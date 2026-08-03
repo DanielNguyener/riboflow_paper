@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Cohort driver for the GENOME-route Ribo-seq QC."""
+
+import argparse
+import glob
+import os
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_COMMON = os.path.join(os.path.dirname(_HERE), "common")
+for _entry in (_HERE, _COMMON, os.path.join(_COMMON, "ribo_seq_qc")):
+    if _entry not in sys.path:
+        sys.path.insert(0, _entry)
+import config
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+MAX_WORKERS = 10
+
+#: step name -> (script, the staging suffix it produces). Order is load-bearing:
+STEP_SCRIPTS = {
+    "qc":        ("01_readlen_psite_qc.py", "readlen_window_qc"),
+    "cds_frame": ("03_cds_frame.py", "cds_psite_frame"),
+}
+STEP_ORDER = ["qc", "cds_frame"]
+
+MASTER_TABLES = {
+    "readlen_window_qc.csv": "readlen_window_qc",
+    "cds_psite_frame.csv": "cds_psite_frame",
+}
+
+def discover_samples(bam_dir, pattern="*.bam"):
+    """Sorted [(sample, bam_path)] for every BAM matching `pattern` under `bam_dir`.
+
+    `pattern` is a glob relative to `bam_dir`. The default handles a flat folder; a nested
+    RiboFlow layout passes e.g. "*/genome/alignment_ribo/merged/*.post_dedup.bam".
+    """
+    bams = sorted(glob.glob(os.path.join(bam_dir, pattern)))
+    return [(config.sample_from_bam(b), b) for b in bams]
+
+def staging_path(sample, suffix):
+    return os.path.join(config.staging_dir(), "%s_%s.csv" % (sample, suffix))
+
+def run_step(step, sample, bam, plots=False):
+    script = os.path.join(HERE, STEP_SCRIPTS[step][0])
+    command = [
+        sys.executable, script,
+        "--sample", sample,
+        "--bam", bam,
+        "--out", config.out_dir(),
+        "--appris", config.appris_path(),
+        "--gtf", config.gtf_path(),
+    ]
+    if plots and step == "qc":
+        command.append("--plots")
+    print("\n$ %s" % " ".join(command), flush=True)
+    subprocess.run(command, check=True)
+
+def run_sample(sample, bam, steps, skip_existing, plots=False):
+    """Run the requested steps for one sample -> list of (sample, step) failures."""
+    failures = []
+    print("\n%s\nSAMPLE: %s\n  BAM: %s\n%s" % ("=" * 70, sample, bam, "=" * 70), flush=True)
+    for step in steps:
+        suffix = STEP_SCRIPTS[step][1]
+        if skip_existing and os.path.exists(staging_path(sample, suffix)):
+            print("  [%s] [skip-existing] %s (%s already staged)" % (sample, step, suffix),
+                  flush=True)
+            continue
+        try:
+            run_step(step, sample, bam, plots)
+        except subprocess.CalledProcessError as exc:
+            print("  !! %s/%s FAILED (exit %d); continuing with the next step/sample"
+                  % (sample, step, exc.returncode), file=sys.stderr, flush=True)
+            failures.append((sample, step))
+            if step == "qc":
+                break
+    return failures
+
+def aggregate(samples_done):
+    """Concatenate the staging CSVs into the two master tables."""
+    import pandas as pd
+
+    os.makedirs(config.tables_dir(), exist_ok=True)
+    print("\n=== Aggregating master tables ===", flush=True)
+    for filename, suffix in MASTER_TABLES.items():
+        rows = []
+        for sample in samples_done:
+            path = staging_path(sample, suffix)
+            if not os.path.exists(path):
+                continue
+            frame = pd.read_csv(path)
+            frame.insert(0, "sample", sample)
+            rows.append(frame)
+        if rows:
+            master = pd.concat(rows, ignore_index=True)
+            master.to_csv(os.path.join(config.tables_dir(), filename), index=False)
+            print("  %s: %d rows, %d samples"
+                  % (filename, len(master), master["sample"].nunique()))
+        else:
+            print("  %s: no staging inputs found -- skipped" % filename)
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--bam-dir", required=True, help="Folder containing the BAM files.")
+    parser.add_argument("--bam-glob", default="*.bam",
+                        help='Glob relative to --bam-dir. Default "*.bam" (flat folder); '
+                             'for a nested layout pass e.g. '
+                             '"*/genome/alignment_ribo/merged/*.post_dedup.bam".')
+    parser.add_argument("--samples", default=None,
+                        help="Comma-separated subset of sample names to process.")
+    parser.add_argument("--steps", default=",".join(STEP_ORDER),
+                        help="Comma-separated steps to run (qc,cds_frame).")
+    parser.add_argument("--plots", action="store_true",
+                        help="also write the per-sample metagene PDFs from step 01. Off by "
+                             "default: they are diagnostics, and the window and offsets "
+                             "they illustrate are in the QC table.")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Skip a step if its staging output already exists.")
+    parser.add_argument("--aggregate-only", action="store_true",
+                        help="Skip the per-sample steps; rebuild the masters from staging.")
+    args = parser.parse_args()
+
+    steps = [s.strip() for s in args.steps.split(",") if s.strip()]
+    unknown = [s for s in steps if s not in STEP_SCRIPTS]
+    if unknown:
+        parser.error("unknown step(s): %s; valid: %s" % (unknown, list(STEP_SCRIPTS)))
+    steps = [s for s in STEP_ORDER if s in steps]
+
+    samples = discover_samples(args.bam_dir, args.bam_glob)
+    if not samples:
+        parser.error("no BAMs matching %r found in %s" % (args.bam_glob, args.bam_dir))
+    if args.samples:
+        wanted = {x.strip() for x in args.samples.split(",")}
+        samples = [(s, b) for (s, b) in samples if s in wanted]
+        if not samples:
+            parser.error("none of --samples %s matched BAMs in %s"
+                         % (sorted(wanted), args.bam_dir))
+
+    os.makedirs(config.staging_dir(), exist_ok=True)
+
+    if args.aggregate_only:
+        aggregate([s for s, _ in samples])
+        print("\nDone. Aggregation only -- no per-sample steps run.")
+        return
+
+    print("Discovered %d sample(s): %s" % (len(samples), [s for s, _ in samples]))
+    print("Steps: %s" % steps)
+
+    print("\nBuilding/loading annotation cache...", flush=True)
+    config.load_annotation()
+
+    failures = []
+    n_workers = min(MAX_WORKERS, len(samples))
+    if n_workers > 1:
+        print("\nRunning %d sample(s) in parallel (workers=%d)..." % (len(samples), n_workers),
+              flush=True)
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            futures = {pool.submit(run_sample, s, b, steps, args.skip_existing, args.plots): s
+                       for s, b in samples}
+            for future in as_completed(futures):
+                failures += future.result()
+    else:
+        for sample, bam in samples:
+            failures += run_sample(sample, bam, steps, args.skip_existing, args.plots)
+
+    aggregate([s for s, _ in samples])
+
+    print("\nDone. %d sample(s) processed." % len(samples))
+    if failures:
+        print("FAILURES (%d): %s" % (len(failures), failures), file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,219 @@
+# Panel manifest — schema riboflow_paper/panel-manifest/1
+#
+# Maps each manuscript figure panel to the generator that produces it, its exact inputs,
+# and its declared output path.
+
+schema_version: riboflow_paper/panel-manifest/1
+
+defaults:
+  formats: [pdf]             # one editable vector file per panel. `--format pdf,svg,png`
+                             # on make_panels.py adds others for a one-off.
+  overwrite: false           # every generator refuses to overwrite without --force
+
+panels:
+
+  # ── Figure 1 ────────────────────────────────────────────────────────────────
+  - id: fig01
+    figure: 1
+    panel: null
+    generator: null
+    note: >
+      Author-drawn Lucidchart schematic. No generator exists and none is claimed.
+      figures/published/Figure1.pdf is a reference artifact, not a pipeline output.
+
+  # ── Figure 2 ────────────────────────────────────────────────────────────────
+  - id: fig02A
+    figure: 2
+    panel: A
+    title: Read-length selection and P-site offsets agree between routes
+    generator: code/panels/plot_readlen_psite_selection.py
+    inputs:
+      qc_genome: data/ribo_seq_qc/genome/tables/readlen_window_qc.csv
+      qc_txome:  data/ribo_seq_qc/transcriptome/tables/readlen_window_qc.csv
+      samples_csv: supporting_information/S1_Table/samples.csv
+    columns_used: [sample, read_length, in_phase1, psite_offset, cell_line, ribo_GSM]
+    output: results/panels/fig02A_readlen_psite_selection
+
+  - id: fig02B
+    figure: 2
+    panel: B
+    title: Whole-CDS frame-0 periodicity difference, genome minus transcriptome
+    generator: code/panels/plot_cds_periodicity_difference.py
+    inputs:
+      frame_genome: data/ribo_seq_qc/genome/tables/cds_psite_frame.csv
+      frame_txome:  data/ribo_seq_qc/transcriptome/tables/cds_psite_frame.csv
+      samples_csv:    supporting_information/S1_Table/samples.csv
+    columns_used: [sample, read_length, in_phase1, pct_frame0, cell_line, ribo_GSM]
+    output: results/panels/fig02B_cds_periodicity_difference
+
+  # ── Figure 3 ────────────────────────────────────────────────────────────────
+  - id: fig03A
+    figure: 3
+    panel: A
+    title: GAPDH per-base coverage, genome versus transcriptome
+    generator: code/panels/plot_transcript_coverage.py
+    args:
+      gene_id: ENSG00000111640          # GAPDH; resolves to ENST00000396861.5
+      signal: both
+      region: cds                       # the published framing; default view is whole-transcript
+      annotate_correlation: true
+    inputs:
+      coverage_h5: results/coverage/HeLa.shared_coverage.h5
+    output: results/panels/fig03A_HeLa_GAPDH_coverage
+
+  - id: fig03B
+    figure: 3
+    panel: B
+    title: COMT per-base coverage, genome versus transcriptome
+    generator: code/panels/plot_transcript_coverage.py
+    args:
+      gene_id: ENSG00000093010          # COMT; resolves to ENST00000361682.11
+      signal: both
+      region: cds
+      annotate_correlation: true
+    inputs:
+      coverage_h5: results/coverage/HeLa.shared_coverage.h5
+    output: results/panels/fig03B_HeLa_COMT_coverage
+
+  - id: fig03C
+    figure: 3
+    panel: C
+    title: Per-transcript concordance distribution per cell line
+    generator: code/panels/plot_per_transcript_concordance.py
+    args:
+      ylim: [0.10, 1.0]
+      highlight_sample: HeLa
+      highlight_gapdh: ENST00000396861.5
+      highlight_comt: ENST00000361682.11
+    inputs:
+      psite:      data/coverage/concordance/region_concordance_per_transcript.tsv.gz
+      footprint:  data/coverage/concordance/region_coverage_per_transcript.tsv.gz
+      samples_csv: supporting_information/S1_Table/samples.csv
+    columns_used: [sample, transcript_id, spearman, pearson]
+    output: results/panels/fig03C_per_transcript_concordance
+
+  - id: fig03D
+    figure: 3
+    panel: D
+    title: Pooled per-cell-line concordance
+    generator: code/panels/plot_pooled_concordance.py
+    args:
+      highlight_sample: HeLa
+    inputs:
+      psite:     data/coverage/concordance/region_concordance_per_sample.tsv
+      footprint: data/coverage/concordance/region_coverage_per_sample.tsv
+    columns_used: [sample, spearman_all, pearson_all]
+    output: results/panels/fig03D_pooled_concordance
+
+  # ── Figure 4 ────────────────────────────────────────────────────────────────
+  - id: fig04A
+    figure: 4
+    panel: A
+    title: HeLa Ribo-seq versus RNA-seq, genome route
+    generator: code/panels/plot_ribo_rna_scatter.py
+    args: {route: genome, mark_genes: [COMT, GAPDH]}
+    inputs:
+      counts:      data/ribo_rna/ribo_rna_counts_raw_HeLa_cds.tsv
+      orf_catalog: data/annotation/orf_catalog.tsv
+    columns_used: [transcript_id, genome_ribo_reads, genome_rna_reads, base_enst, gene_name]
+    output: results/panels/fig04A_HeLa_ribo_rna_genome
+
+  - id: fig04B
+    figure: 4
+    panel: B
+    title: HeLa Ribo-seq versus RNA-seq, transcriptome route
+    generator: code/panels/plot_ribo_rna_scatter.py
+    args: {route: transcriptome, mark_genes: [COMT, GAPDH], hide_ylabel: true}
+    inputs:
+      counts:      data/ribo_rna/ribo_rna_counts_raw_HeLa_cds.tsv
+      orf_catalog: data/annotation/orf_catalog.tsv
+    columns_used: [transcript_id, txome_ribo_reads, txome_rna_reads, base_enst, gene_name]
+    output: results/panels/fig04B_HeLa_ribo_rna_transcriptome
+
+  - id: fig04C
+    figure: 4
+    panel: C
+    title: Pooled Ribo-seq versus RNA-seq Spearman by route
+    generator: code/panels/plot_ribo_rna_route_summary.py
+    args: {metric: spearman, ylim: [0.8, 1.0], highlight: HeLa}
+    inputs:
+      route_master: data/ribo_rna/ribo_rna_route_cds.tsv
+      check_counts: data/ribo_rna/ribo_rna_counts_raw_HeLa_cds.tsv
+    columns_used: [sample, route, spearman_rho]
+    output: results/panels/fig04C_ribo_rna_route_summary
+    note: >
+      The composite asserted that each scatter's recomputed rho matched this master within
+      5e-3. The check lives in the compute layer so it runs regardless of which panels
+      are drawn.
+
+  # ── Figure 5 ────────────────────────────────────────────────────────────────
+  - id: fig05A
+    figure: 5
+    panel: A
+    title: Distinct mapped read IDs per route
+    generator: code/panels/plot_route_read_counts.py
+    inputs:
+      taxonomy:  data/read_taxonomy/taxonomy/taxonomy_all.tsv
+      samples_csv: supporting_information/S1_Table/samples.csv
+    columns_used: [sample, n_universe, n_genome_unique, n_genome_multi, n_genome_absent,
+                   n_txome_unique, n_txome_multi, n_txome_absent]
+    output: results/panels/fig05A_route_read_counts
+
+  - id: fig05B
+    figure: 5
+    panel: B
+    title: Read-ID union composition
+    generator: code/panels/plot_read_id_union.py
+    inputs:
+      taxonomy:    data/read_taxonomy/taxonomy/taxonomy_all.tsv
+      samples_csv: supporting_information/S1_Table/samples.csv
+    args: {hide_labels: true}
+    columns_used: [sample, n_universe, n_gU_tU, n_gU_tM, n_gM_tU, n_gM_tM,
+                   n_gU_tA, n_gM_tA, n_gA_tU, n_gA_tM]
+    output: results/panels/fig05B_read_id_union
+
+  - id: fig05C
+    figure: 5
+    panel: C
+    title: Protein-coding to pseudogene tie share of genome multimappers
+    generator: code/panels/plot_multimap_biotype.py
+    inputs:
+      tie_master: data/read_taxonomy/multimap_biotype/multimap_tie_biotype_all.tsv
+      taxonomy:   data/read_taxonomy/taxonomy/taxonomy_all.tsv
+    columns_used: [sample, pct_cross_pp_pc, pct_cross_pc_pp]
+    output: results/panels/fig05C_multimap_tie_biotype
+
+  - id: fig05D
+    figure: 5
+    panel: D
+    title: Alternative-isoform exon share of genome-only unique reads
+    generator: code/panels/plot_nonselected_isoform_reach.py
+    inputs:
+      reach_master: data/read_taxonomy/reach/genome_anchored_reach_all.tsv
+      taxonomy:     data/read_taxonomy/taxonomy/taxonomy_all.tsv
+    columns_used: [sample, n_nonselected_isoform_exon, n_gUtA]
+    output: results/panels/fig05D_nonselected_isoform_reach
+
+  - id: fig05E
+    figure: 5
+    panel: E
+    title: Per-transcript alignment fates, HeLa worked example
+    generator: code/panels/plot_transcript_alignment_fates.py
+    args:
+      sample: HeLa
+      title: GSM2100602
+    inputs:
+      fates: data/alignment_fate/HeLa.transcript_alignment_fates.tsv
+    columns_used: [sample, transcript_id, category, n_reads, pct_of_txome_assigned]
+    output: results/panels/fig05E_HeLa_transcript_fates
+    note: >
+      GAPDH and COMT are chosen by the generator, not passed in: this is one manuscript
+      panel, so its content belongs in the program rather than in whatever invokes it.
+      The generator refuses to run unless the table has both. The three fate categories
+      must sum exactly to n_txome_assigned; that invariant is tested.
+
+      The fates master is a shipped INPUT, not a `make_tables.py` product. It is a worked
+      example over one sample and two transcripts, produced deliberately with
+      code/alignment_fate/build_transcript_fates.py.
+
+gates: [numerical, review, reference]

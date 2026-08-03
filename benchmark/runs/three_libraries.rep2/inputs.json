@@ -1,0 +1,45 @@
+{
+  "n_files": 6,
+  "n_ribo_files": 3,
+  "n_rnaseq_files": 3,
+  "n_samples": 3,
+  "input_bytes": 3674037178,
+  "files": [
+    {
+      "kind": "ribo",
+      "sample": "GSM8325903",
+      "path": "${FASTQ_DIR}/ribo/GSM8325903/SRR29385971.fastq.gz",
+      "bytes": 496545105
+    },
+    {
+      "kind": "ribo",
+      "sample": "GSM8325907",
+      "path": "${FASTQ_DIR}/ribo/GSM8325907/SRR29385967.fastq.gz",
+      "bytes": 862261261
+    },
+    {
+      "kind": "ribo",
+      "sample": "GSM8325911",
+      "path": "${FASTQ_DIR}/ribo/GSM8325911/SRR29385963.fastq.gz",
+      "bytes": 835311682
+    },
+    {
+      "kind": "rnaseq",
+      "sample": "GSM8325903",
+      "path": "${FASTQ_DIR}/rnaseq/GSM8325891/SRR29385983.fastq.gz",
+      "bytes": 359633891
+    },
+    {
+      "kind": "rnaseq",
+      "sample": "GSM8325907",
+      "path": "${FASTQ_DIR}/rnaseq/GSM8325895/SRR29385979.fastq.gz",
+      "bytes": 678493420
+    },
+    {
+      "kind": "rnaseq",
+      "sample": "GSM8325911",
+      "path": "${FASTQ_DIR}/rnaseq/GSM8325899/SRR29385975.fastq.gz",
+      "bytes": 441791819
+    }
+  ]
+}

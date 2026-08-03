@@ -1,0 +1,21 @@
+{
+  "n_files": 2,
+  "n_ribo_files": 1,
+  "n_rnaseq_files": 1,
+  "n_samples": 1,
+  "input_bytes": 856178996,
+  "files": [
+    {
+      "kind": "ribo",
+      "sample": "GSM8325903",
+      "path": "${FASTQ_DIR}/ribo/GSM8325903/SRR29385971.fastq.gz",
+      "bytes": 496545105
+    },
+    {
+      "kind": "rnaseq",
+      "sample": "GSM8325903",
+      "path": "${FASTQ_DIR}/rnaseq/GSM8325891/SRR29385983.fastq.gz",
+      "bytes": 359633891
+    }
+  ]
+}

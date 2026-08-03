@@ -1,0 +1,25 @@
+cell_line	ribo_GSM	ribo_GSE	rna_GSM	tissue	cell_type	disease
+A2780	GSM3720427	GSE129702	GSM3720423	ovary	cancer cell line	ovarian carcinoma (cisplatin-resistant)
+A549	GSM2714737	GSE101760	GSM2714733	lung	cancer cell line	lung adenocarcinoma
+BJ	GSM1047586	GSE42509	GSM1041193	skin	immortalized primary cell	normal
+BRx-142	GSM4263928	GSE143623	GSM4263931	breast	circulating tumor cell line	breast cancer (metastatic)
+cardiac fibroblasts	GSM3490787	GSE131112	GSM3490807	heart	primary cell	normal
+Cybrid Cells	GSM1187138	GSE48933	GSM1187142	bone	cybrid cell line (osteosarcoma × patient enucleated cells)	osteosarcoma (143B-derived cybrid, patient mtDNA)
+early neurons	GSM4736516	GSE156671	GSM4736515	brain	iPSC-derived	normal
+fibroblast	GSM1585244	GSE64962	GSM1585236	skin	primary cell	normal
+H1-hESC	GSM4293622	GSE144682	GSM4293640	embryo	embryonic stem cell	normal
+H9-hESC	GSM4192110	GSE140997	GSM4192133	embryo	embryonic stem cell	normal
+HEK293	GSM4793173	GSE158141	GSM4793176	kidney	cancer cell line	normal (transformed)
+HEK293T	GSM3753507	GSE130781	GSM3753509	kidney	cancer cell line	normal (transformed)
+HeLa	GSM2100602	GSE79664	GSM2100595	cervix	cancer cell line	cervical adenocarcinoma
+hESC	GSM2082526	GSE78961	GSM2082514	embryo	embryonic stem cell	normal
+Huh7	GSM2838831	GSE106483	GSM2838830	liver	cancer cell line	hepatocellular carcinoma
+LuCaP-PDX	GSM4504140	GSE130465	GSM4504138	prostate	patient-derived xenograft	prostate adenocarcinoma
+MCF10A	GSM1608276	GSE65885	GSM1608261	breast	normal epithelial cell line	normal
+megakaryocytes	GSM4832654	GSE159579	GSM4832648	blood	primary cell	normal
+neurons	GSM4736518	GSE156671	GSM4736517	brain	iPSC-derived	normal
+normal prostate	GSM3739081	GSE130465	GSM3739076	prostate	primary tissue	normal
+RD-CCL-136	GSM2760255	GSE103308	GSM2760254	skeletal muscle	cancer cell line	rhabdomyosarcoma
+U-251	GSM4192431	GSE141013	GSM4192414	brain	cancer cell line	glioblastoma (Grade IV)
+U-343	GSM4192441	GSE141013	GSM4192424	brain	cancer cell line	glioblastoma (Grade IV)
+U2OS	GSM1248729	GSE51584	GSM1248728	bone	cancer cell line	osteosarcoma

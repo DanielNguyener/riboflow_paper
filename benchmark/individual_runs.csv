@@ -1,0 +1,7 @@
+run_id,scenario,replicate,exit_code,n_tasks,n_completed,n_cached,n_retried,input_reads,wall_time_s,cpu_time_s,cpu_time_h,cpu_utilization_pct,max_task_peak_rss_bytes,max_task_peak_rss_gib,sum_task_realtime_s,executor_cpus,cpu_pct_divisor,description
+one_library.rep1,one_library,1,0,50,50,0,0,14187683,515,3383.7,0.940,41.06,32229425152,30.0160,890.0,16,100,"GSE269734 full depth: 1 matched ribo/RNA-seq library pair (2 FASTQ, 14.19M reads)"
+one_library.rep2,one_library,2,0,50,50,0,0,14187683,516,3393.7,0.943,41.11,32231481344,30.0179,892.9,16,100,"GSE269734 full depth: 1 matched ribo/RNA-seq library pair (2 FASTQ, 14.19M reads)"
+one_library.rep3,one_library,3,0,50,50,0,0,14187683,516,3390.6,0.942,41.07,32232398848,30.0188,892.2,16,100,"GSE269734 full depth: 1 matched ribo/RNA-seq library pair (2 FASTQ, 14.19M reads)"
+three_libraries.rep1,three_libraries,1,0,125,125,0,0,62536429,1630,13951.0,3.875,53.49,32299180032,30.0810,3768.2,16,100,"GSE269734 full depth: 3 matched ribo/RNA-seq library pairs (6 FASTQ, 62.54M reads)"
+three_libraries.rep2,three_libraries,2,0,125,125,0,0,62536429,1672,13997.8,3.888,52.32,32300773376,30.0824,3770.8,16,100,"GSE269734 full depth: 3 matched ribo/RNA-seq library pairs (6 FASTQ, 62.54M reads)"
+three_libraries.rep3,three_libraries,3,0,125,125,0,0,62536429,1637,13933.8,3.870,53.20,32301940736,30.0835,3770.1,16,100,"GSE269734 full depth: 3 matched ribo/RNA-seq library pairs (6 FASTQ, 62.54M reads)"

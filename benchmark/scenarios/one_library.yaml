@@ -1,0 +1,10 @@
+
+input:
+  fastq:
+    GSM8325903:
+      - ribo/GSM8325903/SRR29385971.fastq.gz
+
+rnaseq:
+  fastq:
+    GSM8325903:                                  # RNA-seq is GSM8325891
+      - rnaseq/GSM8325891/SRR29385983.fastq.gz

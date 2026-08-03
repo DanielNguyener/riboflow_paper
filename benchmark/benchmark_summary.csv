@@ -1,0 +1,4 @@
+scenario,n_repeats,input_reads,wall_time_s,cpu_time_h,cpu_utilization_pct,max_task_rss_gib,wall_time_s_unrounded,cpu_time_h_unrounded,cpu_utilization_pct_unrounded,max_task_rss_bytes_mean
+one_library,3,14187683,516,0.942,41.10,30.02,515.6667,0.941476,41.0793,32231101781.333
+three_libraries,3,62536429,1646,3.878,53.00,30.08,1646.3333,3.878019,53.0054,32300631381.333
+change,,x4.41,x3.19,x4.12,+11.90 pp,+0.22%,,,+11.9261 pp,
