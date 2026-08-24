@@ -1,4 +1,3 @@
-
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -19,23 +18,38 @@ env/
 *.temp
 *.log
 _staging*/
-
+_build/
 .cache/
-/figures/*
-!/figures/panel_references/
-/figures/panel_references/*
-!/figures/panel_references/*.pdf
-
+/notebooks/
+# regenerated output; only the coverage checksum manifest is versioned
+/results/
 /results/*
 !/results/coverage/
 /results/coverage/*
 !/results/coverage/coverage_checksums.tsv
-_build/
 
-tests/
-pytest.ini
-requirements-dev.txt
+# figures: the panel references and the five published figures are versioned
+/figures/*
+!/figures/README.md
+!/figures/panel_references/
+/figures/panel_references/*
+!/figures/panel_references/*.pdf
+!/figures/published/
+/figures/published/*
+!/figures/published/Fig[2-6].tif
+!/figures/published/Fig[2-6]_plos.pdf
 
+# machine-local input locations (copy config/inputs.example.yaml)
+/config/local.yaml
+/get_coverage/logs/
+/get_coverage/run_cohort_failures.tsv
+/docs/Fig3_panel_annotations.md
+/docs/figures.md
+
+/docs/methods_te_route.md
+/docs/README.md
+/docs/scientific_methods.md
+    
 *.bam
 *.bai
 *.csi
@@ -50,7 +64,6 @@ requirements-dev.txt
 *.zip
 *.af
 
-# ── local environment and secrets ────────────────────────────────────────────
 .env
 .env.*
 *.local

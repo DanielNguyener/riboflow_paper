@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 import time
@@ -16,6 +15,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
 import bam_inputs                      # the one uniqueness policy
 
 _CDS_HEADER = re.compile(r"\|CDS:(\d+)-(\d+)\|")
+
+#: The junction-window spans the annotation cache is keyed on. Schema 3 stores no junction
+#: bins, so these only fingerprint the cache; they do not change any stored number.
+LEFT_SPAN, RIGHT_SPAN = 35, 10
+
 
 class BuildError(RuntimeError):
     pass
@@ -45,13 +49,8 @@ def _cds_pyranges(cds_table):
                                   "transcript_id", "cds_cum_start"]])
 
 def read_genome_psites(bam_path, offsets):
-    """Stream the genome BAM -> per-read (chrom, psite, strand).
-
-    Uniquely-mapping primaries (`bam_inputs.is_unique_genome_read`, NH == 1) whose read
-    length is in `offsets`.
-    Placement is CIGAR-aware (`psite_placement.place`), so a junction-spanning read's
-    P-site lands on a base the read covers instead of inside the intron.
-    """
+    """Stream the genome BAM -> per-read (chrom, psite, strand) for unique primaries
+    with a read length in `offsets`; placement is CIGAR-aware (never inside an intron)."""
     import pysam
     import psite_placement
 
@@ -75,8 +74,7 @@ def read_genome_psites(bam_path, offsets):
     return chroms, np.asarray(positions, dtype=np.int64), strands
 
 def read_genome_blocks(bam_path, lengths):
-    """Stream the genome BAM -> aligned blocks. `get_blocks()` splits on N, so introns are
-    already excluded and each block is contiguous on the reference."""
+    """Stream the genome BAM -> aligned blocks; `get_blocks()` splits on N (introns excluded)."""
     import pysam
 
     chroms, starts, ends, strands, read_ids = [], [], [], [], []
@@ -125,12 +123,10 @@ def _stage1_psite_assignment(chroms, positions, strands, cds_pr, cds_total_by_id
 
 def project_genome_psites(chroms, positions, strands, exon_pr, cds_pr,
                           cds_total_by_id, tx_index_of_id, coverage_offset):
-    """Genome P-sites -> absolute indices into the concatenated coverage array.
+    """Genome P-sites -> absolute indices into the concatenated coverage array; (indices, stats).
 
-    Returns (indices, stats). Stage 1 sees the CDS exon table alone; stage 2 picks up the
-    reads it left, using the full exon map. Splitting them is what keeps CDS values
-    independent of the UTR rows: adding UTR rows to the stage-1 join would change what
-    `keep="first"` and `idxmax` select, and so could move a published CDS value.
+    Stage 1 (CDS exons only) must stay separate from stage 2 (full exon map): merging them
+    would change what `keep="first"`/`idxmax` select and could move a published CDS value.
     """
     import pyranges as pr
 
@@ -181,8 +177,7 @@ def project_genome_psites(chroms, positions, strands, exon_pr, cds_pr,
 def project_genome_footprints(blocks, exon_pr, cds_pr, tx_index_of_id, coverage_offset):
     """Genome footprint blocks -> (start, end) index ranges in the coverage array.
 
-    Stage 1 is the max-CDS-overlap rule against CDS exons alone; stage 2 uses the full exon map for
-    reads stage 1 did not claim. Each surviving (block, exon) overlap becomes one interval.
+    Stage 1: max-CDS-overlap on CDS exons alone; stage 2: full exon map for unclaimed reads.
     """
     import pyranges as pr
 
@@ -251,11 +246,8 @@ def project_genome_footprints(blocks, exon_pr, cds_pr, tx_index_of_id, coverage_
              "n_unassigned": int((assigned == -1).sum())})
 
 def txome_reference_map(bam_path, tx_index_of_base, transcript_len):
-    """{reference name: (transcript index, reference length)} and a length cross-check.
-
-    The transcriptome reference IS the shared coordinate, so its `@SQ` length must equal
-    `transcript_len`. A mismatch means the two routes are not on one ruler.
-    """
+    """{reference name: transcript index}, cross-checking @SQ length == transcript_len
+    (the transcriptome reference IS the shared coordinate)."""
     import pysam
 
     mapping, mismatches = {}, []
@@ -285,23 +277,10 @@ def txome_reference_map(bam_path, tx_index_of_base, transcript_len):
 
 def read_txome_signals(bam_path, offsets, reference_map, coverage_offset,
                        transcript_len):
-    """ONE pass over the transcriptome BAM -> both P-site indices and footprint ranges.
+    """One transcriptome-BAM pass -> (psite_indices, footprint_starts, footprint_ends).
 
-    The two signals pass exactly the same reads: uniquely-mapping primaries
-    (`bam_inputs.is_unique_txome_read`, MAPQ >= 42), and a
-    read length in the selected window (`offsets` supplies both the window and the offset).
-    Reading the BAM twice to apply the same filter twice is pure I/O, and the outputs are
-    compact int64 index arrays -- for a human library roughly 54 MB of P-site indices and
-    107 MB of footprint ranges, against the 282 MB coverage array they feed.
-
-    P-sites are placed at `reference_start + offset`, the forward transcript coordinate. The
-    published transcriptome alignments are Bowtie2 `--norc`, so every read is on the
-    transcript's forward strand. The CIGAR-aware walk is the GENOME route's rule, where a
-    junction-spanning read would otherwise land in an intron; a transcript reference has no
-    introns.
-
-    Returns (psite_indices, footprint_starts, footprint_ends), all absolute indices into the
-    concatenated coverage array.
+    P-site = reference_start + offset (Bowtie2 --norc: all reads forward; no introns, so no
+    CIGAR walk needed); both signals pass exactly the same reads (MAPQ >= 42, window length).
     """
     import pysam
 
@@ -338,12 +317,7 @@ def read_txome_signals(bam_path, offsets, reference_map, coverage_offset,
 INT32_MAX = int(np.iinfo(np.int32).max)
 
 def accumulate_points(indices, n_positions):
-    """Point counts -> int32[n_positions].
-
-    Accumulates directly into int32 rather than via `np.bincount`, whose int64 result would
-    double the peak footprint on a 70.5-million-position coordinate. Overflow is impossible
-    to reach here (the bound is the read count) but is checked anyway.
-    """
+    """Point counts -> int32[n_positions] directly (an int64 bincount would double peak memory)."""
     if indices.size and int(indices.size) > INT32_MAX:
         raise BuildError("more points (%d) than int32 can count" % indices.size)
     counts = np.zeros(n_positions, dtype=np.int32)
@@ -352,16 +326,10 @@ def accumulate_points(indices, n_positions):
     return counts
 
 def accumulate_intervals(starts, ends, n_positions):
-    """Half-open intervals -> depth, via a difference array.
+    """Half-open intervals -> depth via one global difference array.
 
-    ONE global difference array is correct because every interval lies inside a single
-    transcript's span, so the running sum returns to zero before the next transcript
-    begins. That is asserted, not assumed: if any interval end escaped its transcript the
-    array would not balance and depth would leak forward.
-
-    Overflow is bounded BEFORE the cumulative sum, using the total positive increment as an
-    upper bound on any achievable depth. That keeps the sum itself in int32 -- an int64
-    cumsum would need 564 MB where 282 MB does.
+    Correct only because every interval stays inside one transcript's span (asserted below);
+    int32 overflow is bounded BEFORE the cumsum so the sum itself stays int32.
     """
     if starts.size:
         if starts.size != ends.size:
@@ -398,8 +366,6 @@ def accumulate_intervals(starts, ends, n_positions):
         raise BuildError("footprint depth went negative -- intervals are malformed")
     return depth
 
-#: The obvious vectorised forms allocate a full-length int64 array to produce ~19,736
-
 def per_transcript_sums(values, coverage_offset, transcript_len):
     """Sum a full-coordinate array within each transcript's span."""
     return np.fromiter(
@@ -408,11 +374,8 @@ def per_transcript_sums(values, coverage_offset, transcript_len):
         dtype=np.int64, count=len(coverage_offset))
 
 def region_slice_sums(values, coverage_offset, starts, ends):
-    """Sum a full-coordinate array over one [start, end) window per transcript.
-
-    `starts`/`ends` are transcript-relative; a window with end <= start (a CDS shorter than
-    twice the trim, for instance) contributes 0.
-    """
+    """Sum a full-coordinate array over one transcript-relative [start, end) window each;
+    end <= start contributes 0."""
     return np.fromiter(
         (values[offset + max(int(start), 0):offset + max(int(end), int(start))]
          .sum(dtype=np.int64)
@@ -430,10 +393,7 @@ def sha256_file(path):
 def file_identity(path, with_digest=True, record_path=False):
     """Identify an input by name, size and content digest.
 
-    The full filesystem path is recorded ONLY under `--record-input-paths`. A coverage
-    file is meant to be shareable, and an absolute path names the machine that built it,
-    the directory layout of a private project, and often the operator. The `sha256` is
-    what actually identifies the input; the path is convenience.
+    The full path is recorded only under `--record-input-paths` (shareable files, no machine names).
     """
     path = Path(path)
     record = {"name": path.name, "bytes": path.stat().st_size}
@@ -444,9 +404,8 @@ def file_identity(path, with_digest=True, record_path=False):
     return record
 
 def bam_identity(path, hash_bams=False, record_path=False):
-    """Size + index digest by default. The index is derived from the BAM's block structure
-    and alignment positions, so it cannot survive a content change; hashing many GB on the
-    fast path would cost more than the check is worth. `--hash-bams` adds the full digest."""
+    """Size + index digest by default (the index cannot survive a content change);
+    `--hash-bams` adds the full digest."""
     path = Path(path)
     record = {"name": path.name, "bytes": path.stat().st_size}
     if record_path:
@@ -465,9 +424,6 @@ def build(config):
     """Build one sample's coverage file. Returns the finished path and a run report."""
     import coverage_schema
     import psite_placement
-    import transcript_coords
-    import transcript_regions
-
     started = time.time()
     report = {"sample": config.sample, "steps": {}}
 
@@ -475,7 +431,7 @@ def build(config):
 
     bundle, reused = annotation_cache.load_or_build(
         getattr(config, "annotation_cache", None), config.gtf, config.appris,
-        config.regions, config.left_span, config.right_span)
+        config.regions, LEFT_SPAN, RIGHT_SPAN)
     report["annotation_cache_reused"] = reused
 
     headers = bundle["headers"]
@@ -484,21 +440,14 @@ def build(config):
     transcripts, exons = bundle["transcripts"], bundle["exons"]
     n_positions = bundle["n_positions"]
     region_summary = bundle["region_summary"]
-    stop_ids = bundle["stop_ids"]
     index_of_id, index_of_base = bundle["index_of_id"], bundle["index_of_base"]
-    regions, ribo_bins = bundle["regions"], bundle["ribo_bins"]
+    regions = bundle["regions"]
 
     transcripts = transcripts.copy()
-    transcripts["region_offset"] = _first_row_offset(regions["transcript_index"].to_numpy(),
-                                                     len(transcripts))
-    transcripts["bin_offset"] = _first_row_offset(
-        ribo_bins["transcript_index"].to_numpy() if len(ribo_bins)
-        else np.empty(0, dtype=np.int64), len(transcripts))
-    transcripts["in_transcriptome_reference"] = True
-    transcripts["has_annotated_stop"] = [tid in stop_ids
-                                         for tid in transcripts["transcript_id"]]
-    transcripts["cds_divisible_by_3"] = (transcripts["cds_len_gtf"] % 3 == 0)
-    transcripts["length_filtered"] = _length_filtered(headers, transcripts, regions)
+    cds_starts, cds_ends = _cds_windows(regions, len(transcripts))
+    transcripts["cds_start"] = cds_starts
+    transcripts["cds_end"] = cds_ends
+    del headers
 
     coverage_offset = transcripts["coverage_offset"].to_numpy()
     transcript_len = transcripts["transcript_len"].to_numpy()
@@ -517,22 +466,16 @@ def build(config):
 
     provenance = _provenance(config, coords, cds_table, region_summary,
                              genome_offsets, txome_offsets)
-    bin_attrs = transcript_regions.ribo_bin_provenance(
-        config.left_span, config.right_span, config.span_source)
 
     out_path = Path(config.output) / ("%s.shared_coverage.h5" % config.sample)
     writer = coverage_schema.CoverageWriter(
-        out_path, sample=config.sample, transcripts=transcripts, exons=exons,
-        regions=regions, ribo_bins=ribo_bins,
-        offsets={"genome": genome_offsets, "transcriptome": txome_offsets},
-        provenance=provenance, paper_cds_trim=config.trim,
-        reference_name=config.reference_name, chunk=config.chunk,
+        out_path, sample=config.sample,
+        transcripts=transcripts[list(coverage_schema.TRANSCRIPT_COLUMNS)],
+        provenance=provenance, paper_cds_trim=config.trim, chunk=config.chunk,
         gzip_level=config.gzip_level, shuffle=config.shuffle,
-        ribo_bin_attrs=bin_attrs, assay=getattr(config, "assay", "ribo"))
+        assay=getattr(config, "assay", "ribo"))
 
     try:
-        cds_starts, cds_ends = _cds_windows(regions, len(transcripts))
-
         log("genome P-sites: streaming the BAM")
         chroms, positions, strands = read_genome_psites(
             config.genome_bam, genome_offsets)
@@ -545,11 +488,6 @@ def build(config):
         values = accumulate_points(indices, n_positions)
         del indices
         writer.write_signal("genome_psite", values)
-        writer.set_transcript_counts(
-            "n_genome_psite_events", per_transcript_sums(values, coverage_offset, transcript_len))
-        writer.set_transcript_counts(
-            "hist_cds_genome_psite_key",
-            region_slice_sums(values, coverage_offset, cds_starts, cds_ends) > 0)
         del values
 
         log("transcriptome: streaming the BAM once for both signals")
@@ -560,15 +498,7 @@ def build(config):
         values = accumulate_points(indices, n_positions)
         del indices
         writer.write_signal("txome_psite", values)
-        writer.set_transcript_counts(
-            "n_txome_psite_events", per_transcript_sums(values, coverage_offset, transcript_len))
-        writer.set_transcript_counts(
-            "hist_cds_txome_psite_key",
-            region_slice_sums(values, coverage_offset, cds_starts, cds_ends) > 0)
         del values
-
-        trimmed_starts = cds_starts + config.trim
-        trimmed_ends = cds_ends - config.trim
 
         log("genome footprints: streaming the BAM")
         blocks = read_genome_blocks(config.genome_bam, set(genome_offsets))
@@ -580,12 +510,6 @@ def build(config):
         values = accumulate_intervals(starts, ends, n_positions)
         del starts, ends
         writer.write_signal("genome_footprint", values)
-        writer.set_transcript_counts(
-            "n_genome_footprint_bases",
-            per_transcript_sums(values, coverage_offset, transcript_len))
-        writer.set_transcript_counts(
-            "hist_cds_genome_footprint_key",
-            region_slice_sums(values, coverage_offset, trimmed_starts, trimmed_ends) > 0)
         del values
 
         # already read, in the same pass as the transcriptome P-sites
@@ -595,12 +519,6 @@ def build(config):
         values = accumulate_intervals(starts, ends, n_positions)
         del starts, ends
         writer.write_signal("txome_footprint", values)
-        writer.set_transcript_counts(
-            "n_txome_footprint_bases",
-            per_transcript_sums(values, coverage_offset, transcript_len))
-        writer.set_transcript_counts(
-            "hist_cds_txome_footprint_key",
-            region_slice_sums(values, coverage_offset, trimmed_starts, trimmed_ends) > 0)
         del values
 
         final = writer.finalize()
@@ -617,57 +535,15 @@ def build(config):
         % (final, report["bytes"] / 1e6, report["elapsed_seconds"] / 60.0))
     return final, report
 
-def _first_row_offset(transcript_index, n_transcripts):
-    """For each transcript, the index of its first row in a table sorted by transcript."""
-    offsets = np.zeros(n_transcripts, dtype=np.int64)
-    if transcript_index.size:
-        counts = np.bincount(transcript_index, minlength=n_transcripts)
-        offsets[1:] = np.cumsum(counts)[:-1]
-    return offsets
-
 def _cds_windows(regions, n_transcripts):
-    """Per-transcript normalized CDS [start, end). Absent -> (0, 0)."""
-    starts = np.zeros(n_transcripts, dtype=np.int64)
-    ends = np.zeros(n_transcripts, dtype=np.int64)
+    """Per-transcript normalized CDS [start, end), stop codon excluded. Absent -> (-1, -1)."""
+    import coverage_schema
+    starts = np.full(n_transcripts, coverage_schema.NO_CDS, dtype=np.int64)
+    ends = np.full(n_transcripts, coverage_schema.NO_CDS, dtype=np.int64)
     cds = regions[regions["label"] == "CDS"]
     starts[cds["transcript_index"].to_numpy()] = cds["start"].to_numpy()
     ends[cds["transcript_index"].to_numpy()] = cds["end"].to_numpy()
     return starts, ends
-
-MIN_FIVE_UTR, MIN_CDS, MIN_THREE_UTR = 30, 150, 30
-
-def _length_filtered(headers, transcripts, regions):
-    """The 30/150/30 UTR/CDS minima, computed exactly as `ribo_seq_qc/config.py` does.
-
-    Two details make this NOT the same as applying the thresholds to the normalized
-    regions, and getting either one wrong silently redefines a documented flag:
-
-      1. The lengths come from the RAW HEADER, so the CDS still INCLUDES the stop codon
-         and the 3'UTR does not.
-      2. A missing header UTR5 or UTR3 field filters the transcript outright. After
-         normalization 495 transcripts gain a 3'UTR consisting solely of the relocated
-         stop codon; those must still count as HAVING NO 3'UTR here.
-
-    Carried as a flag, never a filter: nothing drops a transcript for it. `False` holds
-    for 17,071 of the 19,736, which is the number to check a changed definition against.
-
-    It asks whether a transcript's UTRs are long enough for a metagene window, which is a
-    QC convenience and says nothing about whether its CDS can be counted -- so it is NOT a
-    universe. Figure 4 counts all 19,736.
-    """
-    del transcripts, regions                     # deliberately unused: the header decides
-    flags = []
-    for tid in sorted(headers):
-        header = headers[tid]
-        utr5 = header["hdr_utr5"]
-        utr3 = header["hdr_utr3"]
-        cds_start, cds_end = header["hdr_cds"]
-        cds_len = cds_end - cds_start + 1
-        flags.append(
-            (utr5 is None or (utr5[1] - utr5[0] + 1) < MIN_FIVE_UTR)
-            or cds_len < MIN_CDS
-            or (utr3 is None or (utr3[1] - utr3[0] + 1) < MIN_THREE_UTR))
-    return np.asarray(flags, dtype=bool)
 
 def _provenance(config, coords, cds_table, region_summary, genome_offsets, txome_offsets):
     import coverage_schema
@@ -699,9 +575,10 @@ def _provenance(config, coords, cds_table, region_summary, genome_offsets, txome
             "paper_cds_trim": config.trim,
             "genome_uniqueness": "NH==1",
             "txome_uniqueness": "MAPQ>=%d" % bam_inputs.txome_min_mapq(),
-            "left_span": config.left_span,
-            "right_span": config.right_span,
             "psite_placement": psite_placement.PSITE_PLACEMENT,
+            "stop_codon_assignment": "utr3",
+            "exon_source": "gencode_exon_features",
+            "reference_name": getattr(config, "reference_name", "appris_human_v2_selected"),
             "appris_principal_ranks_consumed": False,
         },
         "assignment_policies": {
@@ -743,8 +620,6 @@ def _build_parser():
     parser.add_argument("--qc-txome", required=True, type=Path)
     parser.add_argument("--output", type=Path, default=Path("results/coverage"))
     parser.add_argument("--trim", type=int, default=15)
-    parser.add_argument("--left-span", type=int, default=35)
-    parser.add_argument("--right-span", type=int, default=10)
     parser.add_argument("--assay", default="ribo", choices=("ribo", "rna"),
                         help="recorded in the file's provenance; both BAMs must be the "
                              "same assay, since the two routes are compared to each other")
@@ -774,8 +649,6 @@ def check_inputs(args):
 
 def main(argv=None):
     args = _build_parser().parse_args(argv)
-    args.span_source = ("cli" if (args.left_span, args.right_span) != (35, 10)
-                        else "cli_default")
     if args.trim % 3:
         raise SystemExit("--trim must be a multiple of 3 to keep the CDS slice in frame; "
                          "got %d" % args.trim)

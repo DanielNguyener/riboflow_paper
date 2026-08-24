@@ -90,7 +90,6 @@ def build_one(row, args):
         "--annotation-cache", str(args.annotation_cache),
         "--gzip-level", str(args.gzip_level), "--chunk", str(args.chunk),
     ]
-    # by content digest, and a second copy beside it can only go stale.
     if args.regions:
         command += ["--regions", str(args.regions)]
     if args.hash_bams:
@@ -115,7 +114,9 @@ def write_checksums(output_dir, samples):
         if not path.exists():
             continue
         with h5py.File(path, "r") as handle:
-            provenance = handle["provenance"].attrs.get("json", "")
+            provenance = handle.attrs.get("provenance", "")
+            if isinstance(provenance, bytes):
+                provenance = provenance.decode()
             record = {
                 "sample_id": sample,
                 "filename": path.name,
@@ -155,8 +156,6 @@ def _build_parser():
     parser.add_argument("--qc-txome", type=Path)
     parser.add_argument("--output", type=Path, default=Path("results/coverage"))
     parser.add_argument("--trim", type=int, default=15)
-    parser.add_argument("--left-span", type=int, default=35)
-    parser.add_argument("--right-span", type=int, default=10)
     parser.add_argument("--annotation-cache", type=Path, default=None,
                         help="the shared annotation bundle; built once and reused by every "
                              "sample (default <output>/../.cache/annotation/"
@@ -230,8 +229,9 @@ def main(argv=None):
                                  / "coverage_annotation.pkl")
     sys.path.insert(0, str(HERE))
     import annotation_cache as ac
+    import build_shared_coverage as bsc
     _bundle, reused = ac.load_or_build(args.annotation_cache, args.gtf, args.appris,
-                                       args.regions, args.left_span, args.right_span)
+                                       args.regions, bsc.LEFT_SPAN, bsc.RIGHT_SPAN)
     del _bundle
     log("annotation cache %s: %s" % ("reused" if reused else "built", args.annotation_cache))
 

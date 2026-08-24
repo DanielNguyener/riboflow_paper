@@ -10,8 +10,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import reach_lib as rl
+import concordance_lib as cl
 fc = rl.fc
-cl = rl.cl
 
 STAGING = rl.OUTDIR / "_staging"
 TAXONOMY_TSV = fc.output_root() / "read_taxonomy" / "taxonomy" / "taxonomy_all.tsv"

@@ -10,6 +10,12 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 
+#: Grid size and margins in inches, SHARED by both Figure-2 panels so cells and pages match
+#: 1:1 at assembly. Each panel leaves the other's gutter BLANK, so both must save with
+#: `tight=False` or the crop takes the blank margins back off.
+AXES_SIZE = (7.0, 7.8)
+MARGINS = (1.25, 1.75, 1.25, 0.15)          # left, bottom, right, top
+
 def _as_bool(series):
     return series.astype(str).str.lower().isin(("true", "1"))
 
@@ -55,16 +61,9 @@ def gsm_labels(samples_csv, samples):
     return [mapping.get(s, s) for s in samples]
 
 def draw_grid(axis, matrix, cmap, norm):
-    """Draw a sample x read-length grid as TRUE VECTOR QUADS.
+    """Draw a sample x read-length grid as TRUE VECTOR QUADS; row 0 at the TOP.
 
-    NOT `imshow`. `imshow` embeds a raster image, and in PDF and SVG a viewer resamples it
-    -- which shows up as mottled, blemished cells with soft seams instead of flat colour.
-    These panels ship as editable PDF and SVG, where resampling is obvious; a 300-dpi PNG
-    would hide it.
-
-    `pcolormesh` with `shading="flat"` emits one filled quad per cell, so the output is
-    crisp at any zoom and the white cell borders are real strokes rather than resampling
-    artefacts. Row 0 is drawn at the TOP.
+    NOT `imshow` -- its embedded raster gets resampled by PDF/SVG viewers into mottled cells.
     """
     n_rows, n_cols = matrix.shape
     mesh = axis.pcolormesh(np.arange(n_cols + 1), np.arange(n_rows + 1),
@@ -80,19 +79,28 @@ def cell_centre(index):
     """pcolormesh cells span [i, i+1), so the centre -- for ticks and text -- is i + 0.5."""
     return np.asarray(index) + 0.5
 
-def style_grid(axis, samples, lengths, labels):
-    """Ticks and labels at cell centres. The white cell borders come from `draw_grid`.
-
-    Sizes come from `panel_style`, like every other panel's: a panel set only looks like
-    one figure if the type matches across all of it, and a literal here would drift the
-    moment the shared constant moved.
-    """
+#: Type for the two grids at their two ship scales: "large" = standalone panel,
+#: "base" = journal page (PLOS 8-12 pt window).
+def grid_type(scale="large"):
     sys.path.insert(0, str(HERE))
     import panel_style as ps
+    if scale == "large":
+        return {"label": ps.FONT_LABEL_LARGE, "tick": ps.FONT_TICK_LARGE,
+                "annotation": ps.FONT_ANNOTATION_LARGE}
+    if scale == "base":
+        return {"label": ps.FONT_LABEL, "tick": ps.FONT_TICK, "annotation": ps.FONT_INSET}
+    raise SystemExit("unknown type scale %r (large|base)" % scale)
+
+def style_grid(axis, samples, lengths, labels, sizes=None, show_ylabels=True):
+    """Ticks and labels at cell centres; sizes default to panel_style's *_LARGE scale."""
+    sizes = sizes or grid_type("large")
 
     axis.set_xticks(cell_centre(range(len(lengths))))
-    axis.set_xticklabels(lengths, fontsize=ps.FONT_TICK)
+    axis.set_xticklabels(lengths, fontsize=sizes["tick"])
     axis.set_yticks(cell_centre(range(len(samples))))
-    axis.set_yticklabels(labels, fontsize=ps.FONT_TICK)
-    axis.set_xlabel("read length (nt)", fontsize=ps.FONT_LABEL)
+    axis.set_yticklabels(labels if show_ylabels else [""] * len(samples),
+                         fontsize=sizes["tick"])
+    if not show_ylabels:
+        axis.tick_params(axis="y", length=0)
+    axis.set_xlabel("read length (nt)", fontsize=sizes["label"])
     axis.tick_params(which="minor", length=0)

@@ -63,7 +63,9 @@ def main(argv=None):
         values, prepared["labels"], "#1a7d1a",
         "protein-coding ↔\npseudogene tie", "% of multimapper\nreads (primary)",
         tuple(args.figsize), args.show_labels)
-    written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force)
+    # tight=False: a tight crop would undo the shared-box row alignment.
+    written = ps.save(figure, args.output, ps.resolve_formats(args.formats),
+                      args.force, tight=False)
     for path in written:
         print("[panel] wrote %s" % path)
     return 0

@@ -4,13 +4,30 @@ from __future__ import annotations
 
 from pathlib import Path
 
-FONT_FAMILY = "DejaVu Sans"
+#: Arial per journal requirements; fallbacks are metric-compatible so a machine without
+#: Arial renders at the same widths (matplotlib's DejaVu default is wider and shifts layout).
+FONT_FAMILY = "Arial"
+FONT_FALLBACKS = ("Helvetica", "Liberation Sans", "Arimo", "TeX Gyre Heros", "Nimbus Sans",
+                  "DejaVu Sans")
 FONT_TITLE = 11
 FONT_LABEL = 11
 FONT_TICK = 9
 FONT_ANNOTATION = 9
 #: tick size on purpose -- an inset is a legend, not a second axis.
 FONT_INSET = 8
+
+#: The single ENLARGED type scale, for panels reproduced large (heatmaps, ribo-vs-RNA).
+FONT_LABEL_LARGE = 14
+FONT_TICK_LARGE = 12
+FONT_ANNOTATION_LARGE = 11
+
+#: Linear enlargement of the *_LARGE scale. Marker `s` is an AREA -- scale it by the square.
+LARGE_SCALE = FONT_LABEL_LARGE / FONT_LABEL          # ~1.27
+LARGE_MARKER_AREA = LARGE_SCALE ** 2                 # ~1.62
+
+#: Plot-box edge, in inches, for enlarged-scale panels. It is the AXES box, not the page,
+#: so plot areas line up at assembly regardless of label size.
+LARGE_AXES_BOX = 5.0
 
 GENOME = "#3a923a"
 TXOME = "#cc3d3d"
@@ -21,7 +38,10 @@ PEARSON_LINE = "#b3651a"
 MISSING_HATCH = "#bbbbbb"
 
 DEFAULT_FORMATS = ("pdf",)
-PNG_DPI = 200
+#: Applied to EVERY format: in a PDF it sets the resolution of rasterised artists
+#: (the scatter clouds are rasterised on purpose); vector content is unaffected.
+SAVE_DPI = 300
+PNG_DPI = SAVE_DPI
 
 LEGEND_PAD_PT = 8.0
 
@@ -31,7 +51,7 @@ def apply_rcparams():
     matplotlib.use("Agg")
     matplotlib.rcParams.update({
         "font.family": "sans-serif",
-        "font.sans-serif": [FONT_FAMILY],
+        "font.sans-serif": [FONT_FAMILY] + list(FONT_FALLBACKS),
         "font.size": FONT_TICK,
         "axes.titlesize": FONT_TITLE,
         "axes.labelsize": FONT_LABEL,
@@ -39,7 +59,32 @@ def apply_rcparams():
         "ytick.labelsize": FONT_TICK,
         "pdf.fonttype": 42,
         "svg.fonttype": "none",
+        # Mathtext ignores font.sans-serif -- point mathtext.* at the same family.
+        "mathtext.fontset": "custom",
+        "mathtext.rm": FONT_FAMILY,
+        "mathtext.it": "%s:italic" % FONT_FAMILY,
+        "mathtext.bf": "%s:bold" % FONT_FAMILY,
     })
+
+def resolve_font(family=FONT_FAMILY):
+    """`(name, path)` of the first available family, walking FONT_FALLBACKS.
+
+    matplotlib substitutes a missing family silently; this errors instead.
+    """
+    from matplotlib import font_manager
+
+    for name in [family] + [f for f in FONT_FALLBACKS if f != family]:
+        try:
+            path = font_manager.findfont(font_manager.FontProperties(family=name),
+                                         fallback_to_default=False)
+        except Exception:
+            continue
+        return name, path
+    raise SystemExit(
+        "none of the panel fonts is installed: %s.\nInstall one (Arial ships with macOS "
+        "and Office; Liberation Sans and Arimo are open metric-compatible substitutes) or "
+        "change FONT_FAMILY in code/panels/panel_style.py."
+        % ", ".join([family] + list(FONT_FALLBACKS)))
 
 def resolve_formats(spec):
     """'pdf,svg,png' -> ('pdf', 'svg', 'png'), validated."""
@@ -55,16 +100,7 @@ def resolve_formats(spec):
 def below_axis_anchor(axis, pad_pt=LEGEND_PAD_PT):
     """Axes-fraction y that clears everything already drawn under `axis`.
 
-    A hand-picked `bbox_to_anchor=(0.5, -0.16)` is an *axes fraction*, so the gap it opens
-    scales with the axes height -- while the tick labels and the x-axis label below it
-    occupy a fixed number of points. On a tall axes the constant is a generous gap; on a
-    short one (two horizontal bars, say) it is smaller than a two-line x label, and the
-    legend lands on top of the label. This measures the tick labels, the axis offset text
-    and the x label as rendered, then converts a pad in points into the fraction that
-    clears the lowest of them.
-
-    Call it after the figure's layout pass (`tight_layout`), because that pass moves the
-    axes. Returns a negative number: the y for `loc="upper center"` in `transAxes`.
+    Call after `tight_layout` (the layout pass moves the axes); returns a negative y.
     """
     figure = axis.figure
     figure.canvas.draw()
@@ -83,12 +119,9 @@ def below_axis_anchor(axis, pad_pt=LEGEND_PAD_PT):
     return float(axis.transAxes.inverted().transform((0.0, lowest - pad_px))[1])
 
 def legend_below(axis, handles=None, labels=None, pad_pt=LEGEND_PAD_PT, **kwargs):
-    """A legend centred under the x axis, positioned clear of the x label -- not guessed.
+    """A legend centred under the x axis, positioned clear of the x label.
 
-    Thin wrapper over `Axes.legend` that supplies `loc`/`bbox_to_anchor` from
-    `below_axis_anchor`; any other legend keyword passes straight through. The returned
-    legend lives outside the axes, so hand it to `save(..., extra_artists=[legend])` or the
-    export will crop it.
+    The legend lives outside the axes -- hand it to `save(..., extra_artists=[legend])`.
     """
     kwargs.setdefault("loc", "upper center")
     kwargs.setdefault("frameon", False)
@@ -100,11 +133,11 @@ def legend_below(axis, handles=None, labels=None, pad_pt=LEGEND_PAD_PT, **kwargs
         return axis.legend(handles=handles, **kwargs)
     return axis.legend(handles, labels, **kwargs)
 
-def save(figure, output, formats=DEFAULT_FORMATS, force=False, extra_artists=None):
-    """Write one figure in each requested format. REFUSES to overwrite without `force`.
+def save(figure, output, formats=DEFAULT_FORMATS, force=False, extra_artists=None,
+         tight=True):
+    """Write one figure in each requested format; refuses to overwrite without `force`.
 
-    `output` may carry an extension or not; the stem is what matters. Returns the paths
-    written, so a caller can record exactly what it produced.
+    `tight=False` exports at exactly `figsize` (no crop) so co-placed panels scale equally.
     """
     output = Path(output)
     stem = output.with_suffix("") if output.suffix.lstrip(".") in ("pdf", "svg", "png") \
@@ -120,11 +153,10 @@ def save(figure, output, formats=DEFAULT_FORMATS, force=False, extra_artists=Non
 
     written = []
     for fmt, destination in zip(formats, destinations):
-        kwargs = {"bbox_inches": "tight"}
-        if extra_artists:
+        kwargs = {"bbox_inches": "tight"} if tight else {}
+        if extra_artists and tight:
             kwargs["bbox_extra_artists"] = list(extra_artists)
-        if fmt == "png":
-            kwargs["dpi"] = PNG_DPI
+        kwargs["dpi"] = PNG_DPI if fmt == "png" else SAVE_DPI
         figure.savefig(destination, **kwargs)
         written.append(destination)
     return written

@@ -15,9 +15,7 @@ REQUIRED = ("sample", "transcript_id", "spearman", "pearson")
 def prepare(psite_path, footprint_path, samples_csv=None, highlight=None):
     """Load both tables, order the cell lines, and resolve the highlighted transcripts.
 
-    Pure: returns data, never touches matplotlib. The ordering rule (ascending median
-    Spearman of the P-site table) is applied ONCE here and shared by both sub-panels, so
-    they cannot silently disagree about which cell line is where.
+    Ordering (ascending median P-site Spearman) is applied once and shared by both sub-panels.
     """
     sys.path.insert(0, str(HERE))
     import panel_style as ps
@@ -66,7 +64,12 @@ def _half_box(axis, data, positions, fill, line):
         box.set_facecolor(fill)
         box.set_alpha(0.6)
 
-def draw(prepared, ylim=(0.10, 1.0), figsize=(11.0, 4.4)):
+#: The leader from a marker to its gene name: a thin plain line, no head, no text box.
+LEADER = dict(arrowstyle="-", color="#555", lw=0.6, shrinkA=0, shrinkB=2)
+
+def draw(prepared, ylim=(0.10, 1.0), figsize=(11.0, 4.4), layout="side"):
+    """`layout="side"`: P-site | footprint side by side; `"stacked"`: shared x axis,
+    GSM labels appear once (the form that fits beside panel D)."""
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
     import panel_style as ps
@@ -74,7 +77,10 @@ def draw(prepared, ylim=(0.10, 1.0), figsize=(11.0, 4.4)):
     ps.apply_rcparams()
     order = prepared["order"]
     positions = np.arange(1, len(order) + 1)
-    figure, axes = plt.subplots(1, 2, figsize=figsize, sharey=True)
+    if layout == "stacked":
+        figure, axes = plt.subplots(2, 1, figsize=figsize, sharex=True, sharey=True)
+    else:
+        figure, axes = plt.subplots(1, 2, figsize=figsize, sharey=True)
 
     for axis, (name, frame) in zip(axes, prepared["frames"].items()):
         spearman = [frame.loc[frame["sample"] == s, "spearman"].dropna().values
@@ -99,41 +105,53 @@ def draw(prepared, ylim=(0.10, 1.0), figsize=(11.0, 4.4)):
                                  clip_on=False, **marker)
                     axis.scatter([index + 0.2], [floor], color=ps.PEARSON_LINE,
                                  clip_on=False, **marker)
-                    axis.annotate(key.upper(), xy=(index, floor), xytext=(0, 13),
-                                  textcoords="offset points", ha="center", va="bottom",
+                    # Plain text on a thin leader, up-right into the empty band; no box.
+                    axis.annotate(key.upper(), xy=(index + 0.2, floor), xytext=(16, 18),
+                                  textcoords="offset points", ha="left", va="bottom",
                                   fontsize=ps.FONT_TICK, zorder=14,
-                                  bbox=dict(boxstyle="round,pad=0.15", fc="white",
-                                            ec="#555", lw=0.6, alpha=0.9))
+                                  arrowprops=LEADER)
                 else:
                     axis.scatter([index - 0.2], [entry["spearman"]],
                                  color=ps.SPEARMAN_LINE, marker="o", **dot)
                     axis.scatter([index + 0.2], [entry["pearson"]],
                                  color=ps.PEARSON_LINE, marker="o", **dot)
                     near_top = entry["spearman"] > high - 0.08 * (high - low)
-                    xytext = (6, -8) if near_top else (6, 8)
+                    # Down-right when the dot sits near the top; otherwise up-right.
+                    xytext = (16, -22) if near_top else (16, 14)
                     va = "top" if near_top else "bottom"
-                    axis.annotate(key.upper(), xy=(index, entry["spearman"]),
+                    axis.annotate(key.upper(), xy=(index + 0.2, entry["pearson"]),
                                   xytext=xytext, textcoords="offset points",
                                   ha="left", va=va, fontsize=ps.FONT_TICK, zorder=14,
-                                  bbox=dict(boxstyle="round,pad=0.15", fc="white",
-                                            ec="#555", lw=0.6, alpha=0.9))
+                                  arrowprops=LEADER)
 
         axis.set_xticks(positions)
         axis.set_xticklabels([prepared["labels"].get(s, s) for s in order],
                              rotation=90, fontsize=ps.FONT_TICK)
         axis.set_xlim(0.4, len(order) + 0.6)
         axis.grid(axis="y", alpha=0.15)
-        axis.set_title(name, fontsize=ps.FONT_TITLE)
+        if layout == "stacked":
+            # Sub-panel name inside the axes, bottom left; a title would cost a line each.
+            axis.text(0.01, 0.04, name, transform=axis.transAxes, ha="left", va="bottom",
+                      fontsize=ps.FONT_TITLE, zorder=14,
+                      bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#555", lw=0.6))
+        else:
+            axis.set_title(name, fontsize=ps.FONT_TITLE)
 
-    axes[0].set_ylabel("per-transcript correlation", fontsize=ps.FONT_LABEL)
+    if layout == "stacked":
+        axes[0].tick_params(labelbottom=False)
+        figure.supylabel("per-transcript correlation", fontsize=ps.FONT_LABEL, x=0.012)
+    else:
+        axes[0].set_ylabel("per-transcript correlation", fontsize=ps.FONT_LABEL)
     axes[0].set_ylim(*ylim)
-    axes[0].legend(handles=[
+    axes[-1].legend(handles=[
         mpatches.Patch(facecolor=ps.SPEARMAN_FILL, alpha=0.6, edgecolor=ps.SPEARMAN_LINE,
                        lw=1.1, label="Spearman $\\rho$"),
         mpatches.Patch(facecolor=ps.PEARSON_FILL, alpha=0.6, edgecolor=ps.PEARSON_LINE,
                        lw=1.1, label="Pearson $r$")],
         loc="lower right", fontsize=ps.FONT_TICK, frameon=True)
     figure.tight_layout()
+    if layout == "stacked":
+        figure.subplots_adjust(hspace=0.08, left=0.13)
     return figure, axes
 
 def main(argv=None):
@@ -148,6 +166,9 @@ def main(argv=None):
     parser.add_argument("--highlight-comt", default="ENST00000361682.11")
     parser.add_argument("--ylim", nargs=2, type=float, default=(0.10, 1.0))
     parser.add_argument("--figsize", nargs=2, type=float, default=(11.0, 4.4))
+    parser.add_argument("--layout", choices=("side", "stacked"), default="side",
+                        help="side: P-site | footprint; stacked: P-site over footprint, "
+                             "one shared x axis")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
@@ -165,7 +186,7 @@ def main(argv=None):
     print("[panel] order (ascending median Spearman): %s"
           % ", ".join(prepared["order"][:4] + ["..."] + prepared["order"][-2:]))
 
-    figure, _axes = draw(prepared, tuple(args.ylim), tuple(args.figsize))
+    figure, _axes = draw(prepared, tuple(args.ylim), tuple(args.figsize), args.layout)
     written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force)
     for path in written:
         print("[panel] wrote %s" % path)

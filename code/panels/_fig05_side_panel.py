@@ -39,4 +39,6 @@ def draw_side_panel(values, labels, colour, title, xlabel, figsize=(3.0, 8.0),
     axis.set_xlabel(xlabel + ("\n" + subtext.replace("\n", "  ") if subtext else ""),
                     fontsize=ps.FONT_LABEL)
     figure.tight_layout()
+    bottom, top = common.stack_axes_fractions(figsize[1])
+    figure.subplots_adjust(bottom=bottom, top=top)   # the box A, B, C and D all draw in
     return figure, axis

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Rebuild every analysis table in this repository from indexed BAMs."""
+"""Rebuild every analysis table in this repository from indexed BAMs.
+
+Stages write under --output (default results/); `--into-data` copies them over data/.
+The two `te_*` R stages need `Rscript` (base R, no packages).
+"""
 from __future__ import annotations
 
 import argparse
@@ -17,6 +21,10 @@ SAMPLES_CSV = REPO / "supporting_information" / "S1_Table" / "samples.csv"
 DEFAULT_MANIFEST = REPO / "config" / "cohort_manifest.tsv"
 
 EXAMPLE_SAMPLE = "HeLa"
+EXAMPLE_GSM = "GSM2100602"
+#: The genes Figure 6A partitions (gene IDs resolve through the annotation cache).
+PARTITION_GENES = ("ENSG00000093010", "ENSG00000111640", "ENSG00000124831")   # COMT, GAPDH, LRRFIP1
+LOCUS_GENE = "LRRFIP1"
 
 def shipped_for(relative):
     return REPO / "data" / relative
@@ -33,9 +41,7 @@ def log(msg):
     print("[make_tables] %s" % msg, flush=True)
 
 def prepare_environment(args, create_dirs=True):
-    """Point the drivers at the output root. `create_dirs=False` for read-only modes:
-    a `--validate` that leaves empty directories behind has written to the tree it was
-    only asked to inspect."""
+    """Point the drivers at the output root. `create_dirs=False` for read-only modes."""
     out = Path(args.output).resolve()
     os.environ["RIBOFLOW_PAPER_BAMS"] = str(args.bams)
     os.environ["RIBOFLOW_PAPER_OUT"] = str(out)
@@ -64,8 +70,7 @@ def prepare_environment(args, create_dirs=True):
     return out
 
 def read_manifest(path):
-    """sample_id -> row. Returns {} when there is no manifest, which is not an error:
-    the BAM templates cover a standard RiboFlow tree on their own."""
+    """sample_id -> row; {} when there is no manifest (the BAM templates suffice)."""
     path = Path(path)
     if not path.exists():
         return {}
@@ -90,8 +95,7 @@ def sh(cmd, cwd=None):
     return result.returncode
 
 def stage_annotation(samples, args):
-    """Build the shared annotation caches once, so a missing GTF or APPRIS fails here with
-    a clear message rather than deep inside a subprocess."""
+    """Build the shared annotation caches once; a missing GTF/APPRIS fails here, clearly."""
     import config
     try:
         gtf, appris = config.gtf_path(), config.appris_path()
@@ -122,8 +126,7 @@ def stage_qc(samples, args):
     return code
 
 def stage_offsets(samples, args):
-    """Which detector branch produced each shipped `psite_offset` -- the evidence that the
-    documented rule is the rule that ran. Not consumed by any later stage."""
+    """Record which detector branch produced each `psite_offset`; consumed by no stage."""
     return sh([sys.executable, CODE / "ribo_seq_qc" / "determine_offset_method.py",
                "--workers", str(args.workers)])
 
@@ -134,12 +137,7 @@ def stage_orf_catalog(samples, args):
                "--out-dir", args.out / "annotation"])
 
 def stage_coverage(samples, args):
-    """The shared-coordinate coverage HDF5, one per sample.
-
-    A durable, documented pipeline product, not a temporary intermediate: `concordance`
-    reads it instead of re-streaming the BAMs, the generic plotter draws from it, and
-    nothing deletes it.
-    """
+    """The shared-coordinate coverage HDF5, one per sample; a durable product, never deleted."""
     if not (args.gtf and args.appris):
         log("  the coverage stage needs --gtf and --appris")
         return 1
@@ -169,63 +167,89 @@ def stage_concordance(samples, args):
         command += ["--samples", ",".join(samples)]
     return sh(command)
 
-def stage_ribo_rna(samples, args):
-    """The CDS route table for the cohort, plus the worked example's count table.
+def _rscript():
+    import shutil
+    path = shutil.which("Rscript")
+    if not path:
+        log("  Rscript is not on PATH; the te_normalize and te_stats stages need base R")
+    return path
 
-    The driver reads all four of a sample's BAMs once and produces both, so there is no
-    second pass for the example sample. It needs the QC tables because the ribo counts use
-    each route's own selected read lengths -- the same window the coverage figure uses.
-    """
+def _qc_tables(args):
+    qc = args.out / "ribo_seq_qc"
+    return (qc / "genome" / "tables" / "readlen_window_qc.csv",
+            qc / "transcriptome" / "tables" / "readlen_window_qc.csv")
+
+def stage_te_counts(samples, args):
+    """Four transcripts x samples CDS count matrices, one count program per sample."""
     if not (args.gtf and args.appris):
-        log("  the ribo_rna stage needs --gtf and --appris")
+        log("  the te_counts stage needs --gtf and --appris")
         return 1
-    command = [sys.executable, CODE / "ribo_rna" / "run_ribo_rna_route.py",
-               "--gtf", args.gtf, "--appris", args.appris,
-               "--qc-genome",
-               args.out / "ribo_seq_qc" / "genome" / "tables" / "readlen_window_qc.csv",
-               "--qc-txome",
-               args.out / "ribo_seq_qc" / "transcriptome" / "tables"
-               / "readlen_window_qc.csv",
-               "--counts-sample", EXAMPLE_SAMPLE,
-               # a value (the cache is content-fingerprinted and rejected when stale); it
-               "--annotation-cache",
-               args.out / ".cache" / "annotation" / "coverage_annotation.pkl",
-               "--workers", str(args.workers)]
+    qc_genome, qc_txome = _qc_tables(args)
+    command = [sys.executable, CODE / "ribo_rna" / "build_count_matrices.py",
+               "--bams", args.bams, "--gtf", args.gtf, "--appris", args.appris,
+               "--qc-genome", qc_genome, "--qc-txome", qc_txome,
+               "--manifest", args.manifest, "--output", args.out / "ribo_rna",
+               "--workers", str(min(args.workers, 2))]
     if args.regions:
         command += ["--regions", args.regions]
     if samples:
         command += ["--samples", ",".join(samples)]
     return sh(command)
 
-def stage_fates(samples, args):
-    """Figure 5E's per-read fate table: one sample, the panel's transcripts.
+def stage_te_normalize(samples, args):
+    rscript = _rscript()
+    if not rscript:
+        return 1
+    return sh([rscript, CODE / "te_route" / "normalization.R",
+               "--counts", args.out / "ribo_rna" / "counts",
+               "--output", args.out / "te_route" / "normalized"])
 
-    Which transcripts the panel shows is declared once, in `transcript_fate_lib`, and read
-    from there rather than tabulated here -- a launcher should not be able to change a
-    figure's content. They go over as ONE comma-separated `--transcript-id`: an earlier
-    stage repeated the flag, which has no `action="append"`, so argparse kept only the last
-    value and GAPDH was dropped while the stage still exited 0.
-    """
-    sys.path.insert(0, str(CODE / "alignment_fate"))
-    import transcript_fate_lib
+def stage_te_stats(samples, args):
+    rscript = _rscript()
+    if not rscript:
+        return 1
+    return sh([rscript, CODE / "te_route" / "te_statistics.R",
+               "--normalized", args.out / "te_route" / "normalized",
+               "--orf-catalog", args.out / "annotation" / "orf_catalog.tsv",
+               "--output", args.out / "te_route" / "tables"])
 
+def stage_gene_partition(samples, args):
+    """Figure 6A: the per-read gene partition dump, folded to the seven-segment table."""
     coverage = args.out / "coverage" / ("%s.shared_coverage.h5" % EXAMPLE_SAMPLE)
-    command = [sys.executable, CODE / "alignment_fate" / "build_transcript_fates.py",
+    command = [sys.executable, CODE / "alignment_fate" / "build_gene_read_partition.py",
                "--sample", EXAMPLE_SAMPLE,
                "--genome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_genome_bam"),
                "--transcriptome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_txome_bam"),
-               "--transcript-id",
-               ",".join(tid for tid, _name in transcript_fate_lib.PANEL_TRANSCRIPTS),
-               "--output", args.out / "alignment_fate"]
+               "--gene-id", ",".join(PARTITION_GENES),
+               "--output", args.out / "alignment_fate", "--dump-reads"]
     if coverage.exists():
         command += ["--coverage", coverage]
-    return sh(command)
+    code = sh(command)
+    if code:
+        return code
+    return sh([sys.executable, CODE / "alignment_fate" / "build_gene_partition_data.py",
+               "--reads", args.out / "alignment_fate"
+               / ("%s.gene_read_partition_reads.tsv" % EXAMPLE_SAMPLE),
+               "--sample", EXAMPLE_SAMPLE, "--gsm", EXAMPLE_GSM,
+               "--output", args.out / "alignment_fate" / "gene_partition_route7", "--force"])
+
+def stage_locus(samples, args):
+    """Figure 6B: the LRRFIP1 locus coverage artifact."""
+    if not (args.gtf and args.appris):
+        log("  the locus stage needs --gtf and --appris")
+        return 1
+    qc_genome, qc_txome = _qc_tables(args)
+    return sh([sys.executable, CODE / "alignment_fate" / "build_locus_data.py",
+               "--gene", LOCUS_GENE, "--sample", EXAMPLE_SAMPLE, "--gsm", EXAMPLE_GSM,
+               "--bams", args.bams, "--gtf", args.gtf, "--appris", args.appris,
+               "--qc-genome", qc_genome, "--qc-txome", qc_txome,
+               "--output", args.out / "alignment_fate" / ("locus_%s" % LOCUS_GENE),
+               "--force"])
 
 def _taxonomy_driver(analysis, samples, args):
     """One cohort driver, told which analysis to run.
 
-    Capped at 2 workers whatever `--workers` says: each per-sample subprocess peaks near
-    5 GB resident, and the cap is what keeps a 24-sample cohort inside a normal machine.
+    Capped at 2 workers regardless of `--workers`: each subprocess peaks near 5 GB.
     """
     selection = ["--samples", ",".join(samples)] if samples else []
     return sh([sys.executable, CODE / "read_taxonomy" / "run_read_taxonomy.py", analysis,
@@ -260,11 +284,22 @@ STAGES = [
       "coverage/concordance/region_coverage_per_sample.tsv",
       "coverage/concordance/region_concordance_per_transcript.tsv.gz",
       "coverage/concordance/region_coverage_per_transcript.tsv.gz")),
-    ("ribo_rna",     stage_ribo_rna,     ("annotation", "qc"),     False,
-     ("ribo_rna/ribo_rna_route_cds.tsv",
-      "ribo_rna/ribo_rna_counts_raw_HeLa_cds.tsv")),
-    ("fates",        stage_fates,        ("annotation",),          True,
-     ("alignment_fate/HeLa.transcript_alignment_fates.tsv",)),
+    ("te_counts",    stage_te_counts,    ("annotation", "qc"),     True,
+     ("ribo_rna/counts/ribo_counts_genome.csv",
+      "ribo_rna/counts/ribo_counts_txome.csv",
+      "ribo_rna/counts/rna_counts_genome.csv",
+      "ribo_rna/counts/rna_counts_txome.csv")),
+    ("te_normalize", stage_te_normalize, ("te_counts",),           False,
+     ("te_route/normalized/size_factors.csv",)),
+    ("te_stats",     stage_te_stats,     ("te_normalize", "orf_catalog"), False,
+     ("te_route/tables/per_gene_delta.tsv",
+      "te_route/tables/route_correlation.tsv")),
+    ("gene_partition", stage_gene_partition, ("annotation",),     True,
+     ("alignment_fate/gene_partition_route7.tsv",
+      "alignment_fate/gene_partition_route7.json")),
+    ("locus",        stage_locus,        ("annotation", "qc"),     True,
+     ("alignment_fate/locus_LRRFIP1.npz",
+      "alignment_fate/locus_LRRFIP1.json")),
     ("taxonomy",     stage_taxonomy,     ("annotation",),          True,
      ("read_taxonomy/taxonomy/taxonomy_all.tsv",)),
     ("alignment_concordance", stage_alignment_concordance, ("annotation",), True, ()),
@@ -277,11 +312,17 @@ STAGES = [
 STAGE_STAGING = {
     "qc": ("ribo_seq_qc/genome/tables/_staging",
            "ribo_seq_qc/transcriptome/tables/_staging"),
-    "ribo_rna": ("ribo_rna/_staging_cds",),
+    "te_counts": ("ribo_rna/_route_scratch",),
     "taxonomy": ("read_taxonomy/taxonomy/_staging",),
     "alignment_concordance": ("read_taxonomy/alignment_concordance/_staging",),
     "reach": ("read_taxonomy/reach/_staging",),
     "multimap_biotype": ("read_taxonomy/multimap_biotype/_staging_tie",),
+}
+
+#: Shipped under data/ but built by no stage: third-party inputs, recorded with their source.
+EXTERNAL_INPUTS = {
+    "te_route/housekeeping/Housekeeping_GenesHuman.csv": "HRT Atlas v1.0",
+    "te_route/housekeeping/Housekeeping_TranscriptsHuman.csv": "HRT Atlas v1.0",
 }
 
 STAGE_ORDER = [name for name, _run, _needs, _anno, _out in STAGES]
@@ -314,9 +355,7 @@ def required_stages(requested):
     return [name for name in STAGE_ORDER if name in needed]
 
 def do_into_data(out: Path):
-    """Copy the regenerated artifacts over the shipped ones, reporting each outcome: a
-    copy that CHANGES a published artifact is a different event from a no-op, and the
-    user replacing published bytes should be told exactly which ones changed."""
+    """Copy the regenerated artifacts over the shipped ones, naming each one that changed."""
     import shutil
     same = replaced = 0
     for rel in OUTPUTS:
@@ -350,7 +389,7 @@ def build_parser():
     parser.add_argument("--samples", default=None,
                         help="comma-separated subset (default: every discovered sample)")
     parser.add_argument("--stages", default=None,
-                        help="comma-separated subset of: " + ",".join(STAGE_ORDER))
+                        help="comma-separated subset of: " + ", ".join(STAGE_ORDER))
     parser.add_argument("--all", action="store_true", help="run every stage")
     parser.add_argument("--workers", type=int, default=2,
                         help="parallel samples; memory-heavy stages cap at 2 regardless")

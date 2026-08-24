@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
-import pickle
 import re
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -41,13 +39,9 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 def parse_gtf_features(gtf: Path, wanted: set) -> dict:
-    """One pass over the GTF collecting `exon` and `CDS` features for `wanted` transcripts.
+    """One GTF pass -> {tid: {"exon": [...], "CDS": [...]}}, coordinates 0-based half-open.
 
-    Returns {transcript_id: {"exon": [(chrom, start0, end, strand), ...], "CDS": [...]}}
-    with coordinates converted from GTF 1-based inclusive to 0-based half-open.
-
-    Order within each list is GTF file order, which is NOT necessarily 5'->3'; ordering
-    happens in `build_transcript_coords` and is strand-aware.
+    List order is GTF file order, NOT 5'->3'; `build_transcript_coords` does the strand-aware sort.
     """
     if not gtf.exists():
         raise CoordinateError("GTF not found: %s" % gtf)
@@ -83,21 +77,10 @@ def parse_gtf_features(gtf: Path, wanted: set) -> dict:
     return collected
 
 def build_cds_exon_table(features: dict) -> pd.DataFrame:
-    """The CDS-exon table: one row per CDS piece, in a FIXED order.
+    """The CDS-exon table (CDS pieces, not whole exons), one row per piece in a FIXED order.
 
-    Row order is load-bearing, not cosmetic. Stage 1 of read assignment resolves ties with
-    `drop_duplicates(keep="first")` and `idxmax`, both of which read the first matching row
-    -- so a different sort assigns a read to a different transcript and moves published
-    numbers. The order is therefore pinned: the
-    same columns, the same `order_key` sort, the same `exon_index` and cumulative offsets
-    as `bam_inputs.build_cds_table()["cds"]`, which is the other construction of the same
-    table and is asserted equal to it.
-
-    For GENCODE v34 with the v2 reference this is 195,325 rows x 13 columns.
-
-    This is a REGION-SPLIT table -- CDS pieces, not whole exons -- because CDS assignment
-    is defined on CDS intervals. The whole-exon map used for the shared coordinate is a
-    separate table; see this module's docstring.
+    Row order is load-bearing: stage-1 tie-breaks read the first matching row, so the sort
+    must match `bam_inputs.build_cds_table()["cds"]` exactly (asserted equal).
     """
     rows = []
     for tid in sorted(features):
@@ -145,10 +128,7 @@ def _order_exons(tid: str, exons: list) -> tuple:
 def build_transcript_coords(features: dict, headers: dict) -> dict:
     """Build the transcripts and exons tables, in sorted-transcript_id storage order.
 
-    Storage order is lexicographically sorted versioned `transcript_id`. That is
-    load-bearing downstream: the published pooled Pearson is a float64 dot product over a
-    specific concatenation order, so the covered subset in storage order must equal
-    `sorted(covered)` for the reconstruction to be a gather rather than a sort.
+    Storage order is load-bearing for the pooled-Pearson reconstruction downstream.
     """
     missing = sorted(set(headers) - set(features))
     if missing:
@@ -260,11 +240,7 @@ def transcript_exons(coords: dict, transcript_index: int) -> pd.DataFrame:
     return exons.iloc[start:start + count]
 
 def tx_to_genomic(coords: dict, transcript_index: int, positions) -> np.ndarray:
-    """Transcript positions -> genomic positions (0-based), strand-aware.
-
-    Positions outside [0, transcript_len) yield -1 rather than raising, so a caller can
-    filter without pre-checking.
-    """
+    """Transcript positions -> genomic positions (0-based), strand-aware; out-of-range yields -1."""
     strand = coords["transcripts"].at[transcript_index, "strand"]
     exons = transcript_exons(coords, transcript_index)
     tx_start = exons["tx_start"].to_numpy()
@@ -300,30 +276,4 @@ def genomic_to_tx(coords: dict, transcript_index: int, positions) -> np.ndarray:
         offset = (pos[hit] - g_start[i] if strand == "+" else g_end[i] - 1 - pos[hit])
         out[hit] = tx_start[i] + offset
     return out
-
-def build_provenance(gtf: Path, appris: Path, coords: dict) -> dict:
-    transcripts, exons = coords["transcripts"], coords["exons"]
-    return {
-        "schema": "riboflow_paper/transcript-coords/1",
-        "inputs": {
-            "gtf": {"path": str(gtf), "bytes": gtf.stat().st_size, "sha256": sha256_file(gtf)},
-            "appris_lengths": {"path": str(appris), "bytes": appris.stat().st_size,
-                               "sha256": sha256_file(appris)},
-        },
-        "exon_source": "gencode_exon_features",
-        "counts": {
-            "n_transcripts": int(len(transcripts)),
-            "n_exons": int(len(exons)),
-            "n_positions": int(coords["n_positions"]),
-            "n_plus_strand": int((transcripts["strand"] == "+").sum()),
-            "n_minus_strand": int((transcripts["strand"] == "-").sum()),
-        },
-        "reconciliation": {
-            "rule": "sum(exon lengths) == transcriptome reference length",
-            "n_checked": int(len(transcripts)),
-            "n_mismatched": 0,
-        },
-        "software": {"numpy": np.__version__, "pandas": pd.__version__,
-                     "python": "%d.%d.%d" % sys.version_info[:3]},
-    }
 

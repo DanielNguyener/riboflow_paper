@@ -16,7 +16,6 @@ import qc_core
 qc_core.require("pysam")
 
 import pysam
-import numpy as np
 import pandas as pd
 
 p = argparse.ArgumentParser(description="Whole-CDS P-site frame counts (transcriptome).")
@@ -80,7 +79,6 @@ n_seen = 0
 for read in bam.fetch(until_eof=True):
     if not fc.is_unique_txome_read(read):         # MAPQ >= 42
         continue
-    # NO MAPQ filter: transcriptome BAM used as delivered (see module docstring).
     rlen = read.query_length
     if rlen not in phase1_lengths:
         continue

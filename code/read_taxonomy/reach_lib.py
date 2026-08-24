@@ -15,7 +15,6 @@ for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc")):
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
 import bam_inputs as fc
-import concordance_lib as cl
 
 OUTDIR = fc.output_root() / "read_taxonomy" / "reach"
 
@@ -55,7 +54,7 @@ UNREACHABLE_CATEGORIES = [
 ]
 
 def genome_status_sets(bam_path):
-    """(all_q, uniq_q) over primary genome alignments — identical rule to
+    """(all_q, uniq_q) over primary genome alignments — same rule as
     `taxonomy_lib.status_sets(kind="genome")`."""
     all_q, uniq_q = set(), set()
     bam = pysam.AlignmentFile(str(bam_path), "rb")
@@ -71,8 +70,7 @@ def genome_status_sets(bam_path):
     return all_q, uniq_q
 
 def txome_all_qnames(bam_path):
-    """All primary txome qnames (any MAPQ) — used to define gU_tA = genome-unique
-    minus this set (matches `taxonomy_lib`'s txome `all_q`)."""
+    """All primary txome qnames (any MAPQ); gU_tA = genome-unique minus this set."""
     all_q = set()
     bam = pysam.AlignmentFile(str(bam_path), "rb")
     for r in bam.fetch(until_eof=True):
@@ -83,9 +81,7 @@ def txome_all_qnames(bam_path):
     return all_q
 
 def read_genome_blocks(bam_path, qnames):
-    """qname -> (chrom, strand, blocks) for the given qname set only (gU_tA is small,
-    ~1M reads/sample — cheap to keep full per-block coordinates, unlike the
-    all-genome-unique pass in concordance_lib.read_genome_unique)."""
+    """qname -> (chrom, strand, blocks) for the given qname set only."""
     out = {}
     bam = pysam.AlignmentFile(str(bam_path), "rb")
     for r in bam.fetch(until_eof=True):

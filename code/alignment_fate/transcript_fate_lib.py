@@ -49,9 +49,7 @@ def load_libraries():
 def resolve_transcripts(table, gene_ids=(), transcript_ids=(), coverage=None):
     """Gene and/or transcript IDs -> versioned transcript IDs present in `table`.
 
-    Refuses to guess when a gene maps to more than one candidate, listing them. When a
-    coverage HDF5 is supplied it is used for resolution (it carries gene IDs directly);
-    otherwise the APPRIS transcript table is searched.
+    Refuses to guess when a gene maps to more than one candidate, listing them.
     """
     resolved = []
     for tid in transcript_ids:
@@ -115,12 +113,7 @@ def collect_txome_populations(concordance_lib, txome_bam, base2ver, tids):
 def collect_genome_records(genome_bam, target_qnames):
     """One genome pass -> primary presence, uniqueness, and every reported locus.
 
-    One pass, not two: presence, uniqueness and every reported locus all come from the
-    same scan of the genome BAM. Uniqueness is the
-    repository's one genome rule -- the PRIMARY record's `NH == 1`
-    (`bam_inputs.is_unique_genome_read`). There is no MAPQ fallback: this panel's whole
-    subject is multimapping, so a BAM that cannot report `NH` cannot answer its question
-    and is rejected rather than approximated.
+    No MAPQ fallback: a BAM that cannot report NH is rejected, never approximated.
     """
     import pysam
     from collections import defaultdict

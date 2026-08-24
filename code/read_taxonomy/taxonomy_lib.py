@@ -9,7 +9,6 @@ from pathlib import Path
 import pandas as pd
 import pysam
 
-# `bam_inputs` gives the BAM paths, the uniqueness predicates and the output root. It
 _HERE = Path(__file__).resolve().parent
 _COMMON = _HERE.parent / "common"
 for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc")):
@@ -20,13 +19,7 @@ import bam_inputs as fc
 def sample_to_gsm(samples_csv=None):
     """sample name -> ribo_GSM, from the sample table.
 
-    `cell_line` there uses spaces where sample names use underscores ("Cybrid Cells" vs
-    "Cybrid_Cells"), so the key is normalised.
-
-    Resolution order: explicit argument, then `RIBOFLOW_PAPER_SAMPLES_CSV`, then the
-    repository's own `supporting_information/S1_Table/samples.csv`. The path is never
-    derived from the output root, so nothing has to be run from a particular directory
-    depth for this to resolve.
+    `cell_line` uses spaces where sample names use underscores, so the key is normalised.
     """
     if samples_csv is None:
         samples_csv = os.environ.get("RIBOFLOW_PAPER_SAMPLES_CSV")
@@ -77,13 +70,9 @@ def status_of(q, all_q, uniq_q):
     return "absent"
 
 def classify_sample(sample, log=print):
-    """Return (counts, n_universe) for one sample.
+    """Return (counts keyed (genome_status, txome_status), n_universe) for one sample.
 
-    counts: dict keyed (genome_status, txome_status) over the 8 reachable cells.
-    n_universe: |genome-mapped union txome-mapped| (every read placed by either aligner).
-
-    Memory-lean merge: hold only the four qname sets (no fifth `universe` set). Walk g_all
-    classifying both routes, then walk t_all attributing the genome-absent remainder.
+    Memory-lean: only the four qname sets are held, never a fifth `universe` set.
     """
     g_all, g_uniq = status_sets(fc.genome_bam(sample), "genome")
     t_all, t_uniq = status_sets(fc.txome_bam(sample), "txome")

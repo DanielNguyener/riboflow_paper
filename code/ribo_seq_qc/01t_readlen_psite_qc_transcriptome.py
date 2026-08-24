@@ -6,7 +6,7 @@ import os
 import sys
 import argparse
 
-from collections import defaultdict, Counter
+from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
@@ -19,12 +19,9 @@ import qc_core
 qc_core.require("pysam", "matplotlib")
 
 import pysam
-import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+matplotlib.use("Agg")   # backend for qc_core's lazy pyplot imports (--plots)
 
 p = argparse.ArgumentParser(description="Per-sample read-length selection (transcriptome).")
 p.add_argument("--sample",           required=True)

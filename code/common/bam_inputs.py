@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 _HERE = Path(__file__).resolve().parent
 REPO = _HERE.parents[1]
@@ -25,8 +24,7 @@ RNA_GENOME_BAM_TEMPLATE = "{s}/rnaseq/genome/alignment_ribo/merged/{s}.rnaseq.po
 RNA_TXOME_BAM_TEMPLATE = ("{s}/rnaseq/transcriptome/alignment_ribo/merged/"
                           "{s}.rnaseq.transcriptome.post_dedup.bam")
 
-#: Transcriptome BAMs carry NO NH tag (verified). Bowtie2 MAPQ maxes at 42 for a confident
-#: stripped, so MAPQ == 42 is the operational "uniquely mapped" set (~94 % of reads).
+#: Transcriptome BAMs carry no NH tag; Bowtie2 MAPQ 42 = confident unique (~94 % of reads).
 DEFAULT_TXOME_MIN_MAPQ = 42
 
 _CDS_HEADER = re.compile(r"\|CDS:(\d+)-(\d+)\|")
@@ -59,18 +57,13 @@ def txome_min_mapq() -> int:
     return int(os.environ.get("RIBOFLOW_PAPER_TXOME_MIN_MAPQ", DEFAULT_TXOME_MIN_MAPQ))
 
 # ── the one uniqueness policy ────────────────────────────────────────────────
-# is about multimappers and deliberately does NOT use these -- it classifies with its own
-# GENOME is `NH == 1`, read from the tag, not inferred from MAPQ. STAR happens to encode
-# uniqueness as MAPQ 255 and the two agree exactly on these BAMs (0 disagreements over
-# 4M primaries), but MAPQ is an aligner convention and `NH` is the count itself. A genome
-# BAM with no `NH` is an input error rather than a silent fallback to a MAPQ heuristic:
-# guessing the uniqueness rule is how a multimapper quietly becomes a unique read.
+# Genome uniqueness is `NH == 1` from the tag, never inferred from MAPQ; a missing NH is
+# an input error, not a fallback.
 
 def is_unique_genome_read(read) -> bool:
     """A primary, uniquely-mapping genome alignment: `NH == 1`.
 
-    Raises `InputError` if the record has no `NH` tag. The declared STAR inputs all carry
-    one; a BAM that does not is a different input than this pipeline documents.
+    Raises `InputError` if the record has no `NH` tag (no MAPQ fallback).
     """
     if read.is_unmapped or read.is_secondary or read.is_supplementary:
         return False
@@ -114,27 +107,10 @@ def discover_samples() -> list:
     return [d.name for d in sorted(root.iterdir())
             if d.is_dir() and genome_bam(d.name).exists() and txome_bam(d.name).exists()]
 
-def require_bams(samples) -> None:
-    """Fail before any compute starts, naming every missing BAM at once."""
-    missing = []
-    for sample in samples:
-        for label, path in (("genome", genome_bam(sample)), ("txome", txome_bam(sample))):
-            if not path.exists():
-                missing.append("  %-10s %-8s %s" % (sample, label, path))
-    if missing:
-        raise InputError("these BAMs do not exist:\n" + "\n".join(missing))
-
 def build_cds_table() -> dict:
-    """Per-transcript CDS exon table plus lookups.
+    """Per-transcript CDS exon table plus lookups (keys mirror the return statement).
 
-    Returns a dict with:
-      cds          CDS exons 5'->3' with exon_index, exon_len, cds_cum_start/end
-                   (CDS-relative nt from the start codon)
-      tx_cumstarts {tid: array of cds_cum_start}
-      cds_total    {tid: genomic CDS length in nt, stop codon excluded}
-      n_exons      {tid: number of CDS exons}
-      gene_name / gene_id / strand / chrom   {tid: value}
-      junctions    {tid: array of internal CDS-relative exon boundaries}
+    cds_total excludes the stop codon; coordinates are CDS-relative nt from the start codon.
     """
     cds = config.load_annotation()[
         ["Chromosome", "Start", "End", "Strand", "Phase",
@@ -150,7 +126,7 @@ def build_cds_table() -> dict:
 
     tx_cumstarts = {tid: sub["cds_cum_start"].to_numpy()
                     for tid, sub in cds.groupby("transcript_id", sort=False)}
-    # internal boundaries = cds_cum_start of every exon after the first: the splice
+    # internal boundaries = cds_cum_start of every exon after the first
     junctions = {tid: arr[1:].astype(np.int64) for tid, arr in tx_cumstarts.items()}
 
     return {

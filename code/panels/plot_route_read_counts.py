@@ -26,6 +26,7 @@ def prepare(taxonomy_path, samples_csv=None):
 def draw(prepared, figsize=(4.6, 8.0)):
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
+    import fig05_common as common
     import panel_style as ps
 
     ps.apply_rcparams()
@@ -40,7 +41,7 @@ def draw(prepared, figsize=(4.6, 8.0)):
                  edgecolors="white")
     xmax = genome.max() * 1.30
     for yi, gi, delta in zip(y, genome, genome - txome):
-        axis.text(gi + xmax * 0.015, yi, "+%.2fM" % delta, va="center", ha="left",
+        axis.text(gi + xmax * 0.015, yi, "\u0394%.2fM" % delta, va="center", ha="left",
                   fontsize=ps.FONT_ANNOTATION)
     axis.set_xlim(0, xmax)
     axis.set_xticks(np.arange(0, xmax, 2.0))
@@ -58,6 +59,8 @@ def draw(prepared, figsize=(4.6, 8.0)):
         Line2D([], [], marker="o", ls="none", color=ps.TXOME, label="transcriptome")],
         fontsize=ps.FONT_TICK, frameon=False, loc="lower right")
     figure.tight_layout()
+    bottom, top = common.stack_axes_fractions(figsize[1])
+    figure.subplots_adjust(bottom=bottom, top=top)     # the box panel B also draws in
     return figure, axis
 
 def main(argv=None):
@@ -84,7 +87,9 @@ def main(argv=None):
     if not args.output:
         return 0
     figure, _axis = draw(prepared, tuple(args.figsize))
-    written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force)
+    # tight=False: a tight crop would undo the shared-box row alignment.
+    written = ps.save(figure, args.output, ps.resolve_formats(args.formats),
+                      args.force, tight=False)
     for path in written:
         print("[panel] wrote %s" % path)
     return 0

@@ -57,7 +57,7 @@ def prepare(qc_genome, qc_txome, samples_csv):
             "sources": {"qc_genome": str(qc_genome), "qc_txome": str(qc_txome),
                         "samples_csv": str(samples_csv)}}
 
-def draw(prepared, axes_size=(7.0, 7.8)):
+def draw(prepared, axes_size=None, margins=None, type_scale="large", legend_ncol=2):
     import matplotlib.pyplot as plt
     from matplotlib.colors import ListedColormap
     sys.path.insert(0, str(HERE))
@@ -65,12 +65,14 @@ def draw(prepared, axes_size=(7.0, 7.8)):
     import panel_style as ps
 
     ps.apply_rcparams()
+    sizes = common.grid_type(type_scale)
     samples, lengths = prepared["samples"], prepared["lengths"]
-    width, height = axes_size
-    left, bottom, right, top = 1.25, 1.55, 0.25, 0.15
-    figure, axis = plt.subplots(figsize=(left + width + right, bottom + height + top))
-    axis.set_position([left / (left + width + right), bottom / (bottom + height + top),
-                       width / (left + width + right), height / (bottom + height + top)])
+    # Shared with fig02B (`_fig02_common.MARGINS`); right gutter deliberately blank here.
+    width, height = axes_size or common.AXES_SIZE
+    left, bottom, right, top = margins or common.MARGINS
+    fig_w, fig_h = left + width + right, bottom + height + top
+    figure, axis = plt.subplots(figsize=(fig_w, fig_h))
+    axis.set_position([left / fig_w, bottom / fig_h, width / fig_w, height / fig_h])
     from matplotlib.colors import BoundaryNorm
     colormap = ListedColormap([BLANK_C, AGREE_C, DIFFER_C, GENOME_C, TXOME_C])
     norm = BoundaryNorm(np.arange(-0.5, 5.5, 1.0), colormap.N)
@@ -80,16 +82,23 @@ def draw(prepared, axes_size=(7.0, 7.8)):
             if prepared["labels"][i, j]:
                 axis.text(common.cell_centre(j), common.cell_centre(i),
                           prepared["labels"][i, j], ha="center", va="center",
-                          fontsize=ps.FONT_ANNOTATION,
+                          fontsize=sizes["annotation"],
                           color="white" if prepared["status"][i, j] else "black",
                           linespacing=0.9)
-    common.style_grid(axis, samples, lengths, prepared["gsm"])
-    handles = [plt.Rectangle((0, 0), 1, 1, color=c)
-               for c in (AGREE_C, DIFFER_C, GENOME_C, TXOME_C, BLANK_C)]
-    axis.legend(handles, STATUS_LABELS, loc="upper center", bbox_to_anchor=(0.5, -0.13),
-                ncol=3, fontsize=ps.FONT_TICK, frameon=False, handlelength=1.2,
-                handletextpad=0.5)
-    return figure, axis
+    common.style_grid(axis, samples, lengths, prepared["gsm"], sizes)
+    # Only the statuses that occur in the grid; the caption names the full scheme.
+    present = set(np.unique(prepared["status"]))
+    entries = [(AGREE_C, STATUS_LABELS[0], 1), (DIFFER_C, STATUS_LABELS[1], 2),
+               (GENOME_C, STATUS_LABELS[2], 3), (TXOME_C, STATUS_LABELS[3], 4),
+               (BLANK_C, STATUS_LABELS[4], 0)]
+    entries = [(c, label) for c, label, code in entries if code in present and code != 0]
+    handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c, _ in entries]
+    labels = [label for _, label in entries]
+    # Two columns: ncol=3 overruns the 7 in axes. Anchor is MEASURED, not an axes fraction.
+    legend = ps.legend_below(axis, handles, labels, ncol=legend_ncol,
+                             fontsize=sizes["tick"], frameon=False, handlelength=1.2,
+                             handletextpad=0.5)
+    return figure, axis, legend
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
@@ -100,6 +109,13 @@ def main(argv=None):
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--axes-size", nargs=2, type=float, metavar=("W", "H"),
+                        help="grid size in inches (default: _fig02_common.AXES_SIZE)")
+    parser.add_argument("--margins", nargs=4, type=float, metavar=("L", "B", "R", "T"),
+                        help="margins in inches (default: _fig02_common.MARGINS)")
+    parser.add_argument("--type-scale", choices=("large", "base"), default="large",
+                        help="large: standalone panel type; base: journal-page type (8-12 pt)")
+    parser.add_argument("--legend-ncol", type=int, default=2)
     args = parser.parse_args(argv)
 
     sys.path.insert(0, str(HERE))
@@ -115,8 +131,11 @@ def main(argv=None):
           % (total, prepared["n_agree"], 100.0 * prepared["n_agree"] / total,
              prepared["n_disagree"]))
 
-    figure, _axis = draw(prepared)
-    written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force)
+    figure, _axis, legend = draw(
+        prepared, tuple(args.axes_size) if args.axes_size else None,
+        tuple(args.margins) if args.margins else None, args.type_scale, args.legend_ncol)
+    written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
+                      extra_artists=[legend], tight=False)
     for path in written:
         print("[panel] wrote %s" % path)
     return 0

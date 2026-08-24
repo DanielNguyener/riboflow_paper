@@ -1,0 +1,22 @@
+sample	gsm	gene_order	gene_name	transcript_id	n_union	segment_order	segment_key	segment_label	n_reads	pct_of_union
+HeLa	GSM2100602	0	COMT	ENST00000361682.11	1295	0	r7_shared_unique	Genome-unique	1084	83.7065637066
+HeLa	GSM2100602	0	COMT	ENST00000361682.11	1295	1	r7_shared_multi_pp	Genome-multi, pseudogene tie	0	0.0000000000
+HeLa	GSM2100602	0	COMT	ENST00000361682.11	1295	2	r7_shared_multi_other	Genome-multi, other	34	2.6254826255
+HeLa	GSM2100602	0	COMT	ENST00000361682.11	1295	3	r7_gonly_unique_omit	Genome-unique, omitted exon	105	8.1081081081
+HeLa	GSM2100602	0	COMT	ENST00000361682.11	1295	4	r7_gonly_unique_other	Genome-unique, other	37	2.8571428571
+HeLa	GSM2100602	0	COMT	ENST00000361682.11	1295	5	r7_gonly_multi	Genome-multi	26	2.0077220077
+HeLa	GSM2100602	0	COMT	ENST00000361682.11	1295	6	r7_txonly	Transcriptome only	9	0.6949806950
+HeLa	GSM2100602	1	GAPDH	ENST00000396861.5	4360	0	r7_shared_unique	Genome-unique	1057	24.2431192661
+HeLa	GSM2100602	1	GAPDH	ENST00000396861.5	4360	1	r7_shared_multi_pp	Genome-multi, pseudogene tie	2207	50.6192660550
+HeLa	GSM2100602	1	GAPDH	ENST00000396861.5	4360	2	r7_shared_multi_other	Genome-multi, other	805	18.4633027523
+HeLa	GSM2100602	1	GAPDH	ENST00000396861.5	4360	3	r7_gonly_unique_omit	Genome-unique, omitted exon	63	1.4449541284
+HeLa	GSM2100602	1	GAPDH	ENST00000396861.5	4360	4	r7_gonly_unique_other	Genome-unique, other	49	1.1238532110
+HeLa	GSM2100602	1	GAPDH	ENST00000396861.5	4360	5	r7_gonly_multi	Genome-multi	64	1.4678899083
+HeLa	GSM2100602	1	GAPDH	ENST00000396861.5	4360	6	r7_txonly	Transcriptome only	115	2.6376146789
+HeLa	GSM2100602	2	LRRFIP1	ENST00000308482.14	1525	0	r7_shared_unique	Genome-unique	281	18.4262295082
+HeLa	GSM2100602	2	LRRFIP1	ENST00000308482.14	1525	1	r7_shared_multi_pp	Genome-multi, pseudogene tie	40	2.6229508197
+HeLa	GSM2100602	2	LRRFIP1	ENST00000308482.14	1525	2	r7_shared_multi_other	Genome-multi, other	18	1.1803278689
+HeLa	GSM2100602	2	LRRFIP1	ENST00000308482.14	1525	3	r7_gonly_unique_omit	Genome-unique, omitted exon	755	49.5081967213
+HeLa	GSM2100602	2	LRRFIP1	ENST00000308482.14	1525	4	r7_gonly_unique_other	Genome-unique, other	27	1.7704918033
+HeLa	GSM2100602	2	LRRFIP1	ENST00000308482.14	1525	5	r7_gonly_multi	Genome-multi	388	25.4426229508
+HeLa	GSM2100602	2	LRRFIP1	ENST00000308482.14	1525	6	r7_txonly	Transcriptome only	16	1.0491803279

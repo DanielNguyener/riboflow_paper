@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Machinery: shared genome-multimapper reads whose PRIMARY alignment is score-tied with a SECONDARY alignment, where both the primary and the tied secondary are protein_coding / processed_pseudogene loci."""
+"""Shared genome-multimapper reads whose primary is score-tied with a secondary at
+protein_coding / processed_pseudogene loci."""
 from __future__ import annotations
 
 import sys
@@ -23,12 +24,9 @@ PP = "processed_pseudogene"
 _MISSING_AS = -(10 ** 9)
 
 def read_genome_multi_records_flagged(bam_path, target_qnames):
-    """qname -> list of (chrom, pos5, AS, is_secondary) for EVERY reported genome locus
-    (primary + secondary) of each read whose PRIMARY record is a multimapper (NH>1) and whose
-    qname is in `target_qnames`. Full BAM pass. Adds the primary/secondary flag and per-record
-    AS that read_genome_multi_records drops — needed to compare the primary against tied
-    secondaries. Same 5'-most-base convention as Parts 14/15/16.
-    """
+    """qname -> [(chrom, pos5, AS, is_secondary)] for every reported genome locus of each
+    NH>1-primary read in `target_qnames`. Full BAM pass; keeps the primary/secondary flag
+    and per-record AS needed for the tie test."""
     import pysam
     out = defaultdict(list)
     primary_multi = set()
@@ -94,14 +92,14 @@ def _classify_loci(records_by_qname, exon_pr, gene_pr):
     base["biotype"] = base["locus_idx"].map(biotype)
     return base[["qname", "AS", "is_secondary", "biotype"]]
 
-def categorize(records_by_qname, exon_pr, gene_pr):
-    """Return (counts, n_reads) where counts is a dict with the four category counts plus
-    n_qualifying, computed over the gM population `records_by_qname`."""
-    n_reads = len(records_by_qname)
+def categorize_reads(records_by_qname, exon_pr, gene_pr):
+    """qname -> one of the four tie categories, or None for a read qualifying for none.
+
+    The four categories are mutually exclusive by construction, so one label per read.
+    """
     loci = _classify_loci(records_by_qname, exon_pr, gene_pr)
-    empty = {"cross_pc_pp": 0, "cross_pp_pc": 0, "same_pc_pc": 0, "same_pp_pp": 0, "n_qualifying": 0}
     if loci.empty:
-        return empty, n_reads
+        return pd.Series(dtype=object)
 
     prim = loci[~loci["is_secondary"]].drop_duplicates("qname").set_index("qname")
     prim_bt = prim["biotype"]
@@ -119,16 +117,18 @@ def categorize(records_by_qname, exon_pr, gene_pr):
 
     is_pc = df["prim_bt"] == PC
     is_pp = df["prim_bt"] == PP
-    cross_pc_pp = int((is_pc & df["has_pp"]).sum())
-    cross_pp_pc = int((is_pp & df["has_pc"]).sum())
-    same_pc_pc = int((is_pc & df["has_pc"] & ~df["has_pp"]).sum())
-    same_pp_pp = int((is_pp & df["has_pp"] & ~df["has_pc"]).sum())
+    label = pd.Series(None, index=df.index, dtype=object)
+    label[is_pc & df["has_pc"] & ~df["has_pp"]] = "same_pc_pc"
+    label[is_pp & df["has_pp"] & ~df["has_pc"]] = "same_pp_pp"
+    label[is_pc & df["has_pp"]] = "cross_pc_pp"
+    label[is_pp & df["has_pc"]] = "cross_pp_pc"
+    return label
 
-    counts = {
-        "cross_pc_pp": cross_pc_pp,
-        "cross_pp_pc": cross_pp_pc,
-        "same_pc_pc": same_pc_pc,
-        "same_pp_pp": same_pp_pp,
-    }
+def categorize(records_by_qname, exon_pr, gene_pr):
+    """(counts, n_reads): the four category counts plus n_qualifying over `records_by_qname`."""
+    n_reads = len(records_by_qname)
+    label = categorize_reads(records_by_qname, exon_pr, gene_pr)
+    counts = {name: int((label == name).sum())
+              for name in ("cross_pc_pp", "cross_pp_pc", "same_pc_pc", "same_pp_pp")}
     counts["n_qualifying"] = sum(counts.values())
     return counts, n_reads

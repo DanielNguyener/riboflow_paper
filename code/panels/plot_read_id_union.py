@@ -40,9 +40,10 @@ def prepare(taxonomy_path, samples_csv=None):
     return {"frame": frame, "order": order, "order_provenance": provenance,
             "labels": [labels.get(s, s) for s in order], "source": str(taxonomy_path)}
 
-def draw(prepared, figsize=(6.4, 8.0), show_labels=True):
+def draw(prepared, figsize=(6.4, 8.6), show_labels=True, show_key=True):
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
+    import fig05_common as common
     import panel_style as ps
 
     ps.apply_rcparams()
@@ -63,7 +64,8 @@ def draw(prepared, figsize=(6.4, 8.0), show_labels=True):
     axis.set_yticks(list(y))
     axis.set_yticklabels(prepared["labels"] if show_labels else [""] * len(y))
     axis.set_ylim(-0.6, len(y) - 0.4)
-    axis.set_xlim(0, 118)
+    #: 100 % of the bar, plus just enough room for the widest count drawn at 100.5.
+    axis.set_xlim(0, 109)
     axis.set_xticks([0, 20, 40, 60, 80, 100])
     axis.set_xlabel("Read IDs in union of read alignments (%)", fontsize=ps.FONT_LABEL)
     axis.grid(axis="x", alpha=0.15)
@@ -71,7 +73,14 @@ def draw(prepared, figsize=(6.4, 8.0), show_labels=True):
     cells = {(0, 0): SEGMENTS[0][2], (0, 1): SEGMENTS[2][2],
              (1, 0): SEGMENTS[1][2], (1, 1): SEGMENTS[3][2],
              (2, 0): SEGMENTS[4][2], (2, 1): NOT_IN_UNION}
-    inset = axis.inset_axes([0.30, -0.30, 0.24, 0.15])
+    # The key hangs below the shared fig05_common box. Its anchor is a FRACTION of the axes
+    # height, so at small sizes it lands on the x label -- draw small with the key off.
+    if not show_key:
+        figure.tight_layout()
+        bottom, top = common.stack_axes_fractions(figsize[1])
+        figure.subplots_adjust(bottom=bottom, top=top)
+        return figure, axis, []
+    inset = axis.inset_axes([0.36, -0.185, 0.28, 0.085])
     inset.set_xlim(0, 2.0)
     inset.set_ylim(0, 3.5)
     inset.axis("off")
@@ -83,10 +92,12 @@ def draw(prepared, figsize=(6.4, 8.0), show_labels=True):
         inset.text(-0.12, y0 + 0.5, name, ha="right", va="center", fontsize=ps.FONT_INSET)
     for column, name in enumerate(("present", "absent")):
         inset.text(column + 0.5, 3.05, name, ha="center", va="bottom", fontsize=ps.FONT_INSET)
-    inset.text(1.0, 3.50, "TRANSCRIPTOME ALIGNMENT", ha="center", va="bottom", fontsize=ps.FONT_INSET)
-    inset.text(-0.62, 0.5, "GENOME ALIGNMENT", transform=inset.transAxes, ha="center",
+    inset.text(1.0, 3.50, "TRANSCRIPTOME", ha="center", va="bottom", fontsize=ps.FONT_INSET)
+    inset.text(-0.72, 0.5, "GENOME", transform=inset.transAxes, ha="center",
                va="center", rotation=90, fontsize=ps.FONT_INSET)
     figure.tight_layout()
+    bottom, top = common.stack_axes_fractions(figsize[1])
+    figure.subplots_adjust(bottom=bottom, top=top)     # the box panel A also draws in
     return figure, axis, [inset]
 
 def main(argv=None):
@@ -94,9 +105,12 @@ def main(argv=None):
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--taxonomy", required=True, type=Path)
     parser.add_argument("--samples-csv", type=Path)
+    parser.add_argument("--hide-key", action="store_true",
+                        help="omit the genome x transcriptome key (define it in the "
+                             "caption instead); for a panel drawn small")
     parser.add_argument("--hide-labels", action="store_true",
                         help="omit the y tick labels (panel A carries them in the figure)")
-    parser.add_argument("--figsize", nargs=2, type=float, default=(6.4, 8.0))
+    parser.add_argument("--figsize", nargs=2, type=float, default=(6.4, 8.6))
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
@@ -112,9 +126,10 @@ def main(argv=None):
     for column, _label, _colour in SEGMENTS:
         print("[panel]   %-20s median %5.2f%%" % (column, medians[column]))
 
-    figure, _axis, extra = draw(prepared, tuple(args.figsize), not args.hide_labels)
+    figure, _axis, extra = draw(prepared, tuple(args.figsize), not args.hide_labels,
+                                show_key=not args.hide_key)
     written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
-                      extra_artists=extra)
+                      extra_artists=extra, tight=False)
     for path in written:
         print("[panel] wrote %s" % path)
     return 0

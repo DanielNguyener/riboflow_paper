@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import gzip
 import re
-import sys
 from pathlib import Path
 
 UTR5, CDS, UTR3 = "UTR5", "CDS", "UTR3"
@@ -32,14 +31,9 @@ class RegionError(RuntimeError):
     """Raised when the region sources disagree or an invariant fails."""
 
 def parse_reference_headers(appris_lengths: Path) -> dict:
-    """Parse `appris_human_v2_transcript_lengths.tsv` into per-transcript identity + raw regions.
+    """Parse `appris_human_v2_transcript_lengths.tsv` -> {transcript_id: identity + raw regions}.
 
-    Each line is `<pipe-delimited name>\\t<length>`, where the name carries, in order:
-    transcript_id | gene_id | havana_gene | havana_transcript | transcript_name | gene_name
-    | length | UTR5:a-b | CDS:a-b | UTR3:a-b |
-
-    Returns {transcript_id: {...}} with the raw header intervals as 1-based inclusive
-    (start, end) tuples, or None where the header carries no such field.
+    Header intervals stay 1-based inclusive (start, end), or None when the field is absent.
     """
     out = {}
     with open(appris_lengths) as fh:
@@ -81,10 +75,7 @@ def parse_reference_headers(appris_lengths: Path) -> dict:
     return out
 
 def parse_stop_codon_transcripts(gtf: Path, wanted: set) -> set:
-    """Transcript IDs with a GENCODE `stop_codon` feature. The authoritative relocation test.
-
-    One pass, `stop_codon` lines only -- cheap next to the exon parse in transcript_coords.
-    """
+    """Transcript IDs with a GENCODE `stop_codon` feature -- the authoritative relocation test."""
     found = set()
     opener = gzip.open if str(gtf).endswith(".gz") else open
     with opener(gtf, "rt") as fh:
@@ -102,8 +93,7 @@ def parse_stop_codon_transcripts(gtf: Path, wanted: set) -> set:
 def parse_actual_regions_bed(bed_path: Path) -> dict:
     """Parse `appris_human_v2_actual_regions.bed` -> {transcript_id: {label: (start, end)}}.
 
-    BED6, already 0-based half-open, already in transcript coordinates. The name column is
-    the full pipe-delimited reference name; the transcript id is its first field.
+    BED6, 0-based half-open, already in transcript coordinates.
     """
     out = {}
     with open(bed_path) as fh:
@@ -128,12 +118,8 @@ def parse_actual_regions_bed(bed_path: Path) -> dict:
     return out
 
 def derive_normalized_regions(header: dict, has_annotated_stop: bool) -> dict:
-    """{label: (start, end)} 0-based half-open, tiling [0, L), stop codon in UTR3.
-
-    The stop codon is moved out of the CDS and into UTR3 exactly when one is annotated.
-    A region that does not exist is ABSENT from the returned mapping -- never a
-    zero-length interval at position 0.
-    """
+    """{label: (start, end)} 0-based half-open, tiling [0, L); an annotated stop codon
+    moves into UTR3. A region that does not exist is ABSENT, never zero-length."""
     length = header["transcript_len"]
     cds_start_1, cds_end_1 = header["hdr_cds"]
     start, end = cds_start_1 - 1, cds_end_1
@@ -178,15 +164,9 @@ def check_tiling(transcript_id: str, regions: dict, length: int) -> None:
                               % (transcript_id, start, end))
 
 def build_regions(headers: dict, stop_codon_ids: set, bed: dict = None) -> tuple:
-    """Per-transcript region overlays, with both raw forms and the normalized one.
+    """Per-transcript region overlays (raw + normalized) -> (rows, summary).
 
-    Returns (rows, summary). Each row:
-        transcript_id, label, raw_header_start_1based, raw_header_end_1based,
-        raw_bed_start, raw_bed_end, start, end, source
-    with -1 wherever a raw source does not describe that region.
-
-    When `bed` is supplied, every derived interval is compared against it and ANY
-    disagreement raises -- the BED is a cross-check, not a fallback.
+    A supplied `bed` is a cross-check, never a fallback: any disagreement raises.
     """
     rows = []
     n_relocated = n_not_relocated = 0
@@ -255,12 +235,10 @@ def build_regions(headers: dict, stop_codon_ids: set, bed: dict = None) -> tuple
     return rows, summary
 
 def heuristic_stop_codon_ids(headers: dict) -> set:
-    """Fallback for when no GTF is available: header UTR3 present, or CDS length % 3 == 0.
+    """No-GTF fallback: header UTR3 present, or CDS length % 3 == 0.
 
-    Reproduces the GTF `stop_codon` set exactly on the shipped v2 reference (0 disagreements
-    over 19,736 transcripts), but it IS a heuristic. Note that divisibility alone is not
-    enough: 20 transcripts have a header UTR3 and a CDS length not divisible by 3
-    (5'-incomplete annotations) and are still relocated.
+    Matches the GTF stop_codon set on the shipped v2 reference, but IS a heuristic
+    (divisibility alone misses 5'-incomplete annotations that carry a UTR3).
     """
     out = set()
     for tid, header in headers.items():
@@ -270,24 +248,10 @@ def heuristic_stop_codon_ids(headers: dict) -> set:
     return out
 
 def build_ribo_region_bins(headers: dict, left_span: int, right_span: int) -> list:
-    """ribopy's five-way binning, as DERIVED definitions -- never as annotation.
+    """ribopy's five-way binning (port of `region_lib.classify` boundaries), derived, not annotation.
 
-    A verbatim port of `region_lib.classify`'s boundaries (itself a port of ribopy's
-    `get_extended_boundaries`). Note it uses the STOP-INCLUSIVE header CDS end, which is a
-    different convention from the canonical regions above; that is ribopy's choice and is
-    preserved rather than silently harmonised.
-
-        start_site = header CDS start - 1     (0-based)
-        stop_site  = header CDS end           (0-based exclusive, stop-inclusive)
-
-        UTR5_OUTER   = [0,                           start_site - left_span)
-        START_WINDOW = [start_site - left_span,      start_site + right_span + 1)
-        CDS_CORE     = [start_site + right_span + 1, stop_site - left_span)
-        STOP_WINDOW  = [stop_site - left_span,       stop_site + right_span + 1)
-        UTR3_OUTER   = [stop_site + right_span + 1,  L)
-
-    Bins are clipped to [0, L) and empty bins are omitted, so short transcripts do not
-    produce inverted intervals.
+    Uses the STOP-INCLUSIVE header CDS end -- ribopy's convention, deliberately not harmonised
+    with the canonical regions above; bins are clipped to [0, L) and empty bins omitted.
     """
     if left_span < 0 or right_span < 0:
         raise RegionError("left_span and right_span must be >= 0, got %d / %d"

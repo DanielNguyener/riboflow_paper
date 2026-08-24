@@ -1,10 +1,13 @@
-
-matplotlib==3.9.4          
+# The environment the published artifacts were produced with (Python 3.9.23, run as `python`).
+matplotlib==3.9.4
 pandas==2.3.3
 numpy==2.0.1
 scipy==1.13.1
 PyYAML==6.0.3
-pysam==0.23.3              
-pyranges==0.1.4            
+pysam==0.23.3
+pyranges==0.1.4
 h5py==3.14.0
 openpyxl==3.1.5
+PyMuPDF==1.26.5          # figure assembly (code/assemble_figures.py, code/panels/figure_io.py)
+Pillow==11.3.0           # TIFF export
+# R 4.4.3 (base R only) for code/te_route/normalization.R and te_statistics.R.

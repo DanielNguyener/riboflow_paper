@@ -1,0 +1,97 @@
+{
+  "alternative_chosen_by": "most genome-only unique reads on non-selected sequence",
+  "alternative_support_top5": {
+    "ENST00000244815.9": 701,
+    "ENST00000289175.10": 701,
+    "ENST00000392000.4": 699,
+    "ENST00000420665.5": 47,
+    "ENST00000473815.1": 30
+  },
+  "alternative_transcript": "ENST00000244815.9",
+  "builder": "code/alignment_fate/build_locus_data.py",
+  "chrom": "chr2",
+  "counts": {
+    "genome_cov_total": 984.0,
+    "genome_only_unique": 739,
+    "genome_psite_dropped": 0,
+    "genome_reads_at_locus_in_window": 1264,
+    "genome_unique": 1006,
+    "txome_cov_total": 295.0,
+    "txome_psite_dropped": 0,
+    "txome_unique_on_selected": 295
+  },
+  "coverage_semantics": {
+    "genome_cov": "genome route, NH==1 primaries in the read-length window, one count per read at its P-site (cigar_aware)",
+    "order": "5'->3' over the merged exons of both models (SplicedAxis order)",
+    "txome_cov": "transcriptome route, MAPQ>=42 primaries on the selected transcript, P-site projected through the transcript->genome map"
+  },
+  "gene": "LRRFIP1",
+  "genome_window": {
+    "lengths": [
+      26,
+      27,
+      28,
+      29
+    ],
+    "offsets": {
+      "26": 11,
+      "27": 11,
+      "28": 11,
+      "29": 11
+    }
+  },
+  "gsm": "GSM2100602",
+  "inputs": {
+    "appris": {
+      "file": "appris_human_v2_transcript_lengths.tsv",
+      "sha256": "c499dbf62a20e70f1123d66934af1166f8c9ca66bb6288acb23fa5a0a688f7b5"
+    },
+    "gtf": {
+      "file": "gencode.v34.annotation.gtf",
+      "sha256": "ab3fa4679fbade76c213ad0b5a88a5f2b5f51e0ef17c42576b420ef31c1b3bdd"
+    },
+    "qc_genome": {
+      "file": "data/ribo_seq_qc/genome/tables/readlen_window_qc.csv",
+      "sha256": "b41e36f50b72eb969f2b8635a48117c09bdea5e678548e8884eb00f8ef6f65be"
+    },
+    "qc_txome": {
+      "file": "data/ribo_seq_qc/transcriptome/tables/readlen_window_qc.csv",
+      "sha256": "ff647da33f4c263082788b5a4972850d9d3581236e05703c11f4d49754051134"
+    },
+    "ribo_genome": {
+      "file": "HeLa.post_dedup.bam",
+      "sha256": "c3fc08687c11bfc5b8c3608b83e41b6530e4e4ef968b3c1c8eaa4276a7def61b"
+    },
+    "ribo_txome": {
+      "file": "HeLa.transcriptome.post_dedup.bam",
+      "sha256": "e4d640223fe7b4d4ab006f19a13535d29c70e09b643a98292d3f375f2511e034"
+    }
+  },
+  "intron_gap_plot_units": 90.0,
+  "locus": {
+    "end": 237781643,
+    "label": "chr2:237,627,586-237,781,643 (+)",
+    "start": 237627586
+  },
+  "n_absent_nt": 3619,
+  "sample": "HeLa",
+  "selected_length": 4092,
+  "selected_transcript": "ENST00000308482.14",
+  "signal": "psite",
+  "strand": "+",
+  "txome_min_mapq": 42,
+  "txome_window": {
+    "lengths": [
+      26,
+      27,
+      28,
+      29
+    ],
+    "offsets": {
+      "26": 11,
+      "27": 11,
+      "28": 11,
+      "29": 11
+    }
+  }
+}

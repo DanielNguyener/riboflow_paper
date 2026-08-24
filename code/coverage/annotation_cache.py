@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import pickle
-import sys
 import time
 from pathlib import Path
 
@@ -43,7 +42,6 @@ def fingerprint(gtf, appris, regions, left_span, right_span):
 
 def build(gtf, appris, regions, left_span, right_span):
     """Parse the annotation into the reusable coordinate bundle."""
-    import numpy as np
     import pandas as pd
     import transcript_coords
     import transcript_regions

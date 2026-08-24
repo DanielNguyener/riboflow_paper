@@ -15,7 +15,7 @@ COVERAGE_DIR = REPO / "code" / "coverage"
 
 SIGNAL_CHOICES = ("psite", "footprint", "both")
 NORMALIZE_CHOICES = ("none", "per-million", "max")
-OVERLAY_CHOICES = ("auto", "ribo_bins", "canonical", "none")
+OVERLAY_CHOICES = ("auto", "canonical", "none")
 
 BUILD_HINT = """\
 Build one with:
@@ -44,11 +44,7 @@ def _import_coverage_modules():
 def check_coverage_file(path, expect_sample=None, require_regions=True):
     """Validate the input before drawing anything. Returns the file's identity dict.
 
-    Checks, in the order a reader would want them: the file exists; it is a valid,
-    CURRENT-schema coverage file; it declares a sample, a coordinate convention, both
-    routes and a P-site policy; and, if asked, that it carries region annotations to draw.
-
-    Raises SystemExit with one message naming everything that is wrong, plus `BUILD_HINT`.
+    Raises SystemExit naming everything that is wrong, plus `BUILD_HINT`.
     """
     coverage_schema, _metrics = _import_coverage_modules()
 
@@ -79,8 +75,8 @@ def check_coverage_file(path, expect_sample=None, require_regions=True):
                               % ", ".join(sorted(missing_routes)))
         if not identity["psite_placement"]:
             complaints.append("it records no P-site placement rule")
-        if require_regions and not len(coverage.handle["regions"]["start"]):
-            complaints.append("it carries no transcript-region annotations to draw")
+        if require_regions and not (coverage.cds_start >= 0).any():
+            complaints.append("it carries no CDS bounds to draw regions from")
     if complaints:
         raise SystemExit("%s cannot be plotted:\n%s\n\n%s"
                          % (path, "\n".join("  - %s" % c for c in complaints), BUILD_HINT))
@@ -88,11 +84,7 @@ def check_coverage_file(path, expect_sample=None, require_regions=True):
 
 def load_tracks(coverage_path, gene_id=None, transcript_id=None, region="whole",
                 trim=None, normalize="none", overlay="auto"):
-    """Everything a plot needs for one transcript, and nothing about how to draw it.
-
-    Returns a dict with the four arrays, the x coordinate, the resolved identifiers, the
-    region intervals, and a per-route state from the schema's four-state vocabulary.
-    """
+    """Everything a plot needs for one transcript, and nothing about how to draw it."""
     coverage_schema, _metrics = _import_coverage_modules()
 
     with coverage_schema.open_coverage(coverage_path) as coverage:
@@ -105,7 +97,6 @@ def load_tracks(coverage_path, gene_id=None, transcript_id=None, region="whole",
 
         info = coverage.transcript_info(index)
         regions = coverage.regions_of(index)
-        ribo_bins = coverage.ribo_bins_of(index)
         file_trim = coverage.trim
         effective_trim = file_trim if trim is None else trim
 
@@ -115,8 +106,8 @@ def load_tracks(coverage_path, gene_id=None, transcript_id=None, region="whole",
                 raise SystemExit(
                     "%s has a CDS of %d nt, which does not survive a %d nt trim at each "
                     "end. Use --region whole or a smaller --trim."
-                    % (info["transcript_id"], info["cds_len_gtf"], effective_trim))
-            # start codon, so a trimmed window runs [trim, cds_len - trim). That is what
+                    % (info["transcript_id"], info["cds_len"], effective_trim))
+            # CDS-relative axis: a trimmed window runs [trim, cds_len - trim).
             axis_origin = regions["CDS"][0]
         elif region == "whole":
             start, end = 0, info["transcript_len"]
@@ -129,13 +120,12 @@ def load_tracks(coverage_path, gene_id=None, transcript_id=None, region="whole",
                             ("g_fp", "genome_footprint"), ("t_fp", "txome_footprint")):
             tracks[key] = coverage.get_track(index, signal)[start:end]
 
+        counts = coverage.event_counts(index)
         states = {}
-        for key, events in (("g_ps", "n_genome_psite_events"),
-                            ("t_ps", "n_txome_psite_events"),
-                            ("g_fp", "n_genome_footprint_bases"),
-                            ("t_fp", "n_txome_footprint_bases")):
+        for key, signal in (("g_ps", "genome_psite"), ("t_ps", "txome_psite"),
+                            ("g_fp", "genome_footprint"), ("t_fp", "txome_footprint")):
             states[key] = coverage_schema.describe_coverage_state(
-                info[events], int(tracks[key].sum()))
+                counts[signal], int(tracks[key].sum()))
         sample = coverage.sample
 
     scale = 1.0
@@ -157,10 +147,8 @@ def load_tracks(coverage_path, gene_id=None, transcript_id=None, region="whole",
         "transcript_id": info["transcript_id"],
         "gene_id": info["gene_id"],
         "gene_name": info["gene_name"],
-        "strand": info["strand"],
-        "chrom": info["chrom"],
         "transcript_len": info["transcript_len"],
-        "cds_len_gtf": info["cds_len_gtf"],
+        "cds_len": info["cds_len"],
         "region": region,
         "trim": effective_trim,
         "file_trim": file_trim,
@@ -173,46 +161,29 @@ def load_tracks(coverage_path, gene_id=None, transcript_id=None, region="whole",
         "values": plotted,
         "states": states,
         "regions": regions,
-        "ribo_bins": ribo_bins,
-        "overlay": resolve_overlay(overlay, regions, ribo_bins),
+        "overlay": resolve_overlay(overlay, regions),
         "normalize": normalize,
         "requested_gene_id": gene_id,
         "requested_transcript_id": transcript_id,
     }
 
-def resolve_overlay(requested, regions, ribo_bins):
-    """Which region overlay to draw, given what the file actually carries.
-
-    `auto` prefers the five-way ribopy bins and falls back to the canonical three, then to
-    nothing. An explicit choice that the file cannot satisfy is an error rather than a
-    silent downgrade: a plot labelled UTR5J when no junction windows were stored would be
-    a lie about the annotation.
-    """
+def resolve_overlay(requested, regions):
+    """Which region overlay to draw; explicit `canonical` without regions is an error."""
     if requested == "none":
         return "none"
     if requested == "auto":
-        if ribo_bins:
-            return "ribo_bins"
         return "canonical" if regions else "none"
-    if requested == "ribo_bins":
-        if not ribo_bins:
-            raise SystemExit(
-                "--regions ribo_bins was asked for, but this file carries no "
-                "/ribo_region_bins for this transcript. Use --regions canonical or auto.")
-        return "ribo_bins"
     if requested == "canonical":
         if not regions:
             raise SystemExit("--regions canonical was asked for, but this file carries "
-                             "no /regions for this transcript.")
+                             "no CDS bounds for this transcript.")
         return "canonical"
     raise SystemExit("unknown --regions %r" % requested)
 
 def overlay_intervals(tracks):
     """[(display label, start, end)] on the plotted axis, for the chosen overlay."""
     origin = tracks["axis_origin"]
-    if tracks["overlay"] == "ribo_bins":
-        rows = [(alias, start, end) for alias, _label, start, end in tracks["ribo_bins"]]
-    elif tracks["overlay"] == "canonical":
+    if tracks["overlay"] == "canonical":
         rows = [(label, start, end)
                 for label, (start, end) in sorted(tracks["regions"].items(),
                                                   key=lambda kv: kv[1])]
@@ -221,11 +192,9 @@ def overlay_intervals(tracks):
     return [(label, start - origin, end - origin) for label, start, end in rows]
 
 def annotate_correlations(tracks):
-    """Spearman rho and the documented log-Pearson, FROM THE DISPLAYED ARRAYS.
+    """Spearman rho and the documented log-Pearson, from the RAW integer counts.
 
-    Uses the published `_spear`/`_pe_log2` on the RAW integer counts. Not
-    `scipy.stats.pearsonr`, which differs at ~1e-15 on the same log2 arrays, and not the
-    normalized values, which would silently change what the number means.
+    Uses `_spear`/`_pe_log2`, never `scipy.stats.pearsonr` (differs at ~1e-15).
     """
     _coverage_schema, metrics = _import_coverage_modules()
     raw = tracks["raw"]
@@ -278,9 +247,7 @@ def _draw_track(axis, x, genome, txome, style, states, ylabel, mirrored):
 
 REGION_SHADING = {
     "UTR5": ("#dfe6ee", "UTR5"),
-    "UTR5J": ("#f6e2c3", "UTR5J"),
     "CDS": ("#ffffff", "CDS"),
-    "UTR3J": ("#f6e2c3", "UTR3J"),
     "UTR3": ("#dfe6ee", "UTR3"),
 }
 
@@ -309,8 +276,12 @@ def _draw_region_overlay(axes, tracks, style):
                      textcoords="offset points", ha="right", va="bottom",
                      fontsize=style["annotation"], color="#888")
 
-def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=None):
-    """Draw one transcript's coverage. Returns (figure, axes)."""
+def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=None,
+                  labels="full", title_correlations=False):
+    """Draw one transcript's coverage. Returns (figure, axes).
+
+    `labels="minimal"` drops the in-axes text; boundary lines stay, numbers go to the record.
+    """
     import matplotlib.pyplot as plt
     import panel_style as ps
 
@@ -332,7 +303,7 @@ def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=
             _draw_track(axis, x, tracks["values"]["g_fp"], tracks["values"]["t_fp"], style,
                         (tracks["states"]["g_fp"], tracks["states"]["t_fp"]),
                         "footprint\ncoverage", mirrored=False)
-        if correlations:
+        if correlations and labels == "full":
             entry = correlations[which]
             axis.text(0.99, 0.94,
                       "Spearman $\\rho$ = %.3f\nPearson $r$ = %.3f"
@@ -349,14 +320,17 @@ def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=
                                (tracks["x_end"], "stop −%d nt" % tracks["trim"])):
             for axis in axes:
                 axis.axvline(boundary, color="#555", ls="--", lw=1.0, zorder=5)
+            if labels == "minimal":
+                continue
             axes[0].annotate(text, xy=(boundary, 1.0), xycoords=("data", "axes fraction"),
                              xytext=(0, 2), textcoords="offset points", ha="center",
                              va="bottom", fontsize=style["tick"], color="#555")
 
     label_box = dict(boxstyle="round,pad=0.35", fc="white", ec="#555", lw=0.9)
-    axes[0].text(0.012, 0.90, "genome", transform=axes[0].transAxes, ha="left", va="top",
-                 fontsize=style["title"], bbox=dict(label_box), zorder=9)
-    if wanted[0] == "psite":
+    if labels == "full":
+        axes[0].text(0.012, 0.90, "genome", transform=axes[0].transAxes, ha="left",
+                     va="top", fontsize=style["title"], bbox=dict(label_box), zorder=9)
+    if wanted[0] == "psite" and labels == "full":
         axes[0].text(0.012, 0.10, "transcriptome", transform=axes[0].transAxes,
                      ha="left", va="bottom", fontsize=style["title"],
                      bbox=dict(label_box), zorder=9)
@@ -365,21 +339,25 @@ def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=
             "max": ", scaled to max"}[tracks["normalize"]]
     axes[-1].set_xlabel(("CDS position" if tracks["region"] == "cds"
                          else "transcript position") + unit, fontsize=style["label"])
-    axes[0].set_title(title if title is not None else
-                      "%s (%s) — %s" % (tracks["gene_name"], tracks["transcript_id"],
-                                             tracks["sample"]),
-                      fontsize=style["title"], pad=14)
+    heading = title if title is not None else "%s (%s) - %s" % (
+        tracks["gene_name"], tracks["transcript_id"], tracks["sample"])
+    if title_correlations and correlations:
+        # A second, smaller title line carrying what the in-axes box would have said.
+        names = {"psite": "P-site", "footprint": "footprint"}
+        stats = "; ".join("%s $\\rho$ = %.3f, $r$ = %.3f"
+                          % (names[w], correlations[w]["spearman"],
+                             correlations[w]["pearson"]) for w in wanted)
+        axes[0].set_title(heading, fontsize=style["title"], pad=14)
+        axes[0].annotate(stats, xy=(0.5, 1.0), xycoords="axes fraction", xytext=(0, 3),
+                         textcoords="offset points", ha="center", va="bottom",
+                         fontsize=style["annotation"], color="#333")
+    else:
+        axes[0].set_title(heading, fontsize=style["title"], pad=14)
     figure.tight_layout()
     return figure, axes
 
 def render(argv=None):
-    """Draw the panel and RETURN the record of what went into it.
-
-    The record is the honest answer to "which transcript, which overlay, which P-site
-    rule, which correlations". It is RETURNED rather than serialised beside the figure:
-    the tests assert on it directly, so the pipeline need not write a sidecar file for
-    their benefit.
-    """
+    """Draw the panel and RETURN the render record (the tests assert on it directly)."""
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--coverage-h5", required=True, type=Path, dest="coverage",
@@ -393,13 +371,22 @@ def render(argv=None):
                         help="which window to plot")
     parser.add_argument("--regions", default="auto", choices=OVERLAY_CHOICES,
                         dest="overlay",
-                        help="which region overlay to draw: the five-way ribopy bins "
-                             "(UTR5/UTR5J/CDS/UTR3J/UTR3), the canonical three, or none")
+                        help="which region overlay to draw on the whole-transcript view: "
+                             "the canonical UTR5/CDS/UTR3, or none")
     parser.add_argument("--trim", type=int, default=None,
                         help="override the file's own paper_cds_trim")
     parser.add_argument("--normalize", default="none", choices=NORMALIZE_CHOICES)
     parser.add_argument("--annotate-correlation", action="store_true")
     parser.add_argument("--title")
+    parser.add_argument("--labels", choices=("full", "minimal"), default="full",
+                        help="minimal: no route names, correlation box or boundary "
+                             "captions inside the axes (the numbers stay in the record)")
+    parser.add_argument("--title-correlations", action="store_true",
+                        help="add a second title line with each track's rho and r "
+                             "(needs --annotate-correlation)")
+    parser.add_argument("--record-json", type=Path,
+                        help="also write the render record (resolved transcript, window, "
+                             "correlations) to this JSON file")
     parser.add_argument("--figsize", nargs=2, type=float, metavar=("W", "H"))
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--format", dest="formats", default="pdf")
@@ -420,9 +407,9 @@ def render(argv=None):
 
     tracks = load_tracks(args.coverage, args.gene_id, args.transcript_id,
                          args.region, args.trim, args.normalize, args.overlay)
-    print("[panel] resolved %s -> %s (%s, %s%s)"
+    print("[panel] resolved %s -> %s (%s)"
           % (args.gene_id or args.transcript_id, tracks["transcript_id"],
-             tracks["gene_name"], tracks["chrom"], tracks["strand"]))
+             tracks["gene_name"]))
     if tracks["overlay"] != "none":
         print("[panel] region overlay (%s): %s"
               % (tracks["overlay"],
@@ -438,7 +425,7 @@ def render(argv=None):
     correlations = annotate_correlations(tracks) if args.annotate_correlation else None
     figure, _axes = plot_coverage(tracks, args.signal, correlations,
                                   tuple(args.figsize) if args.figsize else None,
-                                  args.title)
+                                  args.title, args.labels, args.title_correlations)
     written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force)
     record = {
         "generator": "code/panels/plot_transcript_coverage.py",
@@ -456,8 +443,13 @@ def render(argv=None):
         "signal": args.signal, "normalize": args.normalize,
         "coverage_states": tracks["states"],
         "correlations": correlations,
+        "labels": args.labels,
         "outputs": [str(p) for p in written],
     }
+    if args.record_json:
+        import json
+        args.record_json.parent.mkdir(parents=True, exist_ok=True)
+        args.record_json.write_text(json.dumps(record, indent=2, default=str))
     for path in written:
         print("[panel] wrote %s" % path)
     return record

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Regenerate the manuscript's panel assets from `config/panel_manifest.yaml`."""
+"""Regenerate the manuscript's panel assets from `config/panel_manifest.yaml`.
+
+`fit:` panels re-render until their ink is `fit.width_pt` wide and record `<stem>.clip.json`.
+"""
 from __future__ import annotations
 
 import argparse
@@ -22,7 +25,7 @@ def log(message):
 def load_manifest(path=MANIFEST):
     import yaml
     document = yaml.safe_load(path.read_text())
-    expected = "riboflow_paper/panel-manifest/1"
+    expected = "riboflow_paper/panel-manifest/2"
     if document.get("schema_version") != expected:
         raise SystemExit("%s has schema_version %r, expected %r"
                          % (path, document.get("schema_version"), expected))
@@ -74,17 +77,47 @@ def _flag_pairs(args_block):
             flags += [flag, str(value)]
     return flags
 
-def build_command(entry, defaults, formats, force):
+def build_command(entry, defaults, formats, force, output=None, figsize=None):
     command = [sys.executable, str(REPO / entry["generator"])]
     for key, value in (entry.get("inputs") or {}).items():
         command += ["--" + key.replace("_", "-"), str(REPO / value)
                     if not str(value).startswith("/") else str(value)]
     command += _flag_pairs(entry.get("args"))
-    command += ["--output", str(REPO / entry["output"])]
+    if figsize is not None:
+        command += ["--figsize", "%.6f" % figsize[0], "%.6f" % figsize[1]]
+    command += ["--output", str(output if output is not None else REPO / entry["output"])]
     command += ["--format", ",".join(formats)]
     if force:
         command.append("--force")
     return command
+
+
+def fit_and_run(entry, defaults, formats, force, dry_run=False):
+    """Render a `fit:` panel until its ink is the declared width; record the clip."""
+    import json
+    sys.path.insert(0, str(REPO / "code" / "panels"))
+    import figure_io
+
+    fit = entry["fit"]
+    stem = REPO / entry["output"]
+    pdf = stem.with_suffix(".pdf")
+    if pdf.exists() and not force:
+        return 1, "%s exists; pass --force (fitted panels are re-rendered several times)" % pdf
+    if dry_run:
+        print("    " + " ".join(build_command(entry, defaults, formats, True, stem,
+                                              (fit["width_pt"] / 72.0, fit["height_in"]))))
+        return 0, ""
+
+    def build(width_in, height_in):
+        # --force on every iteration: the loop overwrites its own previous render.
+        return build_command(entry, defaults, formats, True, stem, (width_in, height_in))
+
+    clip = figure_io.fit_panel(entry["id"], build, str(pdf), fit["width_pt"],
+                               fit["height_in"], start_w_in=fit["width_pt"] / 72.0)
+    with open(str(stem) + ".clip.json", "w") as handle:
+        json.dump({"x0": clip.x0, "y0": clip.y0, "x1": clip.x1, "y1": clip.y1,
+                   "target_w_pt": fit["width_pt"]}, handle, indent=2)
+    return 0, ""
 
 def run(command, dry_run=False):
     if dry_run:
@@ -94,12 +127,7 @@ def run(command, dry_run=False):
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
 def _failure_excerpt(output, head=6, tail=18):
-    """The first lines of a failure AND the last, indented.
-
-    A generator's first line is its summary -- "coverage file does not exist: ..." -- and
-    its last lines are usually the remedy. Showing only the tail, as this once did, cut the
-    summary off exactly when a multi-line message was most worth reading.
-    """
+    """The first lines of a failure AND the last, indented (summary head, remedy tail)."""
     lines = output.splitlines()
     if len(lines) <= head + tail:
         shown = lines
@@ -111,7 +139,7 @@ def _failure_excerpt(output, head=6, tail=18):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("panels", nargs="*", help="panel ids, e.g. fig03A fig05E")
+    parser.add_argument("panels", nargs="*", help="panel ids, e.g. fig03A fig06B")
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--manifest", type=Path, default=MANIFEST)
@@ -163,8 +191,12 @@ def main(argv=None):
         entry = by_id[panel_id]
         panel_formats = tuple(entry.get("formats", formats))
         log("%s (Figure %s %s)" % (panel_id, entry["figure"], entry.get("panel", "")))
-        code, output = run(build_command(entry, document["defaults"], panel_formats,
-                                         args.force), args.dry_run)
+        if entry.get("fit"):
+            code, output = fit_and_run(entry, document["defaults"], panel_formats,
+                                       args.force, args.dry_run)
+        else:
+            code, output = run(build_command(entry, document["defaults"], panel_formats,
+                                             args.force), args.dry_run)
         if code:
             log("  FAILED\n%s" % _failure_excerpt(output))
             results.append((panel_id, False, None, None))
@@ -192,8 +224,8 @@ def main(argv=None):
             line += "  %s" % verdict
         print(line)
     print("\n%d/%d panels produced." % (len(results) - len(failed), len(results)))
-    print("These are PANEL ASSETS. Figures 2-5 are assembled by hand in Affinity Designer;")
-    print("figures/published/ holds the author's exports, not this repository's output.")
+    print("These are PANEL ASSETS. `python code/assemble_figures.py --all --check` composes")
+    print("them into figures/published/Fig<N>.tif.")
     return 1 if failed else 0
 
 if __name__ == "__main__":

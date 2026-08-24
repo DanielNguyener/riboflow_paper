@@ -11,7 +11,7 @@ conda activate ribo_genome
 
 set -uo pipefail
 
-REPO="${RIBOFLOW_REPO:?set RIBOFLOW_REPO to the riboflow_genome checkout}"
+REPO="${RIBOFLOW_REPO:?set RIBOFLOW_REPO to the RiboFlow_v2 checkout}"
 YAML_DIR="$REPO/RiboFlow_YAMLs_cohort" 
 PROFILE=${NXF_PROFILE-lonestar6}
 FORCE=${FORCE:-0}

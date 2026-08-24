@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
@@ -39,25 +38,14 @@ def default_out_tsv():
 _CDS_CORE = None
 
 def _genome_cds_core():
-    """RiboPy's CDS core in genomic coordinates, parsed once per process.
-
-    Every genome sample needs the same intervals and building them costs a GTF parse, so
-    the workers share one copy rather than each rebuilding it.
-    """
+    """RiboPy's CDS core in genomic coordinates, parsed once per process (a GTF parse is costly)."""
     global _CDS_CORE
     if _CDS_CORE is None:
         _CDS_CORE = qc_core.genome_cds_core_intervals()
     return _CDS_CORE
 
 def _phase1(cds_length_counts):
-    """The selected window, from `qc_core` -- NOT a local copy of the rule.
-
-    The selection comes from `qc_core.select_read_lengths`, the one implementation. A
-    local copy of the expansion loop would drift from it -- this step would pick a length
-    the QC masters had not selected, look up its `psite_offset` and find a null. The point
-    of this table is to show that the documented rule is the rule that ran, so it must ask
-    the same function the pipeline asks.
-    """
+    """The selected window, from `qc_core.select_read_lengths` -- NOT a local copy that could drift."""
     return qc_core.select_read_lengths(cds_length_counts)[0]
 
 def genome_metagene(sample):

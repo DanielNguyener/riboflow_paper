@@ -18,7 +18,7 @@ import config
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_WORKERS = 10
 
-#: step name -> (script, the staging suffix it produces). Order is load-bearing:
+#: step name -> (script, staging suffix). Order is load-bearing.
 STEP_SCRIPTS = {
     "qc":        ("01_readlen_psite_qc.py", "readlen_window_qc"),
     "cds_frame": ("03_cds_frame.py", "cds_psite_frame"),
@@ -31,11 +31,7 @@ MASTER_TABLES = {
 }
 
 def discover_samples(bam_dir, pattern="*.bam"):
-    """Sorted [(sample, bam_path)] for every BAM matching `pattern` under `bam_dir`.
-
-    `pattern` is a glob relative to `bam_dir`. The default handles a flat folder; a nested
-    RiboFlow layout passes e.g. "*/genome/alignment_ribo/merged/*.post_dedup.bam".
-    """
+    """Sorted [(sample, bam_path)] for every BAM matching the `bam_dir`-relative glob `pattern`."""
     bams = sorted(glob.glob(os.path.join(bam_dir, pattern)))
     return [(config.sample_from_bam(b), b) for b in bams]
 

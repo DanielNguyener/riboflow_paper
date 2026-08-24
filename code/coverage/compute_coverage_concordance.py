@@ -24,7 +24,6 @@ PER_TRANSCRIPT_COLUMNS = [
 SIGNAL_SETS = {
     "psite": {
         "signals": ("genome_psite", "txome_psite"),
-        "keys": ("hist_cds_genome_psite_key", "hist_cds_txome_psite_key"),
         "per_sample": "region_concordance_per_sample.tsv",
         "per_transcript": "region_concordance_per_transcript.tsv",
         "with_frame": True,
@@ -32,7 +31,6 @@ SIGNAL_SETS = {
     },
     "footprint": {
         "signals": ("genome_footprint", "txome_footprint"),
-        "keys": ("hist_cds_genome_footprint_key", "hist_cds_txome_footprint_key"),
         "per_sample": "region_coverage_per_sample.tsv",
         "per_transcript": "region_coverage_per_transcript.tsv",
         "with_frame": False,
@@ -52,8 +50,7 @@ def _spear(genome, txome):
 def _pe_log2(genome, txome, pseudocount=1.0):
     """Pearson r on log2(count + pseudocount), hand-centred in float64.
 
-    `scipy.stats.pearsonr` differs from this at ~1e-15 and clamps to exactly 1.0 on the
-    large pooled arrays, which is why the arithmetic is spelled out rather than delegated.
+    Never delegate to `scipy.stats.pearsonr`: it differs at ~1e-15 and clamps pooled arrays to 1.0.
     """
     if len(genome) <= 2:
         return np.nan
@@ -78,29 +75,26 @@ def load_sample(coverage_path, kind):
 
     spec = SIGNAL_SETS[kind]
     wrapper = coverage_schema.open_coverage(coverage_path)
-    handle = wrapper.handle
     trim = wrapper.trim
-    n_transcripts = wrapper.n_transcripts
+    offsets = wrapper.coverage_offset
+    ids = np.array(wrapper.transcript_ids)
+    gene_names = np.array(wrapper.gene_names)
+    cds_start = wrapper.cds_start.copy()
+    cds_end = wrapper.cds_end.copy()
+    # A transcript without a CDS reads as an empty window at 0, as before schema 3.
+    no_cds = cds_start == coverage_schema.NO_CDS
+    cds_start[no_cds] = 0
+    cds_end[no_cds] = 0
 
-    offsets = handle["transcripts"]["coverage_offset"][:]
-    ids = np.array([s.decode() if isinstance(s, bytes) else s
-                    for s in handle["transcripts"]["transcript_id"][:]])
-    gene_names = np.array([s.decode() if isinstance(s, bytes) else s
-                           for s in handle["transcripts"]["gene_name"][:]])
-
-    labels = np.array([s.decode() if isinstance(s, bytes) else s
-                       for s in handle["regions"]["label"][:]])
-    region_tx = handle["regions"]["transcript_index"][:]
-    cds_start = np.zeros(n_transcripts, dtype=np.int64)
-    cds_end = np.zeros(n_transcripts, dtype=np.int64)
-    mask = labels == "CDS"
-    cds_start[region_tx[mask]] = handle["regions"]["start"][:][mask]
-    cds_end[region_tx[mask]] = handle["regions"]["end"][:][mask]
-
-    genome = handle["coverage"][spec["signals"][0]][:]
-    txome = handle["coverage"][spec["signals"][1]][:]
-    key_genome = handle["transcripts"][spec["keys"][0]][:]
-    key_txome = handle["transcripts"][spec["keys"][1]][:]
+    genome = wrapper.signal(spec["signals"][0])
+    txome = wrapper.signal(spec["signals"][1])
+    # The CDS coverage key: P-sites key a transcript on any read in the UNtrimmed CDS;
+    # footprints only on a non-zero trimmed interior. Derived here, never stored.
+    key_trim = trim if spec["totals_trimmed"] else 0
+    key_genome = coverage_schema.window_sums(
+        genome, offsets, cds_start + key_trim, cds_end - key_trim) > 0
+    key_txome = coverage_schema.window_sums(
+        txome, offsets, cds_start + key_trim, cds_end - key_trim) > 0
     sample = wrapper.sample
     wrapper.close()
 

@@ -15,6 +15,28 @@ TAXONOMY_REQUIRED = (
     "n_genome_unique", "n_genome_multi", "n_genome_absent",
     "n_txome_unique", "n_txome_multi", "n_txome_absent")
 
+#: The plot box shared by Figure 5's cohort panels A-D: distance from the PAGE TOP plus a
+#: HEIGHT, both in points. Both must match across panels or the 24 rows misalign at
+#: assembly; panels export with `tight=False` so the offsets survive to the file.
+STACK_PAGE_HEIGHT_IN = 8.0
+STACK_AXES_TOP_OFFSET_PT = 40.0     # page top -> top of the plot box (C and D's title band)
+STACK_AXES_HEIGHT_PT = 470.0
+
+def stack_axes_fractions(page_height_in=STACK_PAGE_HEIGHT_IN):
+    """`(bottom, top)` for `subplots_adjust` that reproduces the shared box.
+
+    Pages differ in height, so the fractions differ to land the box at the same points.
+    """
+    page_pt = page_height_in * 72.0
+    top = 1.0 - STACK_AXES_TOP_OFFSET_PT / page_pt
+    bottom = 1.0 - (STACK_AXES_TOP_OFFSET_PT + STACK_AXES_HEIGHT_PT) / page_pt
+    if bottom <= 0.0:
+        raise SystemExit(
+            "a %.2f in page cannot hold the shared plot box (%.0f pt from the top, %.0f pt "
+            "tall) and anything below it" % (page_height_in, STACK_AXES_TOP_OFFSET_PT,
+                                             STACK_AXES_HEIGHT_PT))
+    return bottom, top
+
 def load_taxonomy(path):
     """The read-ID taxonomy master, with the union partition derived and checked."""
     sys.path.insert(0, str(HERE))
@@ -47,13 +69,7 @@ def load_taxonomy(path):
     return frame
 
 def load_labels(samples_csv=None):
-    """{sample: GSM}, projected straight out of the sample table.
-
-    `cell_line` there uses spaces where sample names use underscores ("Cybrid Cells" vs
-    "Cybrid_Cells"), so the key is normalised. This reads the S1 Table directly rather
-    than a pre-derived two-column file: a projection of two columns is not worth shipping
-    as its own artifact, and a second copy is a second thing that can go stale.
-    """
+    """{sample: GSM} from the sample table; keys normalised (spaces -> underscores)."""
     if not samples_csv:
         return {}
     frame = pd.read_csv(samples_csv, usecols=["cell_line", "ribo_GSM"])
@@ -61,12 +77,7 @@ def load_labels(samples_csv=None):
             for c, g in zip(frame["cell_line"], frame["ribo_GSM"])}
 
 def sample_order(frame, sort_column="delta_reads"):
-    """The shared cohort ordering: cell lines by ascending `delta_reads`.
-
-    Deterministic given the taxonomy table, which is why every panel computes it rather
-    than one panel writing it for the others: a file passed between panels can go stale
-    against the table it came from, and makes panel order matter.
-    """
+    """The shared cohort ordering: cell lines by ascending `delta_reads`."""
     return frame.sort_values(sort_column)["sample"].tolist()
 
 def median_iqr(values):

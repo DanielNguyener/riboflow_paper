@@ -48,23 +48,9 @@ CATEGORY_LABEL = {
 }
 
 def read_txome_primary(bam_path, base2ver):
-    """qname -> (transcript_id, tx_pos, tx_len) for the PRIMARY txome alignment of
-    EVERY read (any MAPQ), in ONE pass.
-
-    tx_pos = reference_start (bowtie2 --norc; transcript-linear 5' coordinate).
-    tx_len = reference_length (the aligned span the read's genome CIGAR must
-    reproduce for the splice-junction-count check). No MAPQ filter is applied here,
-    so txome-multimapper primaries (one arbitrary-among-ties record per read) are
-    retained. Returns a 3-tuple:
-      present       : {qname: (tid, tx_pos, tx_len)} for primaries whose reference
-                      resolves to an APPRIS transcript (classifiable by classify_all);
-      unique_qnames : subset of `present` keys with MAPQ>=TXOME_MIN_MAPQ. Selecting
-                      {q: present[q] for q in unique_qnames} is the confidently-unique
-                      set, so the gU_tU and gU_txPresent populations both come from
-                      this single pass.
-      all_qnames    : EVERY primary qname (even if its reference didn't resolve), so a
-                      denominator "read IDs shared with the txome dedup BAM" stays
-                      faithful; unresolved ids (expected ~0) are tracked, never concordant.
+    """One pass over every primary txome alignment (any MAPQ) -> (present, unique_qnames,
+    all_qnames): {qname: (tid, tx_pos, tx_len)} for APPRIS-resolving primaries, the
+    MAPQ>=TXOME_MIN_MAPQ subset, and every primary qname (resolved or not).
     """
     present = {}
     unique_qnames = set()
@@ -87,10 +73,7 @@ def read_txome_primary(bam_path, base2ver):
 def read_genome_unique(bam_path):
     """qname -> (chrom, strand, pos5, n_blocks, blk_min, blk_max) for primary, unique genome reads.
 
-    Unique = NH==1 (bam_inputs.is_unique_genome_read) — same rule as
-    `taxonomy_lib.status_sets(kind="genome")`. blocks come
-    from pysam get_blocks() (splits on CIGAR N-ops); pos5 is the 5'-most genomic
-    base (leftmost fwd / rightmost-1 rev).
+    Unique = NH==1; pos5 is the 5'-most genomic base (leftmost fwd / rightmost-1 rev).
     """
     out = {}
     bam = pysam.AlignmentFile(str(bam_path), "rb")
@@ -111,16 +94,9 @@ def read_genome_unique(bam_path):
     return out
 
 def _merge_contiguous(exons):
-    """Merge CDS/UTR feature rows that are genomically CONTIGUOUS (same real exon,
-    split into separate GTF features at the start/stop codon) into one real exon.
+    """Merge genomically contiguous CDS/UTR rows (one exon split at the start/stop codon).
 
-    `config.py` extracts CDS and UTR as separate GTF feature lines, so the exon
-    that contains the start (or stop) codon appears as two adjacent rows —
-    e.g. CDS [7682253,7682817) + UTR3 [7682817,7687703) on the SAME exon. Without
-    this merge, `build_transcript_table` would treat that CDS/UTR seam as a real
-    splice junction, inflating the expected-junction-count used by the
-    splice_discordant check (verified bug: single-block genome alignments spanning
-    exactly such a seam were being flagged discordant).
+    Without this, the CDS/UTR seam counts as a splice junction and inflates splice_discordant.
     """
     out = []
     for tid, g in exons.groupby("transcript_id", sort=False):
@@ -143,11 +119,7 @@ def _merge_contiguous(exons):
 def build_transcript_table(rebuild=False):
     """Per-APPRIS-transcript whole-transcript (UTR5+CDS+UTR3) coordinate table.
 
-    Returns {"table": {transcript_id: {...}}, "base2ver": {base_ENST: versioned_ENST}}.
-    Reuses ribo_seq_qc/config.py's shared annotation cache (no new GTF parse for
-    this part). `table[tid]`:
-      gene_id, chrom, strand, body_start, body_end, total_len (ints/strs),
-      cum_start, g_start, g_end (parallel np arrays, one row per exon, sorted 5'->3').
+    Returns {"table": {tid: {...}}, "base2ver": {base_ENST: versioned_ENST}}.
     """
     if rebuild and TRANSCRIPT_TABLE_CACHE.exists():
         TRANSCRIPT_TABLE_CACHE.unlink()
@@ -199,11 +171,7 @@ def _build_transcript_table():
 def build_exon_gene_table(rebuild=False):
     """ALL GTF exon intervals (every gene_type) with gene_id + gene_type kept.
 
-    This keeps the actual gene_id/gene_type string per exon — needed for the "different
-    protein-coding gene" / "pseudogene" / "other biotype" buckets, and the reason the QC
-    cache's bare interval table was no use here and is no longer built. Strand is dropped
-    deliberately: buckets 5-7 ask "does this footprint land in ANY other gene's exon", not
-    a strand-specific match.
+    Strand is dropped deliberately: buckets 5-7 ask about ANY other gene's exon, strandless.
     """
     if rebuild and EXON_GENE_CACHE.exists():
         EXON_GENE_CACHE.unlink()

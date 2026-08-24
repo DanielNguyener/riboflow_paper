@@ -13,7 +13,7 @@ one inside an absolute path**. Nothing scientifically load-bearing was touched.
 | `${REFERENCES_FOR_RIBOFLOW}` | a clone of `ribosomeprofiling/references_for_riboflow` — the rRNA filter, the APPRIS transcriptome, the regions BED and the transcript-lengths TSV | 96 |
 | `${STAR_INDEX_DIR}` | the STAR GRCh38 genome index; some YAMLs append `/GRCh38` | 48 |
 | `${FASTQ_DIR}` | input FASTQ root, laid out `$FASTQ_DIR/{ribo,rna}/<GSM>/<SRR>_1.fastq.gz` | 36 ribo + 33 RNA |
-| `${RIBOFLOW_REPO}` | the `riboflow_genome` checkout containing `main.nf` | run script |
+| `${RIBOFLOW_REPO}` | the `RiboFlow_v2` checkout containing `main.nf` | run script |
 | `${NXF_PROFILE}` | optional Nextflow profile; defaults to `ls6`, which is **site-specific** | run script |
 
 Two further changes to the run script: a private IP address was removed from a header
@@ -76,7 +76,7 @@ its 6 ribo runs against 3 RNA runs is one visible reason.
 ## Running it
 
 ```bash
-export RIBOFLOW_REPO=/path/to/riboflow_genome
+export RIBOFLOW_REPO=/path/to/RiboFlow_v2
 export FASTQ_DIR=/path/to/fastqs
 export REFERENCES_FOR_RIBOFLOW=/path/to/references_for_riboflow
 export STAR_INDEX_DIR=/path/to/star_index

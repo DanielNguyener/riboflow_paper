@@ -25,8 +25,7 @@ def _fc():
 def require(*packages):
     """Fail with an actionable message when a declared dependency is missing.
 
-    Never installs anything: a script that pip-installs into whatever interpreter happens
-    to be running can silently change the versions a published number was produced with.
+    Never installs anything: auto-installing can silently change pinned versions.
     """
     missing = []
     for package in packages:
@@ -47,26 +46,10 @@ SELECT_CAPTURE = 0.85
 def select_read_lengths(cds_length_counts,
                         min_len=SELECT_MIN_LEN, max_len=SELECT_MAX_LEN,
                         capture=SELECT_CAPTURE):
-    """RiboBase's read-length interval: TE_model `src/utils.py::intevl`, ported.
+    """RiboBase's read-length interval (TE_model `src/utils.py::intevl`), ported EXACTLY.
 
-    `cds_length_counts` is the CDS-assigned RPF length histogram -- RiboPy's
-    `ribo_object.get_length_dist("CDS")`, NOT every accepted alignment. That distinction is
-    the whole point: the two distributions have different modes and different tails, so
-    selecting on all reads reproduces RiboBase's interval for only 15 of the 24 published
-    libraries.
-
-    Four details of the original that a paraphrase gets wrong, all load-bearing:
-
-      * the loop runs `while value <= pct_85`, so a window capturing EXACTLY 85 % expands
-        once more;
-      * `pct_85` is 85 % of the CDS total WITHIN `min_len..max_len`, not of the library;
-      * ties between the two candidate neighbours go to the LONGER length (`>=` on
-        `count[mmax + 1]` vs `count[mmin - 1]`);
-      * a tie for the mode resolves to the SHORTEST tied length, because the original takes
-        `.values[0]` of a frame ordered by ascending `read_length`.
-
-    Returns `(lengths, lo, hi, captured)` -- `lengths` is the complete inclusive interval,
-    `captured` the count inside it. `captured / total` is the original's `read_pct`.
+    `cds_length_counts` must be the CDS-assigned histogram, NOT all accepted alignments.
+    Returns `(lengths, lo, hi, captured)`; `captured / total` is the original's `read_pct`.
     """
     counts = {n: int(cds_length_counts.get(n, 0)) for n in range(min_len, max_len + 1)}
     total = sum(counts.values())
@@ -98,17 +81,14 @@ def select_read_lengths(cds_length_counts,
 
     return list(range(lo, hi + 1)), lo, hi, captured
 
-# Neither uses P-sites: selection runs BEFORE offset estimation, so the histogram is built
-# from raw 5' ends.
+# Both histogram builders use raw 5' ends: selection runs BEFORE offset estimation.
 
 _CDS_HEADER_RE = re.compile(r"\|CDS:(\d+)-(\d+)\|")
 
 def cds_length_hist_transcriptome(bam, min_len, max_len):
     """`{read_length: n}` over transcriptome primaries whose 5' end lands in RiboPy's CDS.
 
-    The transcript coordinate IS the alignment coordinate here, and bowtie2 `--norc` puts
-    every read on the forward strand, so the 5' end is `reference_start`. One primary
-    alignment per read, so a read is counted at most once.
+    bowtie2 `--norc`: every read is forward, so the 5' end is `reference_start`.
     """
     import region_lib as rl
 
@@ -137,14 +117,7 @@ def cds_length_hist_transcriptome(bam, min_len, max_len):
 def cds_length_hist_genome(reads, cds_intervals, min_len, max_len):
     """`{read_length: n}` over genome reads whose 5' end projects into RiboPy's CDS.
 
-    `reads` is the `(Chromosome, pos5, Strand, length)` frame the genome step already
-    builds; `cds_intervals` is `genome_cds_core_intervals()` below -- the RiboPy CDS of
-    every selected transcript, expressed back in GENOMIC coordinates so no per-read
-    projection is needed.
-
-    A read is counted ONCE even where APPRIS isoforms overlap and its 5' end falls in
-    several transcripts' CDS cores. RiboPy counts one alignment once; a per-transcript
-    tally would inflate exactly the length bins that sit under dense annotation.
+    A read is counted ONCE even where overlapping APPRIS CDS cores hit it several times.
     """
     import numpy as np
     import pyranges as pr
@@ -168,12 +141,7 @@ def cds_length_hist_genome(reads, cds_intervals, min_len, max_len):
 def genome_cds_core_intervals(left_span=None, right_span=None):
     """RiboPy's CDS core for every selected transcript, as genomic intervals.
 
-    Walks each transcript's CDS exons 5'->3', keeps the sub-interval whose CDS-relative
-    offset lies in `[right_span + 1, cds_len_header - left_span)`, and maps it back to the
-    genome. `cds_len_header` is the GTF CDS length PLUS 3: the transcriptome reference
-    header counts the stop codon inside its CDS and the GTF does not, and that 3 nt shifts
-    the downstream boundary. The resulting core is strictly inside the GTF CDS, so UTR
-    exons never contribute and are not consulted.
+    `cds_len_header` = GTF CDS length + 3: the reference header counts the stop codon.
     """
     import numpy as np
     import pyranges as pr
@@ -220,11 +188,8 @@ def metagene_counts(reads, up, down):
 
 def detect_offsets(reads, phase1_lengths, pre_counts, offset_fn, up, down,
                    post_window, frame0_threshold):
-    """Per selected read length: the P-site offset, the shifted first-10-codon frame
-    percentages, and whether it clears the periodicity threshold.
-
-    Returns `phase2`. `offset_fn` is the detector from `psite_offset.py`.
-    """
+    """Per selected read length: P-site offset, shifted first-10-codon frame %, and the
+    periodicity pass/fail. Returns `phase2`; `offset_fn` is the detector from `psite_offset.py`."""
     phase2 = {}
     for length in phase1_lengths:
         counts = {p: pre_counts[length].get(p, 0) for p in range(-up, down)}
@@ -263,10 +228,7 @@ def window_qc_table(length_counts, total_reads, phase2,
                     staging_dir, sample, frame0_threshold):
     """Write `<sample>_readlen_window_qc.csv`, the route's one QC master.
 
-    Every observed read length gets a row; lengths outside the window carry nulls rather
-    than being dropped, so the table records what was seen as well as what was selected.
-    The selected lengths and their P-site offsets are columns here, which is why there is
-    no second `psite_shifts` table: it held the same two numbers and nothing read it.
+    Lengths outside the window carry nulls rather than being dropped.
     """
     rows = []
     for length in sorted(length_counts):
@@ -308,7 +270,7 @@ def plot_preshift(pre_counts, phase1_lengths, phase2, up, down, plots_dir, sampl
     figure, axes = _panels(len(phase1_lengths))
     for axis, length in zip(axes, phase1_lengths):
         raw = np.array([pre_counts[length].get(p, 0) for p in positions])
-        # otherwise the CDS body dwarfs the upstream P-site peak.
+        # per-panel max-normalised: otherwise the CDS body dwarfs the upstream P-site peak.
         ys = raw / (raw.max() if raw.max() > 0 else 1)
         axis.axvspan(-up, 0, color="lightgrey", alpha=0.35, zorder=0)
         axis.axvline(0, color="black", linewidth=1.0, linestyle="--", zorder=2)
@@ -384,30 +346,3 @@ def plot_postshift(reads, phase1_lengths, phase2, length_counts, post_window,
     figure.savefig(path, bbox_inches="tight")
     plt.close(figure)
     print("  Saved: %s" % path, flush=True)
-
-def cds_frame_table(per_length, qc_rows, staging_dir, sample):
-    """Write `<sample>_cds_psite_frame.csv` from `{length: (n_total, n0, n1, n2)}`.
-
-    `qc_rows` carries `in_phase1`, `periodic` and `psite_offset` per length, straight from
-    step 01/01t, so the frame table records which window the counts came from.
-    """
-    rows = []
-    for length in sorted(per_length):
-        total, n0, n1, n2 = per_length[length]
-        info = qc_rows.get(length, {})
-        rows.append({
-            "read_length": length,
-            "in_phase1": info.get("in_phase1", True),
-            "periodic": info.get("periodic", False),
-            "psite_offset": info.get("psite_offset"),
-            "n_psite_in_cds": total,
-            "n_frame0": n0, "n_frame1": n1, "n_frame2": n2,
-            "pct_frame0": round(n0 / total * 100, 2) if total else 0.0,
-            "pct_frame1": round(n1 / total * 100, 2) if total else 0.0,
-            "pct_frame2": round(n2 / total * 100, 2) if total else 0.0,
-        })
-    frame = pd.DataFrame(rows)
-    path = os.path.join(staging_dir, "%s_cds_psite_frame.csv" % sample)
-    frame.to_csv(path, index=False)
-    print("  Saved: %s" % path, flush=True)
-    return frame

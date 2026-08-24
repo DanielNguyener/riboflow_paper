@@ -16,9 +16,7 @@ def out_dir():
                           os.path.join(_REPO, "results", "ribo_seq_qc", "genome"))
 
 def tx_out_dir():
-    """Transcriptome QC output root, kept distinct so the genome masters are never
-    clobbered. The transcriptome path uses no annotation cache -- CDS starts are parsed
-    from the BAM reference names -- so it holds only tables and plots."""
+    """Transcriptome QC output root, kept distinct so the genome masters are never clobbered."""
     return os.environ.get("RIBOFLOW_PAPER_QC_TX_OUT",
                           os.path.join(_REPO, "results", "ribo_seq_qc", "transcriptome"))
 
@@ -62,9 +60,7 @@ def staging_dir():
 def plots_dir():
     return os.path.join(out_dir(), "plots")
 
-# ONE file with ONE fingerprint, not five files reused whenever they happen to exist:
-# The fingerprint covers everything that determines the contents -- both input files BY
-# unreadable bundle. The write is atomic, so an interrupted build cannot leave a
+# One fingerprinted bundle file, written atomically; never five files reused on existence.
 
 BUNDLE_PAYLOADS = ("appris_cds", "appris_meta", "appris_utr",
                    "appris_gene_body", "all_gene_bodies")
@@ -106,8 +102,7 @@ MIN_THREE_UTR = 30
 
 MIN_LEN, MAX_LEN = 20, 45
 
-# `code/common/bam_inputs.py`: `is_unique_genome_read` (NH == 1) and
-# `is_unique_txome_read` (MAPQ >= 42). A per-module MAPQ constant is exactly how the
+# Uniqueness policy lives in `code/common/bam_inputs.py` (NH == 1 / MAPQ >= 42).
 
 FRAME_COLORS = {0: "#F8766D", 1: "#00BA38", 2: "#619CFF"}
 
@@ -121,22 +116,7 @@ def sample_from_bam(path):
     return os.path.splitext(base)[0]
 
 def build_annotation_cache(gtf=None, appris=None):
-    """Parse the GTF + APPRIS once into the five derived tables, and cache them.
-
-    appris_cds          one row per protein-coding CDS exon of an APPRIS principal
-                        isoform. Columns: Chromosome, Start (0-based), End, Strand,
-                        Phase, transcript_id, gene_id, gene_name, cds_genomic_start
-    appris_meta         one row per APPRIS principal isoform (full universe).
-                        Columns: transcript_id, appris_cds_len, length_filtered
-    appris_utr          one row per UTR exon of an APPRIS principal isoform.
-                        Columns: Chromosome, Start (0-based), End, Strand,
-                        utr_type ("five" | "three"), transcript_id
-    appris_gene_body    one row per APPRIS principal isoform giving its full genomic
-                        locus (min exon start -> max exon end across all CDS + UTR
-                        exons). Columns: Chromosome, Start, End, Strand, transcript_id.
-                        Identifies intronic positions.
-    all_gene_bodies     one row per GTF gene locus, all gene types. The reachability
-                        stage uses it to separate intronic from intergenic.
+    """Parse the GTF + APPRIS once into the five BUNDLE_PAYLOADS tables and cache them.
 
     Returns the payload dict and writes it as one fingerprinted bundle.
     """
@@ -184,8 +164,7 @@ def build_annotation_cache(gtf=None, appris=None):
     meta_df = pd.DataFrame(meta_rows).drop_duplicates("transcript_id")
     appris_ids = set(meta_df["transcript_id"])
 
-    # gene: all gene types (no filter) — used to separate intronic from intergenic.
-    # `exon` is deliberately NOT collected. A bare exon interval carries no transcript_id,
+    # gene: all gene types (no filter) — separates intronic from intergenic.
     _FEAT = {"CDS", "UTR", "gene"}
     cds_rows  = []
     utr_rows  = []
@@ -285,12 +264,7 @@ def build_annotation_cache(gtf=None, appris=None):
     return payloads
 
 def _write_bundle(payloads, gtf, appris):
-    """Write the bundle ATOMICALLY: temp file in the same directory, then rename.
-
-    A partial write is the failure mode that matters here. `os.replace` is atomic within a
-    filesystem, so a reader either sees the previous bundle or the complete new one --
-    never a truncated pickle that unpickles into half a GTF.
-    """
+    """Write the bundle atomically (temp file + os.replace) so readers never see a partial pickle."""
     import pickle
     import tempfile
 
@@ -311,25 +285,17 @@ def _write_bundle(payloads, gtf, appris):
     return target
 
 def annotation_fingerprint(extra=()):
-    """A content digest of the GTF, the APPRIS table and any caller-supplied terms.
-
-    For caches DERIVED from the annotation but held outside the bundle -- the read-taxonomy
-    tables, which are large and wanted individually. They get their own files so a consumer
-    needing a small payload does not load an 80 MB one, but they must invalidate on the
-    same inputs. Pass the deriving function's own source digest in `extra` so a changed
-    rule rebuilds too.
-    """
+    """Content digest of the GTF + APPRIS + `extra` terms, for annotation-derived caches
+    held outside the bundle (pass the deriving function's source digest in `extra`)."""
     import hashlib
 
     parts = [bundle_fingerprint()] + [str(e) for e in extra]
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()
 
 def cached_frame(path, fingerprint, build):
-    """Read `path` if it carries `fingerprint`, else `build()` it and write it atomically.
+    """Read `path` if it carries `fingerprint`, else `build()` and write atomically.
 
-    The stored object is `{"fingerprint": ..., "payload": ...}`, so a cache built from
-    different inputs is detected rather than trusted. Absent, unreadable, corrupt or
-    mismatched all mean the same thing: rebuild.
+    Absent, unreadable, corrupt or mismatched all mean rebuild.
     """
     import pickle
     import tempfile
@@ -358,12 +324,8 @@ def cached_frame(path, fingerprint, build):
     return payload
 
 def load_bundle(gtf=None, appris=None):
-    """The five tables, rebuilding whenever the cached bundle is not the current one.
-
-    Rebuilds when the file is absent, unreadable, of a different schema version, or built
-    from different inputs or a different builder. Reusing on mere existence is what let a
-    changed GTF serve stale coordinates.
-    """
+    """The five tables, rebuilding whenever the cached bundle is not the current one
+    (absent, unreadable, different schema version, inputs or builder)."""
     import pickle
 
     path = bundle_path()
@@ -378,8 +340,6 @@ def load_bundle(gtf=None, appris=None):
         except Exception:
             pass
     return build_annotation_cache(gtf=gtf, appris=appris)
-
-# files go stale independently of the inputs that produced them.
 
 def load_annotation(gtf=None, appris=None):
     """The per-CDS-exon annotation table for APPRIS principal isoforms."""

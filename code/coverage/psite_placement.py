@@ -43,8 +43,7 @@ def place(read, offset: int):
 def _selected_rows(qc_csv: Path, sample: str, columns):
     """The sample's SELECTED (`in_phase1`) rows of a `readlen_window_qc.csv`-shaped table.
 
-    One reader for the whole repository: the read-length window and the P-site offsets are
-    two columns of the same table, so a second loader could only disagree with this one.
+    The one reader for the whole repository; a second loader could only disagree with it.
     """
     import pandas as pd
 
@@ -74,23 +73,14 @@ def load_offsets(qc_csv: Path, sample: str) -> dict:
 def load_selected_lengths(qc_csv: Path, sample: str) -> list:
     """The sample's selected read lengths, ascending -- the window WITHOUT the offsets.
 
-    Figure 4 counts a read by its aligned 5' nucleotide and never shifts it, so it must be
-    able to ask for the window alone. Reading the same table through the same filter as
-    `load_offsets` is what guarantees the two figures share one read population.
+    Same table and filter as `load_offsets`, so Figure 4 (no offset applied) shares the population.
     """
     return sorted(int(r) for r in _selected_rows(qc_csv, sample, ("read_length",))["read_length"])
 
 def summarize_placements(bam_path: Path, offsets: dict, limit: int = None) -> dict:
     """Stream a genome BAM and describe how its reads are placed.
 
-    `offsets` maps read length -> P-site offset (the sample's own selected window).
-    Read filtering matches the coverage builder exactly, through the same predicate:
-    primary alignments with `NH == 1` (`bam_inputs.is_unique_genome_read`), and only read
-    lengths present in `offsets`.
-
-    Reported because they are the cases where placement is not a trivial addition:
-    the spliced fraction, the CIGAR-signature spectrum, and any read for which the rule
-    is undefined (fewer aligned bases than the offset).
+    Read filtering matches the coverage builder exactly (same predicate, same window).
     """
     import pysam
 

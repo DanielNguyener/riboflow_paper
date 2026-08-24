@@ -19,7 +19,6 @@ def compute_sample(sample, log=print):
     base2ver = txome_payload["base2ver"]
 
     log(f"[{sample}] reading txome BAM...")
-    # One pass keeps EVERY primary (any MAPQ) + the unique subset, so the gU_tU and
     txome_present, txome_uniq_q, txome_all_q = cl.read_txome_primary(fc.txome_bam(sample), base2ver)
     txome_dict = {q: txome_present[q] for q in txome_uniq_q}
     log(f"[{sample}] reading genome BAM...")

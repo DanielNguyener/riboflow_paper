@@ -126,7 +126,7 @@ if n_loaded > 0 and len(cds_df) > 0:
         jdf  = joined.df.copy()
         plus = jdf["Strand"] == "+"
 
-        # in-frame. (Using +Phase mislabels in-frame P-sites in phase-1/2 exons
+        # subtract Phase: using +Phase mislabels in-frame P-sites in phase-1/2 exons.
         jdf["frame"] = np.where(
             plus,
             (jdf["Start"] - jdf["Start_b"] - jdf["Phase"]) % 3,

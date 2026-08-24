@@ -1,0 +1,10 @@
+# Machine-local locations of the raw inputs the `tables` stage needs. Copy this file to
+# config/local.yaml (gitignored) and fill it in, OR export the RIBOFLOW_PAPER_* variables,
+# OR pass --bams/--gtf/--appris. Precedence: flag > environment > config/local.yaml.
+#
+# bams is the RiboFlow output root; the sample's BAMs are found under it at
+#   {bams}/{sample}/genome/alignment_ribo/merged/{sample}.post_dedup.bam
+#   {bams}/{sample}/transcriptome/alignment_ribo/merged/{sample}.transcriptome.post_dedup.bam
+bams: /path/to/riboflow/output/root
+gtf: /path/to/gencode.v34.annotation.gtf
+appris: /path/to/appris_human_v2_transcript_lengths.tsv

@@ -2,13 +2,7 @@
 """The P-site offset detector behind every `psite_offset` value this repository ships."""
 
 def ribotish_get_offset(counts_by_pos, defOffset=12, flank=6, default=12):
-    """
-    Port of ribotish get_offset() (ribo.py:1111).
-
-    1. Locate TIS peak in upstream region → derive frame (peak_pos % 3).
-    2. Compute noise threshold from far-upstream vs CDS-body in-frame counts.
-    3. Scan ±flank nt around defOffset, restricted to the TIS frame; return
-       the first in-frame position that exceeds the threshold.
+    """Port of ribotish get_offset() (ribo.py:1111).
 
     Returns a positive offset (nt from 5' end) or `default` on failure.
     """
@@ -47,27 +41,9 @@ def ribotish_get_offset(counts_by_pos, defOffset=12, flank=6, default=12):
 
 def get_offset_periodicity(counts_by_pos, defOffset=12, flank=6, default=12,
                            win_codons=10, min_down=200, dom_frac=0.40):
-    """Frame-robust P-site offset: like ribotish, but the reading FRAME comes from
-    DOWNSTREAM 3-nt periodicity instead of the single tallest start-peak position.
-
-    Rationale: `ribotish_get_offset` sets `frame = argmax_upstream % 3`, which flips on
-    a near-tie when the start metagene is bimodal (e.g. HEK293T 26 nt: positions -9 and
-    -8 within ~1%, different frames -> +9 vs +11). The downstream 5'-end pileup is phased
-    to a single residue class (P-sites are frame-0, so 5'-ends sit at p ≡ -offset mod 3),
-    and the dominant residue over the first `win_codons` codons of 5'-end positions is a
-    far more stable frame signal than one start position. We take that dominant residue as
-    the frame, then run the IDENTICAL ribotish magnitude/threshold scan constrained to it
-    — so the return convention (canonical ~+11/+12) and the shared genome/transcriptome
-    implementation are preserved. Uses only `counts_by_pos` — no extra I/O.
-
-    The frame is scored on the 5'-END window (p in [0,win)), NOT the P-site window
-    (p+offset): the latter (tried and rejected) pulls start-proximal mixed-frame reads
-    into the window for long read lengths and destabilises the call on 31/32 nt reads.
-
-    Falls back to plain `ribotish_get_offset` when the downstream signal is too thin
-    (< `min_down` reads) or not clearly phased (dominant-frame fraction < `dom_frac`,
-    just above the 1/3 no-periodicity baseline), so this is a strict superset of the
-    old behavior on clean/ambiguous-free lengths.
+    """Frame-robust P-site offset: ribotish scan, but the frame comes from downstream
+    3-nt periodicity (scored on the 5'-END window, NOT the P-site window — the latter
+    destabilises 31/32 nt calls); falls back to `ribotish_get_offset` on thin/unphased signal.
     """
     CODON = 3
     WIN = win_codons * CODON

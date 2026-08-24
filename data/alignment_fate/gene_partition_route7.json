@@ -1,0 +1,115 @@
+{
+  "builder": "code/alignment_fate/build_gene_partition_data.py",
+  "category_to_segment_group": {
+    "absent_omitted_exon": [
+      "genome_unique_absent_nonselected_isoform_exon"
+    ],
+    "absent_other": [
+      "genome_unique_absent_splice_junction",
+      "genome_unique_absent_representable",
+      "genome_unique_absent_pseudogene",
+      "genome_unique_absent_other"
+    ],
+    "multi": [
+      "genome_multi_primary_in_gene_pseudogene_tie",
+      "genome_multi_primary_pseudogene",
+      "genome_multi_primary_in_gene_no_pseudogene_tie",
+      "genome_multi_primary_elsewhere_other",
+      "genome_multi_primary_lost_in_dedup"
+    ],
+    "multi_pseudogene_tie": [
+      "genome_multi_primary_in_gene_pseudogene_tie",
+      "genome_multi_primary_pseudogene"
+    ],
+    "shared_unique": [
+      "genome_unique_shared_concordant",
+      "genome_unique_shared_discordant",
+      "genome_unique_txome_other_transcript",
+      "genome_unique_txome_multimapped"
+    ],
+    "txonly": [
+      "txome_only_genome_absent",
+      "txome_only_genome_elsewhere"
+    ]
+  },
+  "gene_order": [
+    "COMT",
+    "GAPDH",
+    "LRRFIP1"
+  ],
+  "gsm": "GSM2100602",
+  "n_union": {
+    "COMT": 1295,
+    "GAPDH": 4360,
+    "LRRFIP1": 1525
+  },
+  "sample": "HeLa",
+  "segments": [
+    {
+      "colour": "#a6d96a",
+      "hatch": null,
+      "key": "r7_shared_unique",
+      "label": "Genome-unique",
+      "text_colour": "black"
+    },
+    {
+      "colour": "#1a7d1a",
+      "hatch": "//",
+      "key": "r7_shared_multi_pp",
+      "label": "Genome-multi, pseudogene tie",
+      "text_colour": "white"
+    },
+    {
+      "colour": "#1a7d1a",
+      "hatch": null,
+      "key": "r7_shared_multi_other",
+      "label": "Genome-multi, other",
+      "text_colour": "white"
+    },
+    {
+      "colour": "#7fb9da",
+      "hatch": "..",
+      "key": "r7_gonly_unique_omit",
+      "label": "Genome-unique, omitted exon",
+      "text_colour": "black"
+    },
+    {
+      "colour": "#7fb9da",
+      "hatch": null,
+      "key": "r7_gonly_unique_other",
+      "label": "Genome-unique, other",
+      "text_colour": "black"
+    },
+    {
+      "colour": "#0d57a1",
+      "hatch": null,
+      "key": "r7_gonly_multi",
+      "label": "Genome-multi",
+      "text_colour": "white"
+    },
+    {
+      "colour": "#cc3d3d",
+      "hatch": null,
+      "key": "r7_txonly",
+      "label": "Transcriptome only",
+      "text_colour": "white"
+    }
+  ],
+  "semantics": {
+    "genome_only": "read id absent from the transcriptome dedup BAM entirely",
+    "shared": "read id present in BOTH dedup BAMs (global, not gene-local)",
+    "txonly": "no genome alignment AT THIS GENE; the read may align elsewhere",
+    "unit": "read ids; denominator = union of read ids at the gene on either route"
+  },
+  "source": {
+    "file": "HeLa.gene_read_partition_reads.tsv",
+    "generator": "code/alignment_fate/build_gene_read_partition.py --dump-reads",
+    "n_rows": 29458,
+    "sha256": "caabaf6f28c42d9ea4fc45a17b8b5e456937c3870da91986abb0e3446c955050"
+  },
+  "transcripts": {
+    "COMT": "ENST00000361682.11",
+    "GAPDH": "ENST00000396861.5",
+    "LRRFIP1": "ENST00000308482.14"
+  }
+}

@@ -14,48 +14,16 @@ for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc")):
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
 import concordance_lib as cl
-import taxonomy_lib as tl
 fc = cl.fc
 
 OUTDIR = fc.output_root() / "read_taxonomy" / "genome_only_biotype"
 CACHE_DIR = fc.output_root() / ".cache" / "read_taxonomy"
 GENE_BODY_CACHE = CACHE_DIR / "gene_body.pkl"
 
-BIOTYPE_COLORS = {
-    "protein_coding":                     "#1f77b4",
-    "intronic":                           "#aec7e8",
-    "intergenic":                         "#ff7f0e",
-    "lncRNA":                             "#2ca02c",
-    "Mt_rRNA":                            "#17becf",
-    "processed_pseudogene":               "#d62728",
-    "transcribed_processed_pseudogene":   "#9467bd",
-    "unprocessed_pseudogene":             "#8c564b",
-    "transcribed_unprocessed_pseudogene": "#e377c2",
-    "other":                              "#bbbbbb",
-}
-
-def biotype_color_map(biotypes):
-    """dict biotype -> color: fixed hues from BIOTYPE_COLORS where known, else a deterministic
-    (name-hashed, so stable across figures) fallback from tab20b/tab20c."""
-    import hashlib
-    import matplotlib.pyplot as plt
-    fb = list(plt.get_cmap("tab20b").colors) + list(plt.get_cmap("tab20c").colors)
-    out = {}
-    for b in biotypes:
-        if b in BIOTYPE_COLORS:
-            out[b] = BIOTYPE_COLORS[b]
-        else:
-            idx = int(hashlib.md5(str(b).encode()).hexdigest(), 16) % len(fb)
-            out[b] = fb[idx]
-    return out
-
 def read_genome_unique_absent(bam_path, exclude_qnames):
-    """qname -> (chrom, pos5) for primary, UNIQUE (NH==1) genome reads whose qname is NOT
-    in `exclude_qnames` (the txome-present set) — i.e. only the gU_tA reads.
+    """qname -> (chrom, pos5) for primary unique (NH==1) genome reads NOT in `exclude_qnames`.
 
-    Lean counterpart of concordance_lib.read_genome_unique: skips the dict insert for the
-    ~6.8M shared reads, so peak RSS holds only the ~800K genome-only reads. Same uniqueness
-    rule (NH==1, bam_inputs.is_unique_genome_read) and same 5'-most-base convention.
+    Same uniqueness rule and 5'-most-base convention as concordance_lib.read_genome_unique.
     """
     import pysam
     out = {}
@@ -87,13 +55,9 @@ def _rank_int(gt):
     return 3
 
 def gene_body_pr(rebuild=False):
-    """PyRanges of per-gene genomic bodies (min exon start .. max exon end) with gene_type,
-    derived from concordance_lib's all-GTF exon/gene_type table. Separates intronic (inside
-    a gene body, no exon) from intergenic (no gene at all).
+    """PyRanges of per-gene genomic bodies (min exon start .. max exon end) with gene_type.
 
-    Cached under the output root's `.cache/`, keyed by the annotation fingerprint plus this
-    function's own rule, and written atomically. A changed GTF rebuilds it; the previous
-    "reuse whenever the file exists" would have served gene bodies from another release.
+    Cached keyed by the annotation fingerprint, so a changed GTF rebuilds it.
     """
     import pyranges as pr
 
@@ -115,8 +79,7 @@ def gene_body_pr(rebuild=False):
     return pr.PyRanges(frame)
 
 def classify_5p(qnames, genome_dict, exon_pr, gene_pr):
-    """qname -> biotype (GENCODE gene_type | 'intronic' | 'intergenic') for the 5'-end base
-    of each gU_tA read. Returns a pandas Series indexed by qname."""
+    """qname -> biotype (gene_type | 'intronic' | 'intergenic') for each read's 5'-end base."""
     import pyranges as pr
     if not qnames:
         return pd.Series(dtype=object, name="biotype")

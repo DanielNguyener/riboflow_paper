@@ -17,9 +17,7 @@ def log(message):
 def psite_exposure(chroms, positions, strands, cds_pr):
     """Candidate counts for the P-site rule, over the stage-1 CDS join.
 
-    `first_exon_overlap` applies no criterion at all -- `drop_duplicates(keep="first")`
-    takes whichever row the join emitted first -- so every read with two or more candidate
-    transcripts is decided by the rule, and ambiguous == tied by construction.
+    `first_exon_overlap` applies no criterion, so ambiguous == tied by construction.
     """
     import pyranges as pr
 
@@ -41,9 +39,7 @@ def psite_exposure(chroms, positions, strands, cds_pr):
 def footprint_exposure(blocks, cds_pr):
     """Candidate counts for the footprint rule, over the stage-1 CDS join.
 
-    `max_exon_overlap` sums the overlap per (read, transcript) and takes the argmax, so a
-    read is TIED only when two or more transcripts share that maximum. That is strictly
-    fewer reads than are ambiguous.
+    Tied = sharing the max summed overlap, so tied <= ambiguous.
     """
     import pyranges as pr
 

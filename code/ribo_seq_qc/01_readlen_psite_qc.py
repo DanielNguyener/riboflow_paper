@@ -4,7 +4,7 @@ import os
 import sys
 import argparse
 
-from collections import defaultdict, Counter
+from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
@@ -21,9 +21,7 @@ import pyranges as pr
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+matplotlib.use("Agg")   # backend for qc_core's lazy pyplot imports (--plots)
 
 p = argparse.ArgumentParser(description="Per-sample read-length selection.")
 p.add_argument("--sample",           required=True)
@@ -95,7 +93,7 @@ if total_reads == 0:
     print("  No reads — aborting.", flush=True)
     sys.exit(1)
 
-# genomic coordinates so each read's raw 5' end can be tested directly -- no P-site, which
+# CDS cores in genomic coordinates: raw 5' ends tested directly, no P-site shift.
 print("Phase 1: CDS length distribution + 85 % expansion...", flush=True)
 cds_core = qc_core.genome_cds_core_intervals()
 cds_length_counts = qc_core.cds_length_hist_genome(
@@ -108,7 +106,7 @@ phase1_lengths, lo, hi, captured = qc_core.select_read_lengths(cds_length_counts
 print(f"  Peak window: {lo}-{hi} nt | captured {captured / n_cds * 100:.1f}% of CDS reads "
       f"| lengths: {phase1_lengths}", flush=True)
 
-# (upstream of the start codon) are included — they carry the P-site signal.
+# Metagene windows extend upstream of the start codon — that region carries the P-site signal.
 print("Loading CDS annotation cache...", flush=True)
 ann = config.load_annotation()
 tx_starts = (ann.groupby("transcript_id", sort=False)
