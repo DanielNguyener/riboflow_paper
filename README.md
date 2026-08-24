@@ -39,6 +39,9 @@ a ~25 MB product built from the HeLa BAMs (`code/coverage/build_shared_coverage.
 
 ## Reproduce the tables from BAMs
 
+The RiboFlow_v2 BAMs for the 24-cell-line panel are deposited on Zenodo:
+<https://doi.org/10.5281/zenodo.22083992>. Download them into a directory and pass it as `--bams DIR`.
+
 ```bash
 python code/make_tables.py --bams DIR --validate                         # what would run
 python code/make_tables.py --bams DIR --gtf GTF --appris APPRIS --all    # -> results/
@@ -48,7 +51,7 @@ python code/make_figures.py --all --bams DIR --gtf GTF --appris APPRIS --into-da
 
 | input | flag | notes |
 |---|---|---|
-| RiboFlow_v2 output tree | `--bams` | `{s}/genome/alignment_ribo/merged/{s}.post_dedup.bam` etc.; paths may also come from `config/cohort_manifest.tsv` |
+| RiboFlow_v2 output tree | `--bams` | Zenodo [10.5281/zenodo.22083992](https://doi.org/10.5281/zenodo.22083992); `{s}/genome/alignment_ribo/merged/{s}.post_dedup.bam` etc.; paths may also come from `config/cohort_manifest.tsv` |
 | GENCODE GTF | `--gtf` | v34 for the published cohort |
 | APPRIS transcript lengths | `--appris` | the transcriptome reference headers (`references_for_riboflow`, `transcriptome/human/v2`), not redistributed |
 | read-length window + offsets | `--qc-genome` / `--qc-txome` | shipped under `data/ribo_seq_qc/` |
