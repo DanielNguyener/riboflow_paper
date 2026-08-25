@@ -31,7 +31,7 @@ opts <- parse_args(list(counts = file.path(root, "data", "ribo_rna", "counts"),
 
 MIN_CPM      <- 1
 MIN_LINES    <- 12L
-N_GATED      <- 11589L   # asserted, not assumed: this folder must not drift from the analysis
+N_GATED      <- 11589L   # asserted against the published count
 N_ESTIMATION <- 7864L
 
 MATRICES <- c(genome_ribo = "ribo_counts_genome.csv", genome_rna = "rna_counts_genome.csv",

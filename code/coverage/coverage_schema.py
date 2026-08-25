@@ -383,7 +383,7 @@ def validate_file(path) -> list:
         ids = [_text(s) for s in transcripts["transcript_id"][:]]
         if ids != sorted(ids):
             problems.append("transcripts are not in sorted transcript_id order "
-                            "(storage order is load-bearing for the pooled-Pearson "
+                            "(storage order is required by the pooled-Pearson "
                             "reconstruction)")
         if len(set(ids)) != len(ids):
             problems.append("duplicate transcript_id")

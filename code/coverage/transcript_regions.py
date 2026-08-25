@@ -250,7 +250,7 @@ def heuristic_stop_codon_ids(headers: dict) -> set:
 def build_ribo_region_bins(headers: dict, left_span: int, right_span: int) -> list:
     """ribopy's five-way binning (port of `region_lib.classify` boundaries), derived, not annotation.
 
-    Uses the STOP-INCLUSIVE header CDS end -- ribopy's convention, deliberately not harmonised
+    Uses the STOP-INCLUSIVE header CDS end -- ribopy's convention, not harmonised
     with the canonical regions above; bins are clipped to [0, L) and empty bins omitted.
     """
     if left_span < 0 or right_span < 0:

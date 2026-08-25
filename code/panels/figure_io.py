@@ -1,6 +1,6 @@
 """Ink cropping, the fit loop, 1:1 PDF composition and the fitz TIFF export (Figures 5, 6).
 
-The thresholds, dpi, tolerances and geometry are load-bearing: they reproduce the shipped
+The thresholds, dpi, tolerances and geometry reproduce the shipped
 figures pixel for pixel. `assemble_figures.py` and `make_panels.py` import from here.
 """
 from __future__ import annotations
@@ -38,7 +38,7 @@ FIT_SETTLE_PT = 1.0
 def ink_box(pdf, dpi=144, pad_pt=1.0):
     """The panel's drawn extent HORIZONTALLY, over its full page height.
 
-    Vertical bounds are deliberately NOT trimmed -- cropping would break the cohort
+    Vertical bounds are not trimmed: cropping would break the cohort
     panels' declared-from-page-top row alignment.
     """
     import fitz

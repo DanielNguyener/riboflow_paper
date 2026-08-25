@@ -8,7 +8,7 @@ learns where a sample's data lives.
 
 | Column | Meaning |
 |---|---|
-| `schema_version` | `riboflow_paper/cohort-manifest/1`. Present on every row so a single row is self-describing; a reader that does not recognise the value must refuse rather than guess. |
+| `schema_version` | `riboflow_paper/cohort-manifest/1`. Present on every row so a single row is self-describing; a reader that does not recognise the value should stop with an error. |
 | `sample_id` | The key used in every output table's `sample` column and as the BAM directory name. Cell-line names containing spaces use underscores (`Cybrid Cells` → `Cybrid_Cells`). |
 | `cell_line` | Display name, spaces intact. **Display metadata only** — never a join key. |
 | `ribo_gsm`, `rna_gsm` | GEO accessions for the ribosome-profiling and matched RNA-seq libraries. `ribo_gsm` is what the figures use for axis labels. |

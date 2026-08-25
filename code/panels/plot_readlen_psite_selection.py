@@ -67,7 +67,7 @@ def draw(prepared, axes_size=None, margins=None, type_scale="large", legend_ncol
     ps.apply_rcparams()
     sizes = common.grid_type(type_scale)
     samples, lengths = prepared["samples"], prepared["lengths"]
-    # Shared with fig02B (`_fig02_common.MARGINS`); right gutter deliberately blank here.
+    # Shared with fig02B (`_fig02_common.MARGINS`); right gutter left blank here.
     width, height = axes_size or common.AXES_SIZE
     left, bottom, right, top = margins or common.MARGINS
     fig_w, fig_h = left + width + right, bottom + height + top

@@ -1,97 +1,87 @@
 # riboflow_paper
 
-Analysis and figure code for the RiboFlow_v2 manuscript: the same Ribo-seq libraries aligned
-to the genome and to the transcriptome, compared route against route over a 24-cell-line
-panel. Starts from RiboFlow_v2 BAMs; produces every analysis table, every panel and the five
-published figures (Fig2–Fig6), Table 1 and S1 Table.
+Analysis and figure code for the RiboFlow_v2 manuscript: ribosome profiling and matched
+RNA-seq from 24 human cell lines, aligned to the genome and to the transcriptome, with the
+two alignment routes compared. From RiboFlow_v2 alignments, the code produces the analysis
+tables, Figures 2–6, Table 1, and S1 Table.
+
+Read processing is done by the separate
+[RiboFlow_v2](https://github.com/ribosomeprofiling/riboflow) pipeline. The alignments used
+here were produced at commit
+[`e5e041c6`](https://github.com/ribosomeprofiling/riboflow/commit/e5e041c6fa842c27fabe46d2ca87d8aff3696874)
+with the configurations in
+[`config/published_cohort/`](config/published_cohort/riboflow_configs/README.md).
+
+## Layout
 
 | | |
 |---|---|
-| [`code/`](code/README.md) | the programs, one directory per scientific function |
-| [`config/`](config/README.md) | panel/figure manifest, cohort manifest, RiboFlow_v2 run configuration |
-| [`data/`](data/README.md) | the shipped analysis tables the panels read (mirrors `results/`) |
-| `results/` | regenerated output — gitignored |
-| [`figures/`](figures/README.md) | panel references and the published figures |
-| [`docs/`](docs/README.md) | methods, figure index, numeric claims, accessions |
-| [`tests/`](tests/) | `python -m pytest tests -q` |
-| [`supporting_information/`](supporting_information/S1_Table/README.md) | S1 Table and its generator |
-| [`benchmark/`](benchmark/README.md) | the runtime traces behind Table 1 |
-| [`get_coverage/`](get_coverage/README.md) | standalone full-read coverage tool (HPC) |
+| `code/` | `make_tables.py` (BAMs → tables), `make_panels.py` (tables → panels), `assemble_figures.py` (panels → figures), `make_figures.py` (all three); one subdirectory per analysis: `ribo_seq_qc/` (Fig 2), `coverage/` (Fig 3), `ribo_rna/` + `te_route/` (Fig 4, R), `read_taxonomy/` (Fig 5), `alignment_fate/` (Fig 6), `panels/`, `common/` |
+| `config/` | `panel_manifest.yaml` (panels, figures, composition), `cohort_manifest.tsv` (+ `.schema.md`), `inputs.example.yaml`, `published_cohort/` |
+| `data/` | shipped analysis tables, one directory per `code/` subdirectory |
+| `results/` | regenerated output (not versioned, except `coverage/coverage_checksums.tsv`) |
+| `figures/` | `panel_references/*.pdf` and `published/Fig{2..6}.{tif,_plos.pdf}` |
+| `docs/` | `methods_te_route.md` (Figure 4 statistics), `hdf5_schema.md` (coverage file format), `numeric_claims.tsv` (every published number and its source), `accessions.tsv` |
+| `benchmark/` | Nextflow traces and scenario definitions behind Table 1 |
+| `supporting_information/S1_Table/` | `samples.csv` and its generator |
+| `tests/` | test suite |
 
-## Install
+## Installation
 
-Python 3.9 (run as `python`), R ≥ 4 (base R only), Arial available to matplotlib.
+Python 3.9, R ≥ 4 (base only, for `code/te_route/*.R`), and the Arial font.
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
 ```
 
-## Reproduce the figures from the shipped tables (no BAM)
+## Reproducing the tables
 
 ```bash
-python code/make_figures.py --all --check      # figures/published/Fig{2..6}.tif + _plos.pdf
-python -m pytest tests -q                      # includes a clean-copy, byte-for-byte rebuild
+python code/make_tables.py --bams DIR --gtf GTF --appris APPRIS --all --into-data
 ```
 
-Figure 3A/3B are the one exception: they read `results/coverage/HeLa.shared_coverage.h5`,
-a ~25 MB product built from the HeLa BAMs (`code/coverage/build_shared_coverage.py`; see
-[`docs/figures.md`](docs/figures.md)). Without it, `--figure 3` stops with that command.
+Writes to `data/` (`results/` without `--into-data`). `--validate` lists what would run;
+`--stages` selects stages. Inputs may also be given by `RIBOFLOW_PAPER_{BAMS,GTF,APPRIS}` or
+`config/local.yaml` (see `config/inputs.example.yaml`).
 
-## Reproduce the tables from BAMs
-
-The RiboFlow_v2 BAMs for the 24-cell-line panel are deposited on Zenodo:
-<https://doi.org/10.5281/zenodo.22083992>. Download them into a directory and pass it as `--bams DIR`.
+## Reproducing the figures
 
 ```bash
-python code/make_tables.py --bams DIR --validate                         # what would run
-python code/make_tables.py --bams DIR --gtf GTF --appris APPRIS --all    # -> results/
-python code/make_tables.py --bams DIR --gtf GTF --appris APPRIS --all --into-data   # -> data/
-python code/make_figures.py --all --bams DIR --gtf GTF --appris APPRIS --into-data --check
+python code/make_figures.py --all --check
 ```
 
-| input | flag | notes |
+Renders the panels from `data/` and writes `figures/published/Fig{2..6}.{tif,_plos.pdf}`.
+Figure 3A/3B also need `results/coverage/HeLa.shared_coverage.h5`, built from the GSM2100602 BAMs
+by `code/coverage/build_shared_coverage.py` ([`docs/hdf5_schema.md`](docs/hdf5_schema.md)).
+`python code/make_panels.py --all --verify` compares panels with `figures/panel_references/`;
+`python benchmark/summarize_benchmarks.py --check` recomputes Table 1.
+
+## External inputs
+
+| input | identifier | use |
 |---|---|---|
-| RiboFlow_v2 output tree | `--bams` | Zenodo [10.5281/zenodo.22083992](https://doi.org/10.5281/zenodo.22083992); `{s}/genome/alignment_ribo/merged/{s}.post_dedup.bam` etc.; paths may also come from `config/cohort_manifest.tsv` |
-| GENCODE GTF | `--gtf` | v34 for the published cohort |
-| APPRIS transcript lengths | `--appris` | the transcriptome reference headers (`references_for_riboflow`, `transcriptome/human/v2`), not redistributed |
-| read-length window + offsets | `--qc-genome` / `--qc-txome` | shipped under `data/ribo_seq_qc/` |
+| RiboFlow_v2 alignments, 24 cell lines | Zenodo [10.5281/zenodo.22083992](https://doi.org/10.5281/zenodo.22083992) | `--bams DIR`; layout in `config/cohort_manifest.tsv` |
+| Sequencing data | GEO accessions in [`docs/accessions.tsv`](docs/accessions.tsv) | input to RiboFlow_v2 |
+| GENCODE annotation | release 34 (GRCh38) | `--gtf` |
+| APPRIS principal-isoform transcriptome | [`references_for_riboflow`](https://github.com/ribosomeprofiling/references_for_riboflow), `transcriptome/human/v2` | RiboFlow_v2 reference; its transcript-lengths table is `--appris` (not redistributed) |
+| Housekeeping gene lists | HRT Atlas v1.0 (`data/te_route/housekeeping/`) | Figure 4C labels |
+| Sample QC table | [ribobaser](https://github.com/CenikLab/ribobaser) | S1 Table generator (not redistributed) |
 
-Raw inputs have no default. Programs that open BAMs directly take flags, then
-`RIBOFLOW_PAPER_{BAMS,GTF,APPRIS}`, then `config/local.yaml` (copy `config/inputs.example.yaml`).
-
-## Figures
-
-| figure | panels | tables from | generators |
-|---|---|---|---|
-| 2 | A–B read-length window, P-site offsets, CDS periodicity | `code/ribo_seq_qc/` | `code/panels/plot_readlen_psite_selection.py`, `plot_cds_periodicity_difference.py` |
-| 3 | A–B COMT/GAPDH coverage, C–D concordance | `code/coverage/` | `code/panels/plot_transcript_coverage.py`, `plot_per_transcript_concordance.py`, `plot_pooled_concordance.py` |
-| 4 | A–C translation efficiency by route | `code/ribo_rna/` + `code/te_route/` (R) | `code/te_route/plot_te_route_panels.py` |
-| 5 | A–D read taxonomy over the cohort | `code/read_taxonomy/` | `code/panels/plot_fig05_plos_panels.py` |
-| 6 | A gene read partition, B LRRFIP1 locus | `code/alignment_fate/` | `code/panels/plot_gene_partition.py`, `plot_locus_coverage.py` |
-
-`config/panel_manifest.yaml` is the only place figure numbers appear. Figure 1 is an
-author-drawn schematic with no generator. Details, geometry and checksums:
-[`docs/figures.md`](docs/figures.md).
-
-## Verify
+## Tests
 
 ```bash
-python code/make_panels.py --all --verify          # 20 panels against figures/panel_references/
-python code/assemble_figures.py --all --check      # PLOS spec: size, fonts, TIFF mode/dpi/LZW
-python benchmark/summarize_benchmarks.py --check   # every value in Table 1
+python -m pytest tests -q
 ```
 
-## Upstream processing
+Tests needing the coverage HDF5 (`RIBOFLOW_PAPER_COVERAGE_H5`), BAMs
+(`RIBOFLOW_PAPER_BAMS`), `Rscript`, or the S1 Table inputs (`RIBOBASER_RDA`,
+`RIBOFLOW_PAPER_S1_XLSX`) are skipped when those are absent.
 
-Reads were processed with **RiboFlow_v2**, a Nextflow DSL2 pipeline extending
-[RiboFlow](https://github.com/ribosomeprofiling/riboflow) to align to the genome as well as
-the transcriptome. The 24 per-sample parameter files and run script are in
-[`config/published_cohort/`](config/published_cohort/riboflow_configs/README.md). The
-transcriptome reference is `references_for_riboflow` `transcriptome/human/v2`
-(<https://github.com/ribosomeprofiling/references_for_riboflow>), mirroring GENCODE
-release 34. Sample selection used the QC table from
-[ribobaser](https://github.com/CenikLab/ribobaser). Accessions: [`docs/accessions.tsv`](docs/accessions.tsv).
+## Code and data availability
 
-## Citation
+Code: this repository (MIT). Tables: `data/`. Alignments: Zenodo 10.5281/zenodo.22083992.
+Raw reads: GEO ([`docs/accessions.tsv`](docs/accessions.tsv)).
 
-See [`CITATION.cff`](CITATION.cff). License: [`LICENSE`](LICENSE).
+## Citation and license
+
+Citation information will be added at release. License: [`LICENSE`](LICENSE).

@@ -1,0 +1,13 @@
+# Development-only dependencies: running the test suite under `tests/`.
+#
+# Kept separate from requirements.txt on purpose. That file records the versions the
+# PUBLISHED artifacts were produced with, each labelled by evidence class, and nothing
+# may be added to it that was not part of that environment. pytest was not: the test
+# suite is new, written during the Phase-4 standalone-pipeline refactor.
+#
+#     python -m pip install -r requirements.txt -r requirements-dev.txt
+#     python -m pytest tests -q
+#
+# Unpinned, because no published result depends on the test runner's version. The suite
+# uses only core pytest features (fixtures, parametrize, markers, monkeypatch, tmp_path).
+pytest >= 7.0

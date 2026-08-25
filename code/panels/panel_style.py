@@ -135,7 +135,7 @@ def legend_below(axis, handles=None, labels=None, pad_pt=LEGEND_PAD_PT, **kwargs
 
 def save(figure, output, formats=DEFAULT_FORMATS, force=False, extra_artists=None,
          tight=True):
-    """Write one figure in each requested format; refuses to overwrite without `force`.
+    """Write one figure in each requested format; does not overwrite unless `force` is set.
 
     `tight=False` exports at exactly `figsize` (no crop) so co-placed panels scale equally.
     """

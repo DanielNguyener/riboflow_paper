@@ -79,7 +79,7 @@ def parse_gtf_features(gtf: Path, wanted: set) -> dict:
 def build_cds_exon_table(features: dict) -> pd.DataFrame:
     """The CDS-exon table (CDS pieces, not whole exons), one row per piece in a FIXED order.
 
-    Row order is load-bearing: stage-1 tie-breaks read the first matching row, so the sort
+    Row order matters: stage-1 tie-breaks read the first matching row, so the sort
     must match `bam_inputs.build_cds_table()["cds"]` exactly (asserted equal).
     """
     rows = []
@@ -128,7 +128,7 @@ def _order_exons(tid: str, exons: list) -> tuple:
 def build_transcript_coords(features: dict, headers: dict) -> dict:
     """Build the transcripts and exons tables, in sorted-transcript_id storage order.
 
-    Storage order is load-bearing for the pooled-Pearson reconstruction downstream.
+    Storage order is required by the pooled-Pearson reconstruction downstream.
     """
     missing = sorted(set(headers) - set(features))
     if missing:
@@ -196,7 +196,7 @@ def _validate(transcripts: pd.DataFrame, exons: pd.DataFrame) -> None:
     if ids != sorted(ids):
         raise CoordinateError(
             "transcripts are not in sorted transcript_id order; storage order is "
-            "load-bearing for the pooled-Pearson reconstruction")
+            "required by the pooled-Pearson reconstruction")
 
     expected = np.concatenate([[0], np.cumsum(transcripts["transcript_len"].to_numpy())[:-1]])
     if not np.array_equal(transcripts["coverage_offset"].to_numpy(), expected):

@@ -171,7 +171,7 @@ def _build_transcript_table():
 def build_exon_gene_table(rebuild=False):
     """ALL GTF exon intervals (every gene_type) with gene_id + gene_type kept.
 
-    Strand is dropped deliberately: buckets 5-7 ask about ANY other gene's exon, strandless.
+    Strand is dropped because buckets 5-7 ask about ANY other gene's exon, strandless.
     """
     if rebuild and EXON_GENE_CACHE.exists():
         EXON_GENE_CACHE.unlink()

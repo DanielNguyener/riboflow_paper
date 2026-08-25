@@ -22,7 +22,6 @@ _build/
 .cache/
 /notebooks/
 # regenerated output; only the coverage checksum manifest is versioned
-/results/
 /results/*
 !/results/coverage/
 /results/coverage/*
@@ -30,7 +29,6 @@ _build/
 
 # figures: the panel references and the five published figures are versioned
 /figures/*
-!/figures/README.md
 !/figures/panel_references/
 /figures/panel_references/*
 !/figures/panel_references/*.pdf
@@ -41,15 +39,8 @@ _build/
 
 # machine-local input locations (copy config/inputs.example.yaml)
 /config/local.yaml
-/get_coverage/logs/
-/get_coverage/run_cohort_failures.tsv
+/get_coverage/
 /docs/Fig3_panel_annotations.md
-/docs/figures.md
-
-/docs/methods_te_route.md
-/docs/README.md
-/docs/scientific_methods.md
-    
 *.bam
 *.bai
 *.csi

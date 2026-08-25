@@ -18,7 +18,7 @@ import config
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_WORKERS = 10
 
-#: step name -> (script, staging suffix). Order is load-bearing.
+#: step name -> (script, staging suffix). Order is significant.
 STEP_SCRIPTS = {
     "qc":        ("01t_readlen_psite_qc_transcriptome.py", "readlen_window_qc"),
     "cds_frame": ("03t_cds_frame_transcriptome.py", "cds_psite_frame"),

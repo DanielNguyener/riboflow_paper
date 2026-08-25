@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
-"""BAMs + GTF + APPRIS + QC tables -> the compact locus artifact Figure 6B draws.
+"""BAMs + GTF + APPRIS + QC tables -> the locus artifact (`locus_<GENE>.{npz,json}`).
 
-Writes <output>.npz (per-base coverage vectors + exon blocks) and <output>.json (metadata).
+Per-base P-site coverage of both routes over the merged exons of the selected isoform and
+the best-supported alternative isoform (the one carrying the most genome-only unique reads
+on non-selected sequence). Writes <output>.npz (coverage vectors + exon blocks) and
+<output>.json (metadata). Introns are drawn as a constant 90-unit gap. The BAM template,
+MAPQ >= 42 rule and cigar-aware P-site are re-implemented here, identically to `common/`
+and `coverage/`.
+
+Published locus: LRRFIP1, chr2:237,627,586-237,781,643 (+), selected ENST00000308482.14,
+alternative ENST00000244815.9 (3,619 nt absent from the selected reference).
 Run with `python` (3.9).
 """
 from __future__ import annotations

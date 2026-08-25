@@ -1,8 +1,24 @@
 #!/usr/bin/env python3
-"""Per-read gene partition dump -> the compact seven-segment table Figure 6A draws.
+"""Per-read gene partition dump -> the seven-segment table (`gene_partition_route7.{tsv,json}`).
 
-Folds the dump through the root generator's own `prepare_route_explicit` so the fold cannot
-drift from the published semantics. Run with `python` (3.9).
+Folds the dump through `panels/plot_gene_read_partition.prepare_route_explicit`, so the
+fold uses the same semantics as the panel. Run with `python` (3.9).
+
+Segments (unit: read IDs; denominator: the union of read IDs at the gene on either route).
+"Shared" and "genome-only" are BAM-presence terms over the whole library;
+"transcriptome-only" is gene-local.
+
+    r7_shared_unique        shared, genome-unique
+    r7_shared_multi_pp      shared, genome-multimapping, protein-coding/pseudogene tie
+    r7_shared_multi_other   shared, other genome-multimapping
+    r7_gonly_unique_omit    genome-only, genome-unique, on an exon the selected isoform omits
+    r7_gonly_unique_other   genome-only, other genome-unique
+    r7_gonly_multi          genome-only, genome-multimapping
+    r7_txonly               transcriptome-only at the gene
+
+Validated counts (GSM2100602), in the order above: COMT 1084/0/34/105/37/26/9 (union
+1,295); GAPDH 1057/2207/805/63/49/64/115 (4,360); LRRFIP1 281/40/18/755/27/388/16 (1,525).
+Counts other than these are rejected.
 """
 from __future__ import annotations
 
