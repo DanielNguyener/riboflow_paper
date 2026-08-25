@@ -1,5 +1,7 @@
 # riboflow_paper
 
+[![DOI](https://zenodo.org/badge/1321237103.svg)](https://doi.org/10.5281/zenodo.22102431)
+
 Analysis and figure code for the RiboFlow_v2 manuscript: ribosome profiling and matched
 RNA-seq from 24 human cell lines, aligned to the genome and to the transcriptome, with the
 two alignment routes compared. From RiboFlow_v2 alignments, the code produces the analysis
@@ -79,7 +81,9 @@ Tests needing the coverage HDF5 (`RIBOFLOW_PAPER_COVERAGE_H5`), BAMs
 
 ## Code and data availability
 
-Code: this repository (MIT). Tables: `data/`. Alignments: Zenodo 10.5281/zenodo.22083992.
+Code: this repository (MIT), archived at Zenodo
+[10.5281/zenodo.22102431](https://doi.org/10.5281/zenodo.22102431). Tables: `data/`.
+Alignments: Zenodo [10.5281/zenodo.22083992](https://doi.org/10.5281/zenodo.22083992).
 Raw reads: GEO ([`docs/accessions.tsv`](docs/accessions.tsv)).
 
 ## Citation and license
