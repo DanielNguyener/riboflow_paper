@@ -63,13 +63,13 @@ def draw(prepared, ylim=None, figsize=(5.2, 4.4), seed=0, short_labels=False,
         # back two per box, hence the pairwise slice. The box sits ON TOP of the dots, so
         # translucency goes on the FACE COLOUR, not artist `alpha` (which would fade strokes).
         box = axis.boxplot(series, positions=positions, widths=0.42, showfliers=False,
-                           patch_artist=True, zorder=12)
+                           showcaps=False, patch_artist=True, zorder=12)
         for k, (column, _label) in enumerate(METRICS):
             fill, line = colours[column]
             box["boxes"][k].set(facecolor=to_rgba(fill, BOX_FACE_ALPHA), edgecolor=line,
                                 linewidth=1.4, zorder=12)
             box["medians"][k].set(color=line, linewidth=2.0, zorder=13)
-            for stroke in box["whiskers"][2 * k:2 * k + 2] + box["caps"][2 * k:2 * k + 2]:
+            for stroke in box["whiskers"][2 * k:2 * k + 2]:
                 stroke.set(color=line, linewidth=1.4, zorder=12)
 
         for position, (column, _label) in zip(positions, METRICS):
@@ -81,9 +81,7 @@ def draw(prepared, ylim=None, figsize=(5.2, 4.4), seed=0, short_labels=False,
                              linewidths=0.35, alpha=DOT_ALPHA, zorder=5)
             axis.text(position, np.nanmax(values) + 0.004,
                       "%.3f" % np.nanmedian(values), va="bottom", ha="center",
-                      fontsize=ps.FONT_TICK, zorder=14,
-                      bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none",
-                                alpha=0.75))
+                      fontsize=ps.FONT_TICK, zorder=14)
         axis.set_xticks(positions)
         axis.set_xticklabels([SHORT_LABELS[c] if short_labels else label
                               for c, label in METRICS], fontsize=ps.FONT_TICK)
@@ -93,7 +91,8 @@ def draw(prepared, ylim=None, figsize=(5.2, 4.4), seed=0, short_labels=False,
 
     from matplotlib.ticker import FormatStrFormatter, MultipleLocator
     axes[0].set_ylabel("correlation", fontsize=ps.FONT_LABEL)
-    axes[0].yaxis.set_major_locator(MultipleLocator(0.05))
+    axes[0].yaxis.set_major_locator(MultipleLocator(0.1 if ylim[1] - ylim[0] > 0.5
+                                                    else 0.05))
     axes[0].yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
     figure.tight_layout()
     return figure, axes

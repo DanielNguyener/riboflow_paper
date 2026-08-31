@@ -134,34 +134,29 @@ def dress(ax, letter):
             fontsize=ps.FONT_PANEL_LETTER, fontweight="bold")
 
 
-def draw_a(ax, corr, marker):
+def draw_a(ax, corr):
     """A: route agreement per cell line."""
     from matplotlib.colors import to_rgba
 
     metrics = (("spearman_rho", "Spearman $\\rho$", ps.SPEARMAN_FILL, ps.SPEARMAN_LINE),
                ("pearson_r", "Pearson $r$", ps.PEARSON_FILL, ps.PEARSON_LINE))
-    rng = np.random.default_rng(0)
     series = [corr[c].to_numpy(float) for c, _l, _f, _e in metrics]
     positions = np.arange(len(metrics))
     bp = ax.boxplot(series, positions=positions, widths=0.42, showfliers=False,
-                    patch_artist=True, zorder=10)
+                    showcaps=False, patch_artist=True, zorder=10)
     for k, (_c, _l, fill, line) in enumerate(metrics):
         bp["boxes"][k].set(facecolor=to_rgba(fill, 0.35), edgecolor=line,
                            linewidth=ps.lw(1.4), zorder=11)
         bp["medians"][k].set(color=line, linewidth=ps.lw(2.0), zorder=13)
-        for part in ("whiskers", "caps"):
-            for stroke in bp[part][2 * k:2 * k + 2]:
-                stroke.set(color=line, linewidth=ps.lw(1.4), zorder=12)
-        ax.scatter(rng.normal(positions[k], 0.06, len(series[k])), series[k],
-                   s=18 * marker, facecolor=line, edgecolors="black",
-                   linewidths=ps.lw(0.5), alpha=0.55, zorder=14)
+        for stroke in bp["whiskers"][2 * k:2 * k + 2]:
+            stroke.set(color=line, linewidth=ps.lw(1.4), zorder=12)
         ax.annotate("%.3f" % np.nanmedian(series[k]), (positions[k], np.nanmax(series[k])),
                     textcoords="offset points", xytext=(0, 7), ha="center",
                     fontsize=ps.FONT_ANNOTATION, color=INK, zorder=15)
     ax.set_xticks(positions)
     ax.set_xticklabels([l for _c, l, _f, _e in metrics], fontsize=ps.FONT_TICK)
     ax.set_xlim(-0.6, len(metrics) - 0.4)
-    ax.set_ylim(0.90, 1.0)
+    ax.set_ylim(0.0, 1.0)
     ax.set_ylabel("correlation", fontsize=ps.FONT_LABEL)
     ax.grid(axis="y", alpha=0.13, zorder=0)
     dress(ax, "A")
@@ -206,8 +201,6 @@ def draw_c(figure, ax, cax, genes, marker, housekeeping=()):
     density = point_density(x, y)
     dorder = np.argsort(density)
     cmap = LinearSegmentedColormap.from_list("white_viridis", WHITE_VIRIDIS, N=256)
-    # vmin is SOLVED, not nudged: under LogNorm a value at vmin lands in white LUT slot 0,
-    # which would paint the sparsest transcripts white.
     dlo, dhi, floor = float(density.min()), float(density.max()), 2.0 / 255.0
     vmin = max(float(np.exp((np.log(dlo) - floor * np.log(dhi)) / (1.0 - floor))), 1e-12)
 
@@ -384,17 +377,15 @@ def main(argv=None):
 
     if args.panel == "combined":
         figure, axes, cax = geom.combined_page(new_figure)
-        draw_a(axes[0], corr, marker)
+        draw_a(axes[0], corr)
         draw_b(axes[1], genes)
         labelled, dropped = draw_c(figure, axes[2], cax, genes, marker, housekeeping)
         written = ps.save(figure, args.output, formats, args.force, tight=False)
     else:
-        # Same geometry object: only the page changes. bbox_inches="tight" here and only
-        # here — it crops the PAGE and leaves the axes box untouched.
         index = PANELS.index(args.panel) - 1
         figure, axis, cax = geom.single_page(new_figure, index)
         if index == 0:
-            draw_a(axis, corr, marker)
+            draw_a(axis, corr)
         elif index == 1:
             draw_b(axis, genes)
         else:

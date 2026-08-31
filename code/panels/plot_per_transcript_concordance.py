@@ -55,11 +55,10 @@ def prepare(psite_path, footprint_path, samples_csv=None, highlight=None):
 
 def _half_box(axis, data, positions, fill, line):
     boxes = axis.boxplot(data, positions=positions, widths=0.4, showfliers=False,
-                         patch_artist=True,
+                         showcaps=False, patch_artist=True,
                          medianprops=dict(color=line, lw=1.8),
                          boxprops=dict(edgecolor=line, lw=1.1),
-                         whiskerprops=dict(color=line, lw=1.1),
-                         capprops=dict(color=line, lw=1.1))
+                         whiskerprops=dict(color=line, lw=1.1))
     for box in boxes["boxes"]:
         box.set_facecolor(fill)
         box.set_alpha(0.6)
@@ -67,7 +66,7 @@ def _half_box(axis, data, positions, fill, line):
 #: The leader from a marker to its gene name: a thin plain line, no head, no text box.
 LEADER = dict(arrowstyle="-", color="#555", lw=0.6, shrinkA=0, shrinkB=2)
 
-def draw(prepared, ylim=(0.10, 1.0), figsize=(11.0, 4.4), layout="side"):
+def draw(prepared, ylim=(0.0, 1.0), figsize=(11.0, 4.4), layout="side"):
     """`layout="side"`: P-site | footprint side by side; `"stacked"`: shared x axis,
     GSM labels appear once (the form that fits beside panel D)."""
     import matplotlib.pyplot as plt
@@ -96,15 +95,19 @@ def draw(prepared, ylim=(0.10, 1.0), figsize=(11.0, 4.4), layout="side"):
             index = order.index(sample) + 1
             low, high = ylim
             for key, entry in marks.items():
-                dot = dict(s=34, edgecolors="white", linewidths=0.9, zorder=12)
+                dot = dict(s=34, marker="o", edgecolors="white", linewidths=0.9,
+                           zorder=12)
+                diamond = dict(s=22, marker="D", edgecolors="black", linewidths=0.8,
+                               zorder=13)
+                # GAPDH is a diamond in EVERY sub-panel, on or off the axis, so the
+                # discordant example reads as the same transcript in both views.
+                style = diamond if key == "gapdh" else dot
                 if entry["spearman"] < low:
                     floor = low + 0.012 * (high - low)
-                    marker = dict(s=34, marker="D", edgecolors="black", linewidths=0.8,
-                                  zorder=13)
                     axis.scatter([index - 0.2], [floor], color=ps.SPEARMAN_LINE,
-                                 clip_on=False, **marker)
+                                 clip_on=False, **diamond)
                     axis.scatter([index + 0.2], [floor], color=ps.PEARSON_LINE,
-                                 clip_on=False, **marker)
+                                 clip_on=False, **diamond)
                     # Plain text on a thin leader, up-right into the empty band; no box.
                     axis.annotate(key.upper(), xy=(index + 0.2, floor), xytext=(16, 18),
                                   textcoords="offset points", ha="left", va="bottom",
@@ -112,9 +115,9 @@ def draw(prepared, ylim=(0.10, 1.0), figsize=(11.0, 4.4), layout="side"):
                                   arrowprops=LEADER)
                 else:
                     axis.scatter([index - 0.2], [entry["spearman"]],
-                                 color=ps.SPEARMAN_LINE, marker="o", **dot)
+                                 color=ps.SPEARMAN_LINE, **style)
                     axis.scatter([index + 0.2], [entry["pearson"]],
-                                 color=ps.PEARSON_LINE, marker="o", **dot)
+                                 color=ps.PEARSON_LINE, **style)
                     near_top = entry["spearman"] > high - 0.08 * (high - low)
                     # Down-right when the dot sits near the top; otherwise up-right.
                     xytext = (16, -22) if near_top else (16, 14)
@@ -152,6 +155,9 @@ def draw(prepared, ylim=(0.10, 1.0), figsize=(11.0, 4.4), layout="side"):
     figure.tight_layout()
     if layout == "stacked":
         figure.subplots_adjust(hspace=0.08, left=0.13)
+        for loc, label in zip(axes[0].get_yticks(), axes[0].get_yticklabels()):
+            if loc <= ylim[0] + 1e-9:
+                label.set_visible(False)
     return figure, axes
 
 def main(argv=None):
@@ -164,7 +170,7 @@ def main(argv=None):
     parser.add_argument("--highlight-sample", default="HeLa")
     parser.add_argument("--highlight-gapdh", default="ENST00000396861.5")
     parser.add_argument("--highlight-comt", default="ENST00000361682.11")
-    parser.add_argument("--ylim", nargs=2, type=float, default=(0.10, 1.0))
+    parser.add_argument("--ylim", nargs=2, type=float, default=(0.0, 1.0))
     parser.add_argument("--figsize", nargs=2, type=float, default=(11.0, 4.4))
     parser.add_argument("--layout", choices=("side", "stacked"), default="side",
                         help="side: P-site | footprint; stacked: P-site over footprint, "

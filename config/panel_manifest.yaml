@@ -116,7 +116,7 @@ panels:
     title: Per-transcript concordance distribution per cell line
     generator: code/panels/plot_per_transcript_concordance.py
     args:
-      ylim: [0.10, 1.0]
+      ylim: [0.0, 1.0]
       highlight_sample: HeLa
       highlight_gapdh: ENST00000396861.5
       highlight_comt: ENST00000361682.11
@@ -132,6 +132,8 @@ panels:
     panel: D
     title: Pooled per-cell-line concordance
     generator: code/panels/plot_pooled_concordance.py
+    args:
+      ylim: [0.0, 1.005]
     inputs:
       psite:     data/coverage/concordance/region_concordance_per_sample.tsv
       footprint: data/coverage/concordance/region_coverage_per_sample.tsv
