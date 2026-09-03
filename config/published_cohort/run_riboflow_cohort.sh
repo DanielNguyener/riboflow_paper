@@ -7,7 +7,7 @@ else
         [ -f "$c/etc/profile.d/conda.sh" ] && source "$c/etc/profile.d/conda.sh" && break
     done
 fi
-conda activate ribo_genome
+conda activate riboflow
 
 set -uo pipefail
 
