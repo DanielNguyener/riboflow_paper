@@ -8,7 +8,7 @@ alignment_arguments:
   transcriptome: -L 15 --no-unal --norc
   genome: --no-unal -k 1
 ribo:
-  ref_name: appris-v1
+  ref_name: appris-v2
   metagene_radius: 50
   left_span: 35
   right_span: 10
@@ -60,7 +60,7 @@ rnaseq:
   umi_tools_extract_arguments: ''
   genome:
     mapping_quality_cutoff: 0
-    filter_flags: 2052
+    samtools_filter_arguments: "-F 2052"
   transcriptome:
     mapping_quality_cutoff: 10
     alignment_arguments: -L 15 --no-unal
@@ -82,7 +82,7 @@ star:
 genome:
   run: true
   mapping_quality_cutoff: 0
-  ribo_filter_flags: 2052
+  samtools_filter_arguments: "-F 2052"
 transcriptome:
   run: true
   mapping_quality_cutoff: 10

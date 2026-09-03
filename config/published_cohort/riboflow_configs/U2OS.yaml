@@ -59,7 +59,7 @@ rnaseq:
   umi_tools_extract_arguments: ''
   genome:
     mapping_quality_cutoff: 0
-    filter_flags: 2052
+    samtools_filter_arguments: "-F 2052"
   transcriptome:
     mapping_quality_cutoff: 10
     alignment_arguments: -L 15 --no-unal
@@ -81,7 +81,7 @@ star:
 genome:
   run: true
   mapping_quality_cutoff: 0
-  ribo_filter_flags: 2052
+  samtools_filter_arguments: "-F 2052"
 transcriptome:
   run: true
   mapping_quality_cutoff: 10

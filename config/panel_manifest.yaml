@@ -7,7 +7,7 @@ defaults:
 
 figures:
   2:
-    composer: fig02_stack           # two 24 x 9 grids side by side, re-rendered to size
+    composer: fig02_stack           # two 24 x 9 grids side by side
     panels: [fig02A, fig02B]
     page_in: [7.5, 8.75]
     label_pt: 12
@@ -20,16 +20,14 @@ figures:
     label_pt: 12
     raster: {kind: matplotlib_pdf, dpi: 300, border_pt: 2.0}
     output: figures/published/Fig3
-    annotations: docs/Fig3_panel_annotations.md   # the numbers panels A/B no longer print
+    annotations: docs/Fig3_panel_annotations.md
   4:
     composer: single_panel          # one generator page, already PLOS-sized
     panels: [fig04]
-    # min_font_pt: the only sub-8 pt glyphs are mathtext sub/superscripts (log2, p_adj)
-    # set at 70 % of their 10 pt base; every label, tick and key string is 10-12 pt.
     raster: {kind: generator_tiff, dpi: 300, border_pt: 2.0, min_font_pt: 7.0}
     output: figures/published/Fig4
   5:
-    composer: rows_1to1             # panels placed at native size, letters above each row
+    composer: rows_1to1             # native size, letters above each row
     rows: [[fig05A_plos, fig05B_plos, fig05C_plos, fig05D_plos]]
     letters: ABCD
     page: {max_width_pt: 540.0, max_height_pt: 630.0, margin_pt: 4.0, gutter_pt: 6.0,
@@ -52,9 +50,7 @@ panels:
     figure: 1
     panel: null
     generator: null
-    note: >
-      Author-drawn schematic. No generator exists and none is claimed; it is not a
-      pipeline output.
+    note: Author-drawn schematic, not a pipeline output. No generator.
 
   # ── Figure 2 ────────────────────────────────────────────────────────────────
   - id: fig02A
@@ -90,7 +86,7 @@ panels:
     args:
       gene_id: ENSG00000093010          # COMT; resolves to ENST00000361682.11
       signal: both
-      region: cds                       # the published framing; default view is whole-transcript
+      region: cds                       # published framing; default view is whole-transcript
       annotate_correlation: true
     inputs:
       coverage_h5: results/coverage/HeLa.shared_coverage.h5
@@ -141,9 +137,8 @@ panels:
     output: results/panels/fig03D_pooled_concordance
 
   # ── Figure 4 ────────────────────────────────────────────────────────────────
-  # One generator draws the combined page and each panel on its own page from the SAME
-  # solved geometry (code/te_route/plot_te_route_panels.py). The combined page is the
-  # published figure; the singles are references for the panel-level verify.
+  # One generator draws the combined page and the single panels from the same geometry.
+  # The combined page is the published figure; the singles are for panel-level verify.
   - id: fig04
     figure: 4
     panel: null
@@ -261,7 +256,7 @@ panels:
     panel: B
     title: Read-ID union composition, page size
     generator: code/panels/plot_fig05_plos_panels.py
-    args: {panel: B, width_pt: 142.0, height_in: 5.20, font_pt: 8.0}   # + the union key
+    args: {panel: B, width_pt: 142.0, height_in: 5.20, font_pt: 8.0}   # taller: union key
     inputs:
       taxonomy:    data/read_taxonomy/taxonomy/taxonomy_all.tsv
       samples_csv: supporting_information/S1_Table/samples.csv
