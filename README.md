@@ -8,10 +8,8 @@ two alignment routes compared. From RiboFlow_v2 alignments, the code produces th
 tables, Figures 2–6, Table 1, and S1 Table.
 
 Read processing is done by the separate
-[RiboFlow_v2](https://github.com/ribosomeprofiling/riboflow) pipeline. The alignments used
-here were produced at commit
-[`e5e041c6`](https://github.com/ribosomeprofiling/riboflow/commit/e5e041c6fa842c27fabe46d2ca87d8aff3696874)
-with the configurations in
+[RiboFlow_v2](https://github.com/ribosomeprofiling/riboflow) pipeline, with the
+configurations in
 [`config/published_cohort/`](config/published_cohort/riboflow_configs/README.md).
 
 ## Layout

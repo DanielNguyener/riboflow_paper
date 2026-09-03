@@ -326,9 +326,7 @@ _j() { printf '%s' "$*" | tr -d '\n\r\t' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
   echo "  \"references\": \"$(_j "$(basename "$REFERENCES")")\","
   echo "  \"references_label\": \"$_ref_label\","
   echo "  \"star_cpus\": \"${BENCH_STAR_CPUS:-8}\","
-  echo "  \"star_memory_gb\": \"${BENCH_STAR_MEMORY:-48}\","
-  echo "  \"git_pipeline\": \"$(_j "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)")\","
-  echo "  \"git_pipeline_dirty\": $( [[ -n "$(git status --porcelain 2>/dev/null)" ]] && echo true || echo false )"
+  echo "  \"star_memory_gb\": \"${BENCH_STAR_MEMORY:-48}\""
   echo "}"
 } > "$RESULTS/host.json"
 

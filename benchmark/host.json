@@ -24,7 +24,5 @@
   "references": "human_server.yaml",
   "references_label": "human_server (GRCh38 STAR index, appris v2 transcriptome, v1 rRNA filter)",
   "star_cpus": "16",
-  "star_memory_gb": "48",
-  "git_pipeline": "29d281c",
-  "git_pipeline_dirty": true
+  "star_memory_gb": "48"
 }

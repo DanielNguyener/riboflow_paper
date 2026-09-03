@@ -1,6 +1,9 @@
 # RiboFlow_v2 configurations for the 24 published samples
 
-One YAML per cell line, plus [`../run_riboflow_cohort.sh`](../run_riboflow_cohort.sh) 
+One YAML per cell line, plus [`../run_riboflow_cohort.sh`](../run_riboflow_cohort.sh):
+the configuration behind the Figures 2-6 alignments. RiboFlow_v2 is not in this
+repository. The Table 1 benchmark was a later run, recorded in
+[`benchmark/runs/`](../../../benchmark/runs/).
 
 ## Placeholders
 
