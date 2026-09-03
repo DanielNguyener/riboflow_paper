@@ -47,7 +47,7 @@ star:
 genome:
   run: true
   mapping_quality_cutoff: 255   # STAR MAPQ 255 == unique
-  ribo_filter_flags:      2308  # unmapped(4) + secondary(256) + supplementary(2048)
+  samtools_filter_arguments: "-F 2308"  # unmapped(4) + secondary(256) + supplementary(2048)
 
 transcriptome:
   run: true
@@ -71,7 +71,7 @@ rnaseq:
   umi_tools_extract_arguments: ""
   genome:
     mapping_quality_cutoff: 255
-    filter_flags:           2308
+    samtools_filter_arguments: "-F 2308"
   transcriptome:
     mapping_quality_cutoff: 42
     alignment_arguments:   '-L 15 --no-unal'
