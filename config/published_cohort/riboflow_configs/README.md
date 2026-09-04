@@ -2,13 +2,12 @@
 
 One YAML per cell line, plus [`../run_riboflow_cohort.sh`](../run_riboflow_cohort.sh):
 the configuration behind the Figures 2-6 alignments. RiboFlow_v2 is not in this
-repository. The Table 1 benchmark was a later run, recorded in
+repository. The performance benchmark was a different run, recorded in
 [`benchmark/runs/`](../../../benchmark/runs/).
 
 ## Placeholders
 
-Absolute paths were replaced with placeholders. A private IP address was removed from the
-run script's header, and its `fastqs_ready()` check retargeted at `${FASTQ_DIR}`.
+Absolute paths were replaced with placeholders. 
 
 | Placeholder                                                                                    | Meaning                                                                                                                          |
 | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -28,10 +27,8 @@ alignments, so the genome BAMs retain multimappers; the transcriptome routes def
 
 The filters this repository applies when reading the BAMs are different, and depend on the
 BAM class rather than on ribo versus RNA-seq: a genome read must be primary with `NH == 1`,
-a transcriptome read primary with MAPQ >= 42 (`code/common/bam_inputs.py`). Genome
-uniqueness is never inferred from MAPQ. `read_taxonomy` and `alignment_fate` apply the same
-`NH == 1` test to classify reads rather than to drop them, which is why the genome BAMs are
-written permissively.
+a transcriptome read primary with MAPQ >= 42 (`code/common/bam_inputs.py`). `read_taxonomy` and `alignment_fate` apply the same
+`NH == 1` test to classify reads
 
 ## Per-sample FASTQ counts
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate Table 1 (RiboFlow computational performance) from the sanitized benchmark evidence shipped in this directory."""
+"""Regenerate the performance table (RiboFlow_v2 computational performance) from the sanitized benchmark evidence shipped in this directory."""
 from __future__ import annotations
 
 import argparse
@@ -137,7 +137,7 @@ def mean_of_rounded(xs, dp):
     return mean([round(x, dp) for x in xs])
 
 def summarize_scenario(runs):
-    """One Table 1 column. Every averaging rule here is deliberate."""
+    """One performance-table column. Every averaging rule here is deliberate."""
     n = len(runs)
     reads = {r['input_reads'] for r in runs}
     if len(reads) != 1:
@@ -219,7 +219,7 @@ def write_csv(path, columns, rows):
             w.writerow([render(c, r.get(c, '')) for c in columns])
 
 def check_published(scen_rows, change):
-    """Assert every published Table 1 value. Returns a list of failures."""
+    """Assert every published performance-table value. Returns a list of failures."""
     fails = []
 
     def cmp(label, got, want, tol):
@@ -254,7 +254,7 @@ def main(argv=None):
     ap.add_argument('--outdir', default=None,
                     help='where to write the two CSVs (default: --bench-dir)')
     ap.add_argument('--check', action='store_true',
-                    help='additionally assert every published Table 1 value')
+                    help='additionally assert every published performance-table value')
     args = ap.parse_args(argv)
 
     bench = os.path.abspath(args.bench_dir)
@@ -292,7 +292,7 @@ def main(argv=None):
     print('wrote %s  (%d rows)' % (ind_path, len(runs)))
     print('wrote %s  (3 rows)' % sum_path)
     print()
-    print('Table 1  (executor: %d CPU, %s; %%cpu divisor %d)'
+    print('Performance table  (executor: %d CPU, %s; %%cpu divisor %d)'
           % (executor_cpus, host.get('executor_memory', '?'), divisors.pop()))
     print('%-24s %16s %16s %14s' % ('', 'one_library', 'three_libraries', 'change'))
     o, t = scen_rows['one_library'], scen_rows['three_libraries']
@@ -316,7 +316,7 @@ def main(argv=None):
             for f in fails:
                 print('  ' + f)
             return 1
-        print('CHECK OK: all 14 published Table 1 values reproduce exactly.')
+        print('CHECK OK: all 14 published performance-table values reproduce exactly.')
     return 0
 
 if __name__ == '__main__':
