@@ -31,6 +31,10 @@ if str(REPO / "code" / "common") not in sys.path:
     sys.path.insert(0, str(REPO / "code" / "common"))
 from intervals import merge as _merge, subtract as _subtract  # noqa: E402
 
+if str(REPO / "code" / "read_categories") not in sys.path:
+    sys.path.insert(0, str(REPO / "code" / "read_categories"))
+from categories import MISSING_AS, qualifies  # noqa: E402
+
 #: The chain, in evaluation order; one read gets exactly one of these. The order nests by
 #: definedness — `classify_gU_tA` must only see transcriptome-ABSENT reads.
 PARTITION_CATEGORIES = (
@@ -68,25 +72,10 @@ WIDE_COLUMNS = ["sample", "gene_id", "gene_name", "transcript_id",
                 "n_secondary_only_lower_score", "n_missing_as"]
 
 
-#: Score for an alignment carrying no AS tag; far below any real score so it never ties.
-MISSING_AS = -(10 ** 9)
 
 
 class PartitionError(RuntimeError):
     pass
-
-
-def qualifies(is_secondary, score, primary_score):
-    """Can this genome alignment place its read at a gene?
-
-    The primary always; a secondary only when it and the primary both carry an AS and the
-    two are equal (a tied-best placement). A read with no primary record, or an alignment
-    with no AS, is never tied: that is reported, not assumed.
-    """
-    if not is_secondary:
-        return True
-    return (primary_score is not None and primary_score != MISSING_AS
-            and score != MISSING_AS and score == primary_score)
 
 
 def top_placements(recs):

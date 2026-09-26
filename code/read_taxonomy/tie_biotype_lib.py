@@ -12,7 +12,8 @@ import pandas as pd
 
 _HERE = Path(__file__).resolve().parent
 _COMMON = _HERE.parent / "common"
-for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc")):
+for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc"),
+               str(_HERE.parent / "read_categories")):
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
 import biotype_lib as bl
@@ -22,7 +23,7 @@ cl, fc = bl.cl, bl.fc
 OUTDIR = fc.output_root() / "read_taxonomy" / "multimap_biotype"
 PC = "protein_coding"
 PP = "processed_pseudogene"
-_MISSING_AS = -(10 ** 9)
+from categories import MISSING_AS as _MISSING_AS  # noqa: E402
 
 def read_genome_multi_records_flagged(bam_path, target_qnames):
     """qname -> [(chrom, pos5, AS, is_secondary)] for every reported genome locus of each

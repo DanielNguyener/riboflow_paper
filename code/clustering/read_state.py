@@ -40,9 +40,8 @@ REPO = HERE.parents[1]
 
 SCHEMA = "riboflow_paper/read_state/3"
 
-#: Same sentinel `gene_read_partition_lib` uses: far below any real alignment score, so an
-#: unscored alignment can never tie with a scored one in the pseudogene-tie test.
-MISSING_AS = -(10 ** 9)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "read_categories"))
+from categories import MISSING_AS  # noqa: E402
 
 FLAG_SECONDARY = 1
 FLAG_REVERSE = 2

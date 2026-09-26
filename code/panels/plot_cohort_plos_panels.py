@@ -13,21 +13,17 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "read_categories"))
+import categories  # noqa: E402
 from panel_style import die  # noqa: E402
 
 #: The cohort panels' shared plot box, shrunk from the published 470 / 40 pt.
 BOX_HEIGHT_PT = 240.0
 BOX_TOP_OFFSET_PT = 22.0
 
-#: `plot_read_id_union.SEGMENTS` colours with the route-status abbreviations the
-#: captions define: SH shared, GO genome-only, TO transcriptome-only; U unique, M multimapping.
-UNION_KEY = (
-    ("SH-U", "#a6d96a"),
-    ("SH-M", "#1a7d1a"),
-    ("GO-U", "#7fb9da"),
-    ("GO-M", "#0d57a1"),
-    ("TO", "#cc3d3d"),
-)
+#: The category key (abbreviation, colour): SH shared, GO genome-only,
+#: TO transcriptome-only; U unique, M multimapping to the genome.
+UNION_KEY = categories.KEY
 
 MODULES = {"A": "plot_route_read_counts", "B": "plot_read_id_union",
            "C": "plot_cohort_share", "D": "plot_cohort_share"}

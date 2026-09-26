@@ -42,15 +42,15 @@ from scipy.cluster import hierarchy
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import panel_style as ps  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "read_categories"))
+import categories  # noqa: E402
 
 #: The five fates in table order; index 0 is the concordant one (cluster 1 by construction).
 COMPONENTS = ("shared_genome_unique", "shared_genome_multimapped", "genome_only_unique",
               "genome_only_multimapped", "transcriptome_only")
-#: The Figure 5A fate abbreviations (`plot_gene_read_partition.ROUTE7_KEY`), in
-#: COMPONENTS order: SH shared, GO genome-only, TO transcriptome-only; U unique, M multi.
-SHORT = ("SH-U", "SH-M", "GO-U", "GO-M", "TO")
-#: The Fig 4B fate colours, in COMPONENTS order (`plot_read_id_union.SEGMENTS`).
-COLOURS = ("#a6d96a", "#1a7d1a", "#7fb9da", "#0d57a1", "#cc3d3d")
+#: Abbreviations and colours in COMPONENTS order, from the one category key.
+SHORT = tuple(categories.ABBR[k] for k in categories.KEYS)
+COLOURS = tuple(categories.COLOR[k] for k in categories.KEYS)
 EDGE = "#333333"
 ABOVE_CUT = "#8c8c8c"
 CUT = "#4d4d4d"

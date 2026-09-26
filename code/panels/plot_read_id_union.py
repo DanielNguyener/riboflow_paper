@@ -9,12 +9,14 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 
-SEGMENTS = (
-    ("both_genome_unique", "SH-U", "#a6d96a"),
-    ("both_genome_multi", "SH-M", "#1a7d1a"),
-    ("genome_only_unique", "GO-U", "#7fb9da"),
-    ("genome_only_multi", "GO-M", "#0d57a1"),
-    ("txome_only", "TO", "#cc3d3d"))
+sys.path.insert(0, str(HERE.parent / "read_categories"))
+import categories  # noqa: E402
+
+#: (taxonomy column, abbreviation, colour), in the manuscript's category order.
+SEGMENTS = tuple(zip(("both_genome_unique", "both_genome_multi", "genome_only_unique",
+                      "genome_only_multi", "txome_only"),
+                     (categories.ABBR[k] for k in categories.KEYS),
+                     (categories.COLOR[k] for k in categories.KEYS)))
 NOT_IN_UNION = "#dddddd"
 
 def _format_count(value):

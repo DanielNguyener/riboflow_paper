@@ -16,6 +16,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "common"))
 from intervals import merge  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "read_categories"))
+import categories  # noqa: E402
 from panel_style import die  # noqa: E402
 
 #: Type scale, module constants so one caller can rebind them (PLOS allows 8-12 pt).
@@ -30,13 +32,12 @@ FONT_MODEL = 7.5
 #: colours (`plot_gene_read_partition.ROUTE7_KEY`), so one colour means one population in
 #: both panels. Route identity is carried by the mirrored layout and the boxed marks, not
 #: by colour. Stacking order: baseline first (the values are the npz array suffixes).
-GENOME_LAYERS = (("shared_unique", "#a6d96a", "SH-U"),
-                 ("shared_multi", "#1a7d1a", "SH-M"),
-                 ("genome_only", "#7fb9da", "GO-U"),
-                 ("genome_only_multi", "#0d57a1", "GO-M"))
-TXOME_LAYERS = (("shared_unique", "#a6d96a", "SH-U"),
-                ("shared_multi", "#1a7d1a", "SH-M"),
-                ("txome_only", "#cc3d3d", "TO"))
+GENOME_LAYERS = tuple((suffix, categories.COLOR[k], categories.ABBR[k])
+                      for suffix, k in (("shared_unique", "sh_u"), ("shared_multi", "sh_m"),
+                                        ("genome_only", "go_u"), ("genome_only_multi", "go_m")))
+TXOME_LAYERS = tuple((suffix, categories.COLOR[k], categories.ABBR[k])
+                     for suffix, k in (("shared_unique", "sh_u"), ("shared_multi", "sh_m"),
+                                       ("txome_only", "to")))
 #: Neutral grey for the region the reference omits: a statement about the annotation, not
 #: a measurement, so it carries no signal colour.
 ABSENT_COLOUR = "#9a9a9a"

@@ -6,29 +6,31 @@ fold the per-read dump from code/alignment_fate/build_gene_read_partition.py.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "read_categories"))
+import categories  # noqa: E402
 
 #: The route-explicit seven-segment fold, folded from the PER-READ dump -- the tidy table
 #: never records a genome multimapper's transcriptome status. "Shared" is read-level
 #: presence in both BAMs, not "assigned to this gene by both routes".
 ROUTE7_SEGMENTS = (
-    ("r7_shared_unique", "Genome-unique", "#a6d96a", "black", None),
-    ("r7_shared_multi_pp", "Genome-multi, pseudogene tie", "#1a7d1a", "white", "//"),
-    ("r7_shared_multi_other", "Genome-multi, other", "#1a7d1a", "white", None),
-    ("r7_gonly_unique_omit", "Genome-unique, omitted exon", "#7fb9da", "black", ".."),
-    ("r7_gonly_unique_other", "Genome-unique, other", "#7fb9da", "black", None),
-    ("r7_gonly_multi", "Genome-multi", "#0d57a1", "white", None),
-    ("r7_txonly", "Transcriptome only", "#cc3d3d", "white", None),
+    ("r7_shared_unique", "Genome-unique", categories.COLOR["sh_u"], "black", None),
+    ("r7_shared_multi_pp", "Genome-multi, pseudogene tie", categories.COLOR["sh_m"], "white", "//"),
+    ("r7_shared_multi_other", "Genome-multi, other", categories.COLOR["sh_m"], "white", None),
+    ("r7_gonly_unique_omit", "Genome-unique, omitted exon", categories.COLOR["go_u"], "black", ".."),
+    ("r7_gonly_unique_other", "Genome-unique, other", categories.COLOR["go_u"], "black", None),
+    ("r7_gonly_multi", "Genome-multi", categories.COLOR["go_m"], "white", None),
+    ("r7_txonly", "Transcriptome only", categories.COLOR["to"], "white", None),
 )
 
 #: The two-section key for the hatched design: colour = route/uniqueness, hatch = mechanism.
 ROUTE7_KEY = (
-    (("SH-U", "#a6d96a", None),
-     ("SH-M", "#1a7d1a", None),
-     ("GO-U", "#7fb9da", None),
-     ("GO-M", "#0d57a1", None),
-     ("TO", "#cc3d3d", None)),
+    tuple((abbr, colour, None) for abbr, colour in categories.KEY),
     # Mechanism entries name the biology alone; wording matches Figure 4C's panel title.
     (("Protein-coding–pseudogene ties", "#ffffff", "//"),
      ("Alternative exon", "#ffffff", "..")),
