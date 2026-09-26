@@ -33,6 +33,7 @@ from intervals import merge as _merge, subtract as _subtract  # noqa: E402
 
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+import categories  # noqa: E402
 from categories import MISSING_AS, qualifies  # noqa: E402
 
 #: The chain, in evaluation order; one read gets exactly one of these. The order nests by
@@ -599,3 +600,94 @@ def _display(table, tids, coverage):
             names[tid] = info["gene_name"]
             genes[tid] = info["gene_id"]
     return names, genes
+
+
+# ── the ten-to-seven fold (Figure 5A's segments) ──────────────────────────────
+
+#: The route-explicit seven-segment fold, folded from the PER-READ dump -- the tidy table
+#: never records a genome multimapper's transcriptome status. "Shared" is read-level
+#: presence in both BAMs, not "assigned to this gene by both routes".
+ROUTE7_SEGMENTS = (
+    ("r7_shared_unique", "Genome-unique", categories.COLOR["sh_u"], "black", None),
+    ("r7_shared_multi_pp", "Genome-multi, pseudogene tie", categories.COLOR["sh_m"], "white", "//"),
+    ("r7_shared_multi_other", "Genome-multi, other", categories.COLOR["sh_m"], "white", None),
+    ("r7_gonly_unique_omit", "Genome-unique, omitted exon", categories.COLOR["go_u"], "black", ".."),
+    ("r7_gonly_unique_other", "Genome-unique, other", categories.COLOR["go_u"], "black", None),
+    ("r7_gonly_multi", "Genome-multi", categories.COLOR["go_m"], "white", None),
+    ("r7_txonly", "Transcriptome only", categories.COLOR["to"], "white", None),
+)
+
+
+#: Raw chain category -> genome-status half of the seven-way fold; the transcriptome half
+#: comes from the dump's per-read `txome_primary_transcript`.
+#: A genome-multimapped read at a gene has a top-score placement there (its primary or a
+#: score-tied secondary); any other multi category is unknown and raises.
+_R7_MULTI = ("genome_multi_top_at_gene_pseudogene_tie",
+             "genome_multi_top_at_gene_no_pseudogene_tie")
+_R7_MULTI_PP = _R7_MULTI[:1]
+_R7_UNIQUE_SHARED = ("genome_unique_txome_present",)
+_R7_ABSENT_OMIT = ("genome_unique_absent_omitted_exon",)
+_R7_ABSENT_OTHER = ("genome_unique_absent_splice_junction",
+                    "genome_unique_absent_representable",
+                    "genome_unique_absent_pseudogene", "genome_unique_absent_other")
+_R7_TXONLY = ("txome_only_genome_absent", "txome_only_genome_elsewhere")
+
+
+def _route7_segment(category, txome_present):
+    """One read -> one of the seven keys. Raises on an unknown category."""
+    if category in _R7_UNIQUE_SHARED:
+        return "r7_shared_unique"          # every such category conditions on presence
+    if category in _R7_MULTI:
+        if not txome_present:
+            return "r7_gonly_multi"
+        return ("r7_shared_multi_pp" if category in _R7_MULTI_PP
+                else "r7_shared_multi_other")
+    if category in _R7_ABSENT_OMIT:
+        return "r7_gonly_unique_omit"
+    if category in _R7_ABSENT_OTHER:
+        return "r7_gonly_unique_other"
+    if category in _R7_TXONLY:
+        return "r7_txonly"
+    raise SystemExit("unknown chain category %r" % category)
+
+
+def prepare_route_explicit(reads_path, sample=None, genes=None):
+    """The per-read dump -> seven-way entries, same shape `draw` consumes; re-asserts the
+    partition invariants."""
+    frame = pd.read_csv(reads_path, sep="\t")
+    needed = ("sample", "gene_name", "transcript_id", "read_id", "category",
+              "txome_primary_transcript")
+    missing = [c for c in needed if c not in frame.columns]
+    if missing:
+        raise SystemExit("%s lacks column(s) %s -- pass the *_reads.tsv dump, not the "
+                         "tidy table" % (reads_path, ", ".join(missing)))
+    if sample:
+        frame = frame[frame["sample"].astype(str) == str(sample)]
+    txp = frame["txome_primary_transcript"].fillna("").astype(str) != ""
+    frame = frame.assign(_seg=[_route7_segment(c, p)
+                               for c, p in zip(frame["category"], txp)])
+
+    order = list(dict.fromkeys(frame["gene_name"]))
+    if genes:
+        unknown = [g for g in genes if g not in set(order)]
+        if unknown:
+            raise SystemExit("%r not in %s" % (unknown, reads_path))
+        order = list(dict.fromkeys(genes))
+
+    entries = []
+    for gene in order:
+        rows = frame[frame["gene_name"] == gene]
+        if rows["read_id"].duplicated().any():
+            raise SystemExit("%s: duplicated read id in the dump" % gene)
+        n_union = len(rows)
+        counts = rows["_seg"].value_counts()
+        pct = {key: 100.0 * int(counts.get(key, 0)) / n_union
+               for key, _l, _c, _t, _h in ROUTE7_SEGMENTS}
+        if abs(sum(pct.values()) - 100.0) > 1e-9:
+            raise SystemExit("%s: the seven segments sum to %.6f %%" % (gene, sum(pct.values())))
+        entries.append({"transcript_id": rows["transcript_id"].iloc[0],
+                        "gene_name": gene, "sample": str(rows["sample"].iloc[0]),
+                        "n_union": n_union, "pct": pct,
+                        "counts": {key: int(counts.get(key, 0))
+                                   for key, _l, _c, _t, _h in ROUTE7_SEGMENTS}})
+    return {"entries": entries}

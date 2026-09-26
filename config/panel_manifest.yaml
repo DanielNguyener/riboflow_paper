@@ -193,7 +193,7 @@ panels:
     figure: 4
     panel: A
     title: Distinct mapped read IDs per route, page size
-    generator: code/panels/plot_cohort_plos_panels.py
+    generator: code/panels/plot_cohort_panels.py
     args: {panel: A, width_pt: 140.0, height_in: 4.75, font_pt: 8.0}
     inputs:
       taxonomy:    data/read_taxonomy/taxonomy/taxonomy_all.tsv
@@ -204,7 +204,7 @@ panels:
     figure: 4
     panel: B
     title: Read-ID union composition, page size
-    generator: code/panels/plot_cohort_plos_panels.py
+    generator: code/panels/plot_cohort_panels.py
     args: {panel: B, width_pt: 142.0, height_in: 5.20, font_pt: 8.0}   # taller: union key
     inputs:
       taxonomy:    data/read_taxonomy/taxonomy/taxonomy_all.tsv
@@ -215,7 +215,7 @@ panels:
     figure: 4
     panel: C
     title: Protein-coding to pseudogene tie share, page size
-    generator: code/panels/plot_cohort_plos_panels.py
+    generator: code/panels/plot_cohort_panels.py
     args: {panel: C, width_pt: 103.0, height_in: 4.75, font_pt: 8.0}
     inputs:
       tie_master: data/read_taxonomy/multimap_biotype/multimap_tie_biotype_all.tsv
@@ -226,7 +226,7 @@ panels:
     figure: 4
     panel: D
     title: Omitted alternative-exon overlap, page size
-    generator: code/panels/plot_cohort_plos_panels.py
+    generator: code/panels/plot_cohort_panels.py
     args: {panel: D, width_pt: 103.0, height_in: 4.75, font_pt: 8.0}
     inputs:
       reach_master: data/read_taxonomy/reach/genome_anchored_reach_all.tsv
@@ -237,7 +237,7 @@ panels:
     figure: 5
     panel: A
     title: Route-explicit seven-segment read-ID partition at COMT, GAPDH and LRRFIP1
-    generator: code/panels/plot_gene_partition.py
+    generator: code/panels/plot_gene_categories.py
     args:
       genes: [COMT, GAPDH, LRRFIP1]
       title: GSM2100602
@@ -281,7 +281,7 @@ panels:
     panel: null
     title: HeLa genes clustered by read-fate composition (Ward, k = 4), with the cluster
       validation row; panels A-G lettered by the generator
-    generator: code/panels/plot_read_fate_clusters.py
+    generator: code/panels/plot_read_category_clusters.py
     inputs:
       clusters:  data/clustering/HeLa.post_dedup.clusters_k4.tsv
       centroids: data/clustering/HeLa.post_dedup.cluster_centroids.tsv

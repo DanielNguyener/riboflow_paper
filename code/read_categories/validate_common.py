@@ -1,6 +1,6 @@
 """What the three `validate_cluster_*.py` scripts share: constants, the GTF line reader,
 interval merging and the per-cluster statistics. They write tables only; the Figure 6
-validation row is drawn from those tables by `panels/plot_read_fate_clusters.py`."""
+validation row is drawn from those tables by `panels/plot_read_category_clusters.py`."""
 from __future__ import annotations
 
 import argparse

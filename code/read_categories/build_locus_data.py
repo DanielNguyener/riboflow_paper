@@ -11,7 +11,7 @@ post-dedup BAM is already RiboFlow_v2's MAPQ >= 10 set, and no stricter cut is a
 (the same rule as Figures 4-6).
 
 Each route's coverage is also split into the read populations of the Figure 5A partition
-(`panels/plot_gene_read_partition.ROUTE7_KEY`), so the two panels share one colour
+(`panels/plot_gene_categories.ROUTE7_KEY`), so the two panels share one colour
 vocabulary. "Shared" is read-level presence in both BAMs, exactly as in 5A:
   genome half   = shared_unique      (genome NH==1, read present in the transcriptome BAM)
                 + shared_multi       (genome NH>1, present in the transcriptome BAM)
@@ -307,7 +307,7 @@ def depth_over(hits, positions):
 
 
 #: The Figure 5A populations each track is split into, in stacking order (nearest the
-#: baseline first). Keys match `panels/plot_gene_read_partition.ROUTE7_KEY` wording:
+#: baseline first). Keys match `panels/plot_gene_categories.ROUTE7_KEY` wording:
 #: SH-U, SH-M, GO-U, GO-M on the genome track; SH-U, SH-M, TO on the transcriptome track.
 GENOME_LAYERS = ("shared_unique", "shared_multi", "genome_only", "genome_only_multi")
 TXOME_LAYERS = ("shared_unique", "shared_multi", "txome_only")

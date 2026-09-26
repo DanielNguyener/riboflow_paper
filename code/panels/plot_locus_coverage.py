@@ -29,7 +29,7 @@ FONT_TICK = 10.0
 FONT_MODEL = 7.5
 
 #: The coverage is stacked by the Figure 5A read populations and painted in 5A's key
-#: colours (`plot_gene_read_partition.ROUTE7_KEY`), so one colour means one population in
+#: colours (`plot_gene_categories.ROUTE7_KEY`), so one colour means one population in
 #: both panels. Route identity is carried by the mirrored layout and the boxed marks, not
 #: by colour. Stacking order: baseline first (the values are the npz array suffixes).
 GENOME_LAYERS = tuple((suffix, categories.COLOR[k], categories.ABBR[k])

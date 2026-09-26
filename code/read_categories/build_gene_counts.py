@@ -109,8 +109,9 @@ def load_partition_lib():
 
 
 def load_panel_fold():
-    """`panels.plot_gene_read_partition` -- the ten-to-seven fold."""
-    return inputs.import_from(REPO / "code" / "panels", "plot_gene_read_partition")
+    """The ten-to-seven fold, beside the chain."""
+    import gene_read_partition_lib
+    return gene_read_partition_lib
 
 
 # ── the gene universe ────────────────────────────────────────────────────────

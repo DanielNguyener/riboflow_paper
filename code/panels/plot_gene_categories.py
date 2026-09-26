@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""The route-explicit seven-segment gene partition, from the compact table.
+"""Figure 5A: the per-gene read categories, one route-explicit seven-segment bar per gene.
 
-Reads `gene_partition_route7.tsv` (+ .json) and reuses `plot_gene_read_partition.draw()`
-with the route-explicit fold (see ROUTE7_SEGMENTS there). Run with `python` (3.9).
+Reads `gene_partition_route7.tsv` (+ .json); the ten-to-seven fold lives with the chain
+in `read_categories/gene_read_partition_lib.py` (`ROUTE7_SEGMENTS`, `prepare_route_explicit`).
 """
 from __future__ import annotations
 
@@ -13,11 +13,91 @@ import os
 import sys
 from pathlib import Path
 
+import numpy as np
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "read_categories"))
+import categories  # noqa: E402
+from gene_read_partition_lib import ROUTE7_SEGMENTS  # noqa: E402
 from panel_style import die  # noqa: E402
 
 GENE_ORDER = ("COMT", "GAPDH", "LRRFIP1")
+
+#: The two-section key for the hatched design: colour = route/uniqueness, hatch = mechanism.
+ROUTE7_KEY = (
+    tuple((abbr, colour, None) for abbr, colour in categories.KEY),
+    # Mechanism entries name the biology alone; wording matches Figure 4C's panel title.
+    (("Protein-coding–pseudogene ties", "#ffffff", "//"),
+     ("Alternative exon", "#ffffff", "..")),
+)
+
+
+BAR_HEIGHT = 0.62
+ROW_HEIGHT = 1.05
+ROW_MARGIN = 2.3
+PAGE_WIDTH = 9.5
+
+
+def draw(prepared, title=None, figsize=None, label_threshold=6.0, xlabel=None,
+         compact=False, title_size=None, bar_height=None):
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+    import panel_style as ps
+
+    ps.apply_rcparams()
+    entries = prepared["entries"]
+    figsize = figsize or (PAGE_WIDTH, ROW_HEIGHT * len(entries) + ROW_MARGIN)
+    figure, axis = plt.subplots(figsize=figsize)
+    y = np.arange(len(entries))[::-1]
+
+    for yi, entry in zip(y, entries):
+        left = 0.0
+        for key, _label, colour, text_colour, hatch in ROUTE7_SEGMENTS:
+            width = entry["pct"][key]
+            axis.barh(yi, width, left=left, color=colour, edgecolor="white",
+                      linewidth=0.6, height=bar_height or BAR_HEIGHT)
+            if hatch and width > 0:
+                # Hatch colour rides the artist's EDGE colour, so draw a second fill-less
+                # bar; linewidth=0 keeps the overlay from doubling the boundary.
+                axis.barh(yi, width, left=left, fill=False, hatch=hatch,
+                          edgecolor="white", linewidth=0.0,
+                          height=bar_height or BAR_HEIGHT)
+            if width >= label_threshold:
+                axis.text(left + width / 2, yi, "%.0f%%" % width, va="center",
+                          ha="center", fontsize=ps.FONT_ANNOTATION, color=text_colour,
+                          zorder=6, bbox=dict(boxstyle="round,pad=0.12", fc=colour,
+                                              ec="none") if hatch else None)
+            left += width
+
+    axis.set_yticks(list(y))
+    # `compact` uses one-line labels and drops the read count (belongs in the caption).
+    axis.set_yticklabels(
+        [e["gene_name"] if compact
+         else "%s\n%s reads" % (e["gene_name"], format(e["n_union"], ","))
+         for e in entries], fontsize=ps.FONT_TICK)
+    axis.set_ylim(-0.6, len(entries) - 0.4)
+    axis.set_xlim(0, 100)
+    axis.set_xlabel(
+        xlabel or ("% of read IDs at this gene" if compact
+                   else "% of the read IDs aligning to this gene on either route"),
+        fontsize=ps.FONT_LABEL)
+    axis.grid(axis="x", alpha=0.15)
+    if title is None:
+        title = entries[0]["sample"] if entries else ""
+    axis.set_title(title, fontsize=title_size or ps.FONT_TITLE, loc="left",
+                   fontweight="normal", pad=2.0)
+
+    figure.tight_layout()
+    # One band: the five fates, then the two mechanism hatches.
+    handles = [Patch(facecolor=colour, edgecolor="#666666" if hatch else "white",
+                     hatch=hatch, linewidth=0.6 if hatch else 0.4, label=label)
+               for members in ROUTE7_KEY for label, colour, hatch in members]
+    legend = ps.legend_below(
+        axis, handles=handles, ncol=len(handles),
+        fontsize=ps.FONT_ANNOTATION, handlelength=1.3, columnspacing=1.2,
+        handletextpad=0.5, labelspacing=0.3, borderpad=0.0, pad_pt=2.0)
+    return figure, axis, [legend]
 
 
 def load_compact(table, meta_path, genes=None):
@@ -83,7 +163,6 @@ def main(argv=None):
                                             GENE_ORDER))
 
     import panel_style as ps
-    import plot_gene_read_partition as root
 
     if args.font_size:
         ps.FONT_TITLE = ps.FONT_LABEL = args.font_size
@@ -93,8 +172,8 @@ def main(argv=None):
         print("[panel] %-8s union %5d  %s"
               % (entry["gene_name"], entry["n_union"],
                  "  ".join("%s=%d" % (k.replace("r7_", ""), entry["counts"][k])
-                           for k, _l, _c, _t, _h in root.ROUTE7_SEGMENTS)))
-    figure, axis, extra = root.draw(
+                           for k, _l, _c, _t, _h in ROUTE7_SEGMENTS)))
+    figure, axis, extra = draw(
         prepared, title=args.title if args.title is not None else meta["gsm"],
         figsize=tuple(args.figsize) if args.figsize else None,
         xlabel=args.xlabel, compact=args.compact, title_size=args.title_size,

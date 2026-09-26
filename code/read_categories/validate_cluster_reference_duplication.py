@@ -37,7 +37,7 @@ Outputs, under <output> with the cluster table's stem:
                                                  adjusted pairwise Mann-Whitney U
     <stem>.reference_duplication_sources.json
 
-The entries table is Figure 6G's input (`panels/plot_read_fate_clusters.py`).
+The entries table is Figure 6G's input (`panels/plot_read_category_clusters.py`).
 """
 from __future__ import annotations
 

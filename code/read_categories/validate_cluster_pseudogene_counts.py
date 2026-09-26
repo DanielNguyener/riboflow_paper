@@ -35,7 +35,7 @@ Outputs, under <output> with the cluster table's stem:
                                               counts (genes with >= 1)
     <stem>.pseudogene_counts_sources.json     the inputs by path, size and sha256
 
-The genes table is Figure 6E's input (`panels/plot_read_fate_clusters.py`).
+The genes table is Figure 6E's input (`panels/plot_read_category_clusters.py`).
 """
 from __future__ import annotations
 

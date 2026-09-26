@@ -58,9 +58,8 @@ COLUMNS = ("sample", "gsm", "gene_order", "gene_name", "transcript_id", "n_union
 
 
 def fold(reads_path, sample, genes):
-    sys.path.insert(0, os.path.join(CODE, "panels"))
     import pandas as pd
-    import plot_gene_read_partition as root
+    import gene_read_partition_lib as root
 
     prepared = root.prepare_route_explicit(reads_path, sample=sample, genes=genes)
     # Re-check the partition invariants from the raw frame, independently of the root module.

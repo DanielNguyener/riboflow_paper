@@ -228,6 +228,6 @@ def test_chain_rejects_a_genome_side_read_without_a_primary(lib):
     "genome_unique_absent_nonselected_isoform_exon"))
 def test_retired_categories_fail_validation(lib, category):
     assert category not in lib.PARTITION_CATEGORIES
-    import plot_gene_read_partition as fold
+    import gene_read_partition_lib as fold
     with pytest.raises(SystemExit, match="unknown chain category"):
         fold._route7_segment(category, True)

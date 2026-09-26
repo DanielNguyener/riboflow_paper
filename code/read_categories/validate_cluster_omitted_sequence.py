@@ -32,7 +32,7 @@ Outputs, under <output> with the cluster table's stem:
                                             each metric
     <stem>.omitted_sequence_sources.json    the inputs by path, size and sha256
 
-The genes table (exon fraction) is Figure 6F's input (`panels/plot_read_fate_clusters.py`).
+The genes table (exon fraction) is Figure 6F's input (`panels/plot_read_category_clusters.py`).
 """
 from __future__ import annotations
 
