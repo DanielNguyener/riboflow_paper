@@ -121,12 +121,11 @@ def test_a_schema_bump_rebuilds(env):
     config = env["config"]
     config.load_bundle()
     path = Path(config.bundle_path())
-    with path.open("rb") as handle:
-        document = pickle.load(handle)
-    document["schema_version"] = config.CACHE_SCHEMA_VERSION + 100
-    with path.open("wb") as handle:
-        pickle.dump(document, handle)
-    assert rebuilt(config)
+    config.CACHE_SCHEMA_VERSION += 100   # enters bundle_fingerprint, so the cache misses
+    try:
+        assert rebuilt(config)
+    finally:
+        config.CACHE_SCHEMA_VERSION -= 100
 
 
 def test_the_write_is_atomic(env):
@@ -148,8 +147,8 @@ def test_the_write_is_atomic(env):
     pickle_module.dump = explode
     try:
         with pytest.raises(RuntimeError):
-            config._write_bundle({k: None for k in config.BUNDLE_PAYLOADS},
-                                 str(env["gtf"]), str(env["appris"]))
+            config.cached_frame(config.bundle_path(), "poisoned-fingerprint",
+                                lambda: {k: None for k in config.BUNDLE_PAYLOADS})
     finally:
         pickle_module.dump = original
 

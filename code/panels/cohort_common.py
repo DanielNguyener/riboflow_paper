@@ -74,11 +74,8 @@ def load_taxonomy(path):
 
 def load_labels(samples_csv=None):
     """{sample: GSM} from the sample table; keys normalised (spaces -> underscores)."""
-    if not samples_csv:
-        return {}
-    frame = pd.read_csv(samples_csv, usecols=["cell_line", "ribo_GSM"])
-    return {str(c).replace(" ", "_"): str(g)
-            for c, g in zip(frame["cell_line"], frame["ribo_GSM"])}
+    import panel_style as ps
+    return ps.gsm_map(samples_csv) if samples_csv else {}
 
 def sample_order(frame, sort_column="delta_reads"):
     """The shared cohort ordering: cell lines by ascending `delta_reads`."""

@@ -6,26 +6,11 @@
 #   Rscript code/te_route/normalization.R [--counts DIR] [--output DIR]
 
 # Arguments: --key value pairs; every default is repository-relative.
+# parse_args lives in code/common/cli_args.R.
 here <- dirname(normalizePath(sub("^--file=", "",
                                   grep("^--file=", commandArgs(FALSE), value = TRUE))[1]))
 root <- dirname(dirname(here))
-parse_args <- function(defaults) {
-  raw <- commandArgs(TRUE)
-  if (length(raw) && raw[1] %in% c("--help", "-h")) {
-    cat("usage: Rscript", basename(sub("^--file=", "",
-        grep("^--file=", commandArgs(FALSE), value = TRUE))[1]),
-        paste(sprintf("[--%s PATH]", names(defaults)), collapse = " "), "\n")
-    for (k in names(defaults)) cat(sprintf("  --%-14s default %s\n", k, defaults[[k]]))
-    quit(status = 0)
-  }
-  if (length(raw) %% 2 != 0) stop("arguments come in --key value pairs")
-  for (i in seq_len(length(raw) %/% 2) * 2 - 1) {
-    key <- sub("^--", "", raw[i])
-    if (!key %in% names(defaults)) stop("unknown argument --", key)
-    defaults[[key]] <- raw[i + 1]
-  }
-  defaults
-}
+source(file.path(root, "code", "common", "cli_args.R"))
 opts <- parse_args(list(counts = file.path(root, "data", "ribo_rna", "counts"),
                         output = file.path(root, "results", "te_route", "normalized")))
 
@@ -50,7 +35,6 @@ read_counts <- function(path) {
 # ── inputs ─────────────────────────────────────────────────────────────────────────────────
 
 raw <- lapply(MATRICES, function(f) read_counts(file.path(opts$counts, f)))
-names(raw) <- names(MATRICES)
 
 index <- rownames(raw[[1]])
 for (nm in names(raw)) {

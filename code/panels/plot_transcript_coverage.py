@@ -386,16 +386,10 @@ def render(argv=None):
                         help="fail unless the file declares this sample")
     parser.add_argument("--gene-id", help="versioned or unversioned")
     parser.add_argument("--transcript-id", help="versioned or unversioned")
-    parser.add_argument("--signal", default="both", choices=SIGNAL_CHOICES)
     parser.add_argument("--region", default="whole", choices=("whole", "cds"),
                         help="which window to plot")
-    parser.add_argument("--regions", default="auto", choices=OVERLAY_CHOICES,
-                        dest="overlay",
-                        help="which region overlay to draw on the whole-transcript view: "
-                             "the canonical UTR5/CDS/UTR3, or none")
     parser.add_argument("--trim", type=int, default=None,
                         help="override the file's own paper_cds_trim")
-    parser.add_argument("--normalize", default="none", choices=NORMALIZE_CHOICES)
     parser.add_argument("--annotate-correlation", action="store_true")
     parser.add_argument("--title")
     parser.add_argument("--labels", choices=("full", "minimal"), default="full",
@@ -429,7 +423,7 @@ def render(argv=None):
              identity["schema_version"]))
 
     tracks = load_tracks(args.coverage, args.gene_id, args.transcript_id,
-                         args.region, args.trim, args.normalize, args.overlay)
+                         args.region, args.trim, "none", "auto")
     print("[panel] resolved %s -> %s (%s)"
           % (args.gene_id or args.transcript_id, tracks["transcript_id"],
              tracks["gene_name"]))
@@ -446,7 +440,7 @@ def render(argv=None):
             print("[panel]   %s: %s" % (key, state))
 
     correlations = annotate_correlations(tracks) if args.annotate_correlation else None
-    figure, _axes = plot_coverage(tracks, args.signal, correlations,
+    figure, _axes = plot_coverage(tracks, "both", correlations,
                                   tuple(args.figsize) if args.figsize else None,
                                   args.title, args.labels, args.title_correlations,
                                   args.route_legend)
@@ -465,7 +459,7 @@ def render(argv=None):
         "overlay_intervals": [list(row) for row in overlay_intervals(tracks)],
         "axis_window": [tracks["x_start"], tracks["x_end"]],
         "transcript_slice": tracks["slice"],
-        "signal": args.signal, "normalize": args.normalize,
+        "signal": "both", "normalize": "none",
         "coverage_states": tracks["states"],
         "correlations": correlations,
         "labels": args.labels,

@@ -13,9 +13,10 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
 import bam_inputs                      # the one uniqueness policy
-from inputs import sha256_of
+from inputs import make_log, sha256_of
 
 _CDS_HEADER = re.compile(r"\|CDS:(\d+)-(\d+)\|")
+REFERENCE_NAME = "appris_human_v2_selected"
 
 #: The junction-window spans the annotation cache is keyed on. Schema 3 stores no junction
 #: bins, so these only fingerprint the cache; they do not change any stored number.
@@ -25,8 +26,7 @@ LEFT_SPAN, RIGHT_SPAN = 35, 10
 class BuildError(RuntimeError):
     pass
 
-def log(message):
-    print("[coverage] %s" % message, flush=True)
+log = make_log("coverage")
 
 def _exon_pyranges(exons, transcripts):
     """The full exon map as PyRanges, carrying what placement needs."""
@@ -448,7 +448,7 @@ def build(config):
         out_path, sample=config.sample,
         transcripts=transcripts[list(coverage_schema.TRANSCRIPT_COLUMNS)],
         provenance=provenance, paper_cds_trim=config.trim, chunk=config.chunk,
-        gzip_level=config.gzip_level, shuffle=config.shuffle,
+        gzip_level=config.gzip_level,
         assay=config.assay)
 
     try:
@@ -554,7 +554,7 @@ def _provenance(config, coords, cds_table, region_summary, genome_offsets, txome
             "psite_placement": psite_placement.PSITE_PLACEMENT,
             "stop_codon_assignment": "utr3",
             "exon_source": "gencode_exon_features",
-            "reference_name": config.reference_name,
+            "reference_name": REFERENCE_NAME,
             "appris_principal_ranks_consumed": False,
         },
         "assignment_policies": {
@@ -599,10 +599,8 @@ def _build_parser():
     parser.add_argument("--assay", default="ribo", choices=("ribo", "rna"),
                         help="recorded in the file's provenance; both BAMs must be the "
                              "same assay, since the two routes are compared to each other")
-    parser.add_argument("--reference-name", default="appris_human_v2_selected")
     parser.add_argument("--chunk", type=int, default=1 << 16)
     parser.add_argument("--gzip-level", type=int, default=9)
-    parser.add_argument("--no-shuffle", dest="shuffle", action="store_false", default=True)
     parser.add_argument("--hash-bams", action="store_true")
     parser.add_argument("--record-input-paths", action="store_true",
                         help="store full filesystem paths in the provenance. Off by "

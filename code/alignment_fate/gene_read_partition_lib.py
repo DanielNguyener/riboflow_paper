@@ -27,6 +27,10 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 
+if str(REPO / "code" / "common") not in sys.path:
+    sys.path.insert(0, str(REPO / "code" / "common"))
+from intervals import merge as _merge, subtract as _subtract  # noqa: E402
+
 #: The chain, in evaluation order; one read gets exactly one of these. The order nests by
 #: definedness — `classify_gU_tA` must only see transcriptome-ABSENT reads.
 PARTITION_CATEGORIES = (
@@ -42,28 +46,6 @@ PARTITION_CATEGORIES = (
     "genome_unique_absent_other",
 )
 
-CATEGORY_LABEL = {
-    "txome_only_genome_absent":
-        "transcriptome-only: no primary genome alignment",
-    "txome_only_genome_elsewhere":
-        "transcriptome-only: no top-score genome placement at this gene",
-    "genome_multi_top_at_gene_pseudogene_tie":
-        "genome-multi: top-score placement here, tied with a processed pseudogene",
-    "genome_multi_top_at_gene_no_pseudogene_tie":
-        "genome-multi: top-score placement here, no pseudogene tie",
-    "genome_unique_txome_present":
-        "genome-unique: present on the transcriptome route",
-    "genome_unique_absent_omitted_exon":
-        "genome-only: on exonic sequence of this gene its selected transcript omits",
-    "genome_unique_absent_splice_junction":
-        "genome-only: junction absent from the selected isoform",
-    "genome_unique_absent_representable":
-        "genome-only: representable, absent from the dedup'd transcriptome BAM",
-    "genome_unique_absent_pseudogene":
-        "genome-only: pseudogene",
-    "genome_unique_absent_other":
-        "genome-only: intronic, intergenic or other biotype",
-}
 
 #: `reach_lib` category -> this chain's label, for a genome-only unique read that does NOT
 #: overlap the gene's omitted exonic sequence. `reach_lib` (Figure 4D) is not a gene-level
@@ -123,20 +105,33 @@ def load_libraries():
                  for name in ("reference_lib", "reach_lib", "tie_biotype_lib"))
 
 
-def gene_locus(exon_gene_df, gene_id):
+def build_span_table(exon_gene_df):
+    """Version-stripped gene id -> (chromosome, start, end, n_chromosomes), once for
+    every gene; the per-call aggregation rescanned a 1.4-million-row frame each time."""
+    base = exon_gene_df["gene_id"].astype(str).str.split(".").str[0]
+    return exon_gene_df.assign(_base=base).groupby("_base").agg(
+        chrom=("Chromosome", "first"), start=("Start", "min"),
+        end=("End", "max"), n_chrom=("Chromosome", "nunique"))
+
+
+def gene_locus(annotation, gene_id):
     """The gene's full genomic span, over EVERY annotated isoform.
 
     Not the selected transcript's own span: nonselected-isoform exons lie outside it.
     """
     base = str(gene_id).split(".", 1)[0]
-    rows = exon_gene_df[exon_gene_df["gene_id"].astype(str).str.split(".").str[0] == base]
-    if rows.empty:
+    try:
+        row = annotation["spans"].loc[base]
+    except KeyError:
         raise PartitionError("gene %r has no exon in the annotation" % gene_id)
-    chroms = rows["Chromosome"].unique()
-    if len(chroms) != 1:
+    if int(row["n_chrom"]) != 1:
+        exon_gene_df = annotation["exon_gene_df"]
+        members = exon_gene_df.loc[
+            exon_gene_df["gene_id"].astype(str).str.split(".").str[0] == base,
+            "Chromosome"].unique()
         raise PartitionError("gene %r spans %d chromosomes (%s); this is not handled"
-                             % (gene_id, len(chroms), ", ".join(map(str, chroms))))
-    return str(chroms[0]), int(rows["Start"].min()), int(rows["End"].max())
+                             % (gene_id, len(members), ", ".join(map(str, members))))
+    return str(row["chrom"]), int(row["start"]), int(row["end"])
 
 
 def fetch_gene_candidates(genome_bam, chrom, start, end):
@@ -257,32 +252,6 @@ def _in_locus(record, chrom, start, end):
     return min(b[0] for b in blocks) < end and max(b[1] for b in blocks) > start
 
 
-def _merge(intervals):
-    """Sorted, merged [start, end) intervals."""
-    out = []
-    for start, end in sorted(intervals):
-        if out and start <= out[-1][1]:
-            out[-1][1] = max(out[-1][1], end)
-        else:
-            out.append([start, end])
-    return [tuple(i) for i in out]
-
-
-def _subtract(intervals, holes):
-    """Merged `intervals` minus merged `holes`."""
-    out = []
-    holes = _merge(holes)
-    for start, end in _merge(intervals):
-        cursor = start
-        for h_start, h_end in holes:
-            if h_end <= cursor or h_start >= end:
-                continue
-            if h_start > cursor:
-                out.append((cursor, h_start))
-            cursor = max(cursor, h_end)
-        if cursor < end:
-            out.append((cursor, end))
-    return out
 
 
 def _overlaps(blocks, intervals):
@@ -462,6 +431,7 @@ def load_annotation(libs):
         "base2ver": payload["base2ver"],
         "exon_pr": reference_lib.load_exon_gene_pr(),
         "exon_gene_df": exon_gene_df,
+        "spans": build_span_table(exon_gene_df),
         "gene_body_pr": pr.PyRanges(
             reach_lib.fc.config.load_all_gene_bodies().reset_index(drop=True)),
         "gene2tid": reach_lib.gene_to_transcript_map(table),
@@ -470,18 +440,60 @@ def load_annotation(libs):
     }
 
 
+class FateError(RuntimeError):
+    pass
+
+
+def resolve_transcripts(table, gene_ids=(), transcript_ids=(), coverage=None):
+    """Gene and/or transcript IDs -> versioned APPRIS transcript IDs present in `table`.
+
+    Refuses to guess when a gene maps to more than one candidate, listing them.
+    """
+    resolved = []
+    for tid in transcript_ids:
+        if tid in table:
+            resolved.append(tid)
+            continue
+        base = tid.split(".", 1)[0]
+        hits = [t for t in table if t.split(".", 1)[0] == base]
+        if len(hits) == 1:
+            resolved.append(hits[0])
+        elif not hits:
+            raise FateError("transcript %r is not in the APPRIS transcript table" % tid)
+        else:
+            raise FateError("transcript %r is ambiguous: %s" % (tid, ", ".join(hits)))
+
+    for gene_id in gene_ids:
+        if coverage is not None:
+            index = coverage.resolve_gene(gene_id)
+            resolved.append(coverage.transcript_info(index)["transcript_id"])
+            continue
+        base = gene_id.split(".", 1)[0]
+        hits = [tid for tid, entry in table.items()
+                if str(entry.get("gene_id", "")).split(".", 1)[0] == base]
+        if len(hits) == 1:
+            resolved.append(hits[0])
+        elif not hits:
+            raise FateError("gene %r has no transcript in the APPRIS table" % gene_id)
+        else:
+            raise FateError(
+                "gene %r maps to %d transcripts and no unique one resolves it; pass the "
+                "versioned transcript ID instead.\n%s"
+                % (gene_id, len(hits), "\n".join("    %s" % h for h in sorted(hits))))
+    return list(dict.fromkeys(resolved))
+
+
 def compute_partition(sample, genome_bam, txome_bam, gene_ids=(), transcript_ids=(),
                       coverage=None, log=lambda _m: None):
     """The whole computation. Returns (wide, tidy, dump)."""
     sys.path.insert(0, str(HERE))
-    import transcript_fate_lib
 
     libs = load_libraries()
     reference_lib = libs[0]
     annotation = load_annotation(libs)
     table = annotation["table"]
 
-    tids = transcript_fate_lib.resolve_transcripts(
+    tids = resolve_transcripts(
         table, gene_ids, transcript_ids, coverage)
     if not tids:
         raise PartitionError("no transcripts requested")
@@ -497,7 +509,7 @@ def compute_partition(sample, genome_bam, txome_bam, gene_ids=(), transcript_ids
     log("fetching the genome-side candidates of each gene")
     loci, candidates = {}, {}
     for tid in tids:
-        loci[tid] = gene_locus(annotation["exon_gene_df"], table[tid]["gene_id"])
+        loci[tid] = gene_locus(annotation, table[tid]["gene_id"])
         candidates[tid] = fetch_gene_candidates(genome_bam, *loci[tid])
 
     targets = set()

@@ -29,12 +29,7 @@ def prepare(psite_path, footprint_path, samples_csv=None, highlight=None):
     order = (frames["P-site"].groupby("sample")["spearman"].median()
              .sort_values().index.tolist())
 
-    labels = {}
-    if samples_csv:
-        gsm = pd.read_csv(samples_csv)
-        ps.require_columns(gsm, ("cell_line", "ribo_GSM"), str(samples_csv))
-        labels = {str(c).replace(" ", "_"): str(g)
-                  for c, g in zip(gsm["cell_line"], gsm["ribo_GSM"])}
+    labels = ps.gsm_map(samples_csv) if samples_csv else {}
 
     marks = {}
     for name, frame in frames.items():
@@ -166,10 +161,6 @@ def main(argv=None):
     parser.add_argument("--footprint", required=True, type=Path)
     parser.add_argument("--samples-csv", type=Path,
                         help="the sample table; supplies the GSM axis labels")
-    parser.add_argument("--highlight-sample", default="HeLa")
-    parser.add_argument("--highlight-gapdh", default="ENST00000396861.5")
-    parser.add_argument("--highlight-comt", default="ENST00000361682.11")
-    parser.add_argument("--ylim", nargs=2, type=float, default=(0.0, 1.0))
     parser.add_argument("--figsize", nargs=2, type=float, default=(11.0, 4.4))
     parser.add_argument("--layout", choices=("side", "stacked"), default="side",
                         help="side: P-site | footprint; stacked: P-site over footprint, "
@@ -182,8 +173,8 @@ def main(argv=None):
     sys.path.insert(0, str(HERE))
     import panel_style as ps
 
-    highlight = {"sample": args.highlight_sample,
-                 "gapdh": args.highlight_gapdh, "comt": args.highlight_comt}
+    highlight = {"sample": "HeLa", "gapdh": "ENST00000396861.5",
+                 "comt": "ENST00000361682.11"}
     prepared = prepare(args.psite, args.footprint, args.samples_csv, highlight)
     print("[panel] %d cell lines; P-site %d rows, footprint %d rows"
           % (len(prepared["order"]), prepared["n_rows"]["P-site"],
@@ -191,7 +182,7 @@ def main(argv=None):
     print("[panel] order (ascending median Spearman): %s"
           % ", ".join(prepared["order"][:4] + ["..."] + prepared["order"][-2:]))
 
-    figure, _axes = draw(prepared, tuple(args.ylim), tuple(args.figsize), args.layout)
+    figure, _axes = draw(prepared, (0.0, 1.0), tuple(args.figsize), args.layout)
     written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force)
     for path in written:
         print("[panel] wrote %s" % path)

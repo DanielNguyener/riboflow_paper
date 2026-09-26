@@ -68,12 +68,11 @@ def measure(pdf_path):
 
 def resolve_gsm(cell_line):
     """The GSM the manuscript's tables use in place of a cell-line name."""
-    import pandas as pd
-    samples = pd.read_csv(SAMPLES_CSV)
-    row = samples[samples["cell_line"].astype(str).str.replace(" ", "_") == cell_line]
-    if row.empty:
+    import panel_style
+    mapping = panel_style.gsm_map(SAMPLES_CSV)
+    if cell_line not in mapping:
         raise SystemExit("cell line %r not found in %s" % (cell_line, SAMPLES_CSV))
-    return str(row["ribo_GSM"].iloc[0])
+    return mapping[cell_line]
 
 
 # ── S1 Fig: two 24 x 9 grids side by side ─────────────────────────────────────────────
@@ -294,7 +293,7 @@ def panel_entry(entry):
     if not pdf.exists():
         raise SystemExit("%s is missing; run `python code/make_panels.py %s` first"
                          % (pdf.relative_to(REPO), entry["id"]))
-    clip = figure_io.ink_box_trim_bottom(str(pdf))
+    clip = figure_io.ink_box(str(pdf), trim_bottom=True)
     clip_file = REPO / (entry["output"] + ".clip.json")
     if clip_file.exists():
         # keep the fitted horizontal clip (the trim helper re-measures; widths must agree)

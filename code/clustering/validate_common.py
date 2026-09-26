@@ -18,6 +18,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO / "code" / "common"))
 import inputs  # noqa: E402
+from intervals import merge, merged_length  # noqa: E402
 
 KEY = ["gene", "gene_id", "transcript_id"]
 ATTR = re.compile(r'(\S+) "([^"]*)"')
@@ -67,19 +68,8 @@ def gtf_records(gtf, features):
                 yield f
 
 
-def merge(intervals):
-    """Union of half-open [start, end) intervals as a sorted, non-overlapping tuple list."""
-    out = []
-    for s, e in sorted(intervals):
-        if out and s <= out[-1][1]:
-            out[-1][1] = max(out[-1][1], e)
-        else:
-            out.append([s, e])
-    return [tuple(x) for x in out]
 
 
-def merged_length(intervals):
-    return sum(end - start for start, end in merge(intervals))
 
 
 # ── statistics ───────────────────────────────────────────────────────────────────────────

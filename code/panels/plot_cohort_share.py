@@ -9,7 +9,6 @@ D: omitted alternative-exon overlap of genome-only unique reads (`--reach-master
 """
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -52,47 +51,3 @@ def prepare(letter, master, taxonomy, samples_csv=None):
     return {"order": order, "values": values,
             "order_provenance": "shared cohort order, derived from %s" % taxonomy,
             "labels": [labels_map.get(s, s) for s in order]}
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--panel", required=True, choices=sorted(PANELS))
-    parser.add_argument("--tie-master", type=Path, help="multimap_tie_biotype_all.tsv (C)")
-    parser.add_argument("--reach-master", type=Path, help="genome_anchored_reach_all.tsv (D)")
-    parser.add_argument("--taxonomy", required=True, type=Path,
-                        help="the taxonomy master, for the shared Figure-5 cohort order")
-    parser.add_argument("--samples-csv", type=Path)
-    parser.add_argument("--show-labels", action="store_true")
-    parser.add_argument("--figsize", nargs=2, type=float, default=(3.0, 8.0))
-    parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--format", dest="formats", default="pdf")
-    parser.add_argument("--force", action="store_true")
-    args = parser.parse_args(argv)
-
-    sys.path.insert(0, str(HERE))
-    import panel_style as ps
-    from _cohort_side_panel import draw_side_panel
-
-    spec = PANELS[args.panel]
-    master = getattr(args, spec["master"])
-    if not master:
-        parser.error("panel %s needs --%s" % (args.panel, spec["master"].replace("_", "-")))
-    prepared = prepare(args.panel, master, args.taxonomy, args.samples_csv)
-    values = prepared["values"]
-    print("[panel] %d cell lines, order %s"
-          % (len(prepared["order"]), prepared["order_provenance"]))
-    print("[panel] %s %% median %.2f, range [%.2f, %.2f]"
-          % (spec["stat"], np.nanmedian(values), np.nanmin(values), np.nanmax(values)))
-
-    figure, _axis = draw_side_panel(
-        values, prepared["labels"], spec["colour"], spec["title"], spec["xlabel"],
-        tuple(args.figsize), args.show_labels)
-    # tight=False: a tight crop would undo the shared-box row alignment.
-    written = ps.save(figure, args.output, ps.resolve_formats(args.formats),
-                      args.force, tight=False)
-    for path in written:
-        print("[panel] wrote %s" % path)
-    return 0
-
-if __name__ == "__main__":
-    sys.exit(main())

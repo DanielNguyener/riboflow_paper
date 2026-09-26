@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent / "common"))
+from inputs import sha256_of  # noqa: E402
 SCHEMA_VERSION = "riboflow_paper/cohort-manifest/1"
 
 BAM_COLUMNS = ("ribo_genome_bam", "ribo_genome_bai", "ribo_txome_bam", "ribo_txome_bai",
@@ -69,10 +71,6 @@ def validate(rows, bams_root, columns=BAM_COLUMNS):
                 problems.append("%s: %s is empty -- %s" % (row["sample_id"], column, path))
     return problems
 
-def sha256_file(path):
-    sys.path.insert(0, str(HERE.parent / "common"))
-    from inputs import sha256_of
-    return sha256_of(path)
 
 def build_one(row, args):
     sample = row["sample_id"]
@@ -84,16 +82,10 @@ def build_one(row, args):
         "--gtf", str(args.gtf), "--appris", str(args.appris),
         "--qc-genome", str(args.qc_genome), "--qc-txome", str(args.qc_txome),
         "--output", str(args.output),
-        "--trim", str(args.trim), "--assay", args.assay,
         "--annotation-cache", str(args.annotation_cache),
-        "--gzip-level", str(args.gzip_level), "--chunk", str(args.chunk),
     ]
     if args.regions:
         command += ["--regions", str(args.regions)]
-    if args.hash_bams:
-        command.append("--hash-bams")
-    if args.record_input_paths:
-        command.append("--record-input-paths")
 
     started = time.time()
     completed = subprocess.run(command, capture_output=True, text=True)
@@ -119,7 +111,7 @@ def write_checksums(output_dir, samples):
                 "sample_id": sample,
                 "filename": path.name,
                 "bytes": path.stat().st_size,
-                "sha256": sha256_file(path),
+                "sha256": sha256_of(path),
                 "schema_version": handle.attrs.get("schema", ""),
                 "provenance_sha256": hashlib.sha256(
                     provenance.encode("utf-8")).hexdigest(),
@@ -153,19 +145,8 @@ def _build_parser():
     parser.add_argument("--qc-genome", type=Path)
     parser.add_argument("--qc-txome", type=Path)
     parser.add_argument("--output", type=Path, default=Path("results/coverage"))
-    parser.add_argument("--trim", type=int, default=15)
-    parser.add_argument("--annotation-cache", type=Path, default=None,
-                        help="the shared annotation bundle; built once and reused by every "
-                             "sample (default <output>/../.cache/annotation/"
-                             "coverage_annotation.pkl)")
-    parser.add_argument("--assay", default="ribo", choices=("ribo", "rna"))
-    parser.add_argument("--gzip-level", type=int, default=9)
-    parser.add_argument("--chunk", type=int, default=1 << 16)
     parser.add_argument("--workers", type=int, default=1,
                         help="concurrent samples. A build peaks near 5 GB resident.")
-    parser.add_argument("--hash-bams", action="store_true")
-    parser.add_argument("--record-input-paths", action="store_true",
-                        help="store full filesystem paths in each file's provenance")
     parser.add_argument("--skip-existing", action="store_true")
     parser.add_argument("--validate", action="store_true",
                         help="check every BAM and index, then exit")
@@ -222,9 +203,8 @@ def main(argv=None):
         if before != len(selected):
             log("skipping %d sample(s) already built" % (before - len(selected)))
 
-    if args.annotation_cache is None:
-        args.annotation_cache = (args.output.parent / ".cache" / "annotation"
-                                 / "coverage_annotation.pkl")
+    args.annotation_cache = (args.output.parent / ".cache" / "annotation"
+                             / "coverage_annotation.pkl")
     sys.path.insert(0, str(HERE))
     import annotation_cache as ac
     import build_shared_coverage as bsc

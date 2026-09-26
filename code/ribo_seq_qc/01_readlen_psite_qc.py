@@ -33,25 +33,20 @@ p.add_argument("--gtf",              default=None, help="genome route only")
 p.add_argument("--appris",           default=None, help="genome route only")
 p.add_argument("--out",              default=None,
                help="Output root; default config.out_dir() / config.tx_out_dir() by route.")
-p.add_argument("--frame0-threshold", type=float, default=50.0,
-               help="Min frame0 %% after P-site shift to keep a length (default 50).")
-p.add_argument("--offset-method", choices=["periodicity", "argmax"], default="periodicity",
-               help="P-site offset frame selection: 'periodicity' (default; frame from "
-                    "downstream 3-nt phasing, robust to bimodal start peaks) or 'argmax' "
-                    "(ribotish's single-peak frame). See psite_offset.py.")
 p.add_argument("--plots", action="store_true",
                help="also write the pre- and post-shift metagene PDFs. Off by default: they\n"
                     "are diagnostics, and the read-length window and offsets they illustrate\n"
                     "are already in the tables this step writes.")
 args = p.parse_args()
 
-_OFFSET_FN = get_offset_periodicity if args.offset_method == "periodicity" else ribotish_get_offset
+#: Offset frame from downstream 3-nt phasing (robust to bimodal start peaks); see psite_offset.py.
+_OFFSET_FN = get_offset_periodicity
 
 SAMPLE      = args.sample
 BAM         = args.bam
 TX          = args.route == "transcriptome"
 OUT         = args.out or (config.tx_out_dir() if TX else config.out_dir())
-F0_THRESH   = args.frame0_threshold
+F0_THRESH   = 50.0   # min frame0 % after the P-site shift to keep a length
 TAG         = " (transcriptome)" if TX else ""
 
 MIN_LEN, MAX_LEN = config.MIN_LEN, config.MAX_LEN

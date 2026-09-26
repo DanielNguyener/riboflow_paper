@@ -152,21 +152,3 @@ def test_an_empty_population_reports_zeros_not_an_error():
     empty = cds_pyranges([("TA", 100, 200)])
     assert vap.psite_exposure([], np.empty(0, dtype=np.int64), [], empty)["n_ambiguous"] == 0
     assert vap.footprint_exposure(blocks([]), empty)["n_ambiguous"] == 0
-
-
-# ── the program is a validator, not a pipeline stage ─────────────────────────
-
-def test_it_is_not_a_make_tables_stage():
-    text = (REPO / "code" / "make_tables.py").read_text()
-    assert "validate_assignment_policy" not in text
-
-
-def test_it_refuses_a_missing_input_by_name():
-    import subprocess
-    result = subprocess.run(
-        [sys.executable, str(REPO / "code" / "coverage" / "validate_assignment_policy.py"),
-         "--sample", "X", "--genome-bam", "/nope.bam", "--gtf", "/nope.gtf",
-         "--appris", "/nope.tsv", "--qc-genome", "/nope.csv", "--output", "/tmp/x.json"],
-        capture_output=True, text=True)
-    assert result.returncode != 0
-    assert "--genome-bam" in result.stderr

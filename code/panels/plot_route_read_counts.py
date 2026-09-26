@@ -2,7 +2,6 @@
 """Figure 4 A -- distinct mapped read IDs per alignment route."""
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -61,35 +60,3 @@ def draw(prepared, figsize=(4.6, 8.0)):
     bottom, top = common.stack_axes_fractions(figsize[1])
     figure.subplots_adjust(bottom=bottom, top=top)     # the box panel B also draws in
     return figure, axis
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--taxonomy", required=True, type=Path)
-    parser.add_argument("--samples-csv", type=Path)
-    parser.add_argument("--figsize", nargs=2, type=float, default=(4.6, 8.0))
-    parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--format", dest="formats", default="pdf")
-    parser.add_argument("--force", action="store_true")
-    args = parser.parse_args(argv)
-
-    sys.path.insert(0, str(HERE))
-    import panel_style as ps
-
-    prepared = prepare(args.taxonomy, args.samples_csv)
-    print("[panel] %d cell lines, ordered by ascending net genome excess"
-          % len(prepared["order"]))
-    gap = prepared["genome_m"] - prepared["txome_m"]
-    print("[panel] gap median %.2fM, range [%.2f, %.2f]"
-          % (np.median(gap), gap.min(), gap.max()))
-
-    figure, _axis = draw(prepared, tuple(args.figsize))
-    # tight=False: a tight crop would undo the shared-box row alignment.
-    written = ps.save(figure, args.output, ps.resolve_formats(args.formats),
-                      args.force, tight=False)
-    for path in written:
-        print("[panel] wrote %s" % path)
-    return 0
-
-if __name__ == "__main__":
-    sys.exit(main())

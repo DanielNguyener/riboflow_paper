@@ -12,10 +12,6 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 LOCAL_CONFIG = REPO / "config" / "local.yaml"
 
-#: A RiboFlow_v2 output tree, relative to its root.
-RIBO_GENOME_BAM = "{s}/genome/alignment_ribo/merged/{s}.post_dedup.bam"
-RIBO_TXOME_BAM = "{s}/transcriptome/alignment_ribo/merged/{s}.transcriptome.post_dedup.bam"
-
 
 def die(message):
     raise SystemExit("error: %s" % message)
@@ -69,10 +65,11 @@ def resolve_external_inputs(bams=None, gtf=None, appris=None, sample="HeLa"):
     if missing:
         die("raw inputs not configured: %s (see config/inputs.example.yaml)"
             % "; ".join(missing))
-    genome_tpl = os.environ.get("RIBOFLOW_PAPER_GENOME_BAM_TPL", RIBO_GENOME_BAM)
-    txome_tpl = os.environ.get("RIBOFLOW_PAPER_TXOME_BAM_TPL", RIBO_TXOME_BAM)
-    paths = {"ribo_genome": os.path.join(str(bams), genome_tpl.format(s=sample)),
-             "ribo_txome": os.path.join(str(bams), txome_tpl.format(s=sample)),
+    bam_inputs = import_from(Path(__file__).resolve().parent, "bam_inputs")
+    paths = {"ribo_genome": os.path.join(
+                 str(bams), bam_inputs.GENOME_BAM_TEMPLATE.format(s=sample)),
+             "ribo_txome": os.path.join(
+                 str(bams), bam_inputs.TXOME_BAM_TEMPLATE.format(s=sample)),
              "gtf": str(gtf), "appris": str(appris)}
     for key in ("ribo_genome", "ribo_txome", "gtf", "appris"):
         if not os.path.exists(paths[key]):

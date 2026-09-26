@@ -74,11 +74,6 @@ class Geometry:
     cbar_pad, cbar_w, cbar_label = 0.10, 0.16, 0.55
 
     def __init__(self, width=ps.PAGE_WIDTH_MAX, height=ps.PAGE_HEIGHT_MAX):
-        for value, cap, what in ((width, ps.PAGE_WIDTH_MAX, "width"),
-                                 (height, ps.PAGE_HEIGHT_MAX, "height")):
-            if value > cap:
-                raise SystemExit("page %s %.2f in exceeds PLOS maximum %.2f in"
-                                 % (what, value, cap))
         # PLOS measures the file including the 2-pt TIFF border, so draw the page LESS it.
         border = 2 * ps.BORDER_PT / 72.0
         by_width = (width - border - self.left - self.gap - self.right) / (1.0 + A_RATIO)
@@ -349,10 +344,6 @@ def main(argv=None):
                         help="HRT Atlas Housekeeping_TranscriptsHuman.csv (panel C labels)")
     parser.add_argument("--panel", choices=PANELS, default="combined",
                         help="the combined page, or one panel on its own page")
-    parser.add_argument("--width", type=float, default=ps.PAGE_WIDTH_MAX,
-                        help="page width cap in inches (PLOS maximum %.2f)" % ps.PAGE_WIDTH_MAX)
-    parser.add_argument("--height", type=float, default=ps.PAGE_HEIGHT_MAX,
-                        help="page height cap in inches (PLOS maximum %.2f)" % ps.PAGE_HEIGHT_MAX)
     parser.add_argument("--output", required=True, type=Path, help="path stem, no extension")
     parser.add_argument("--format", dest="formats", default="pdf", help="pdf,png,tif")
     parser.add_argument("--force", action="store_true")
@@ -370,7 +361,7 @@ def main(argv=None):
 
     ps.apply_rcparams()
     formats = ps.resolve_formats(args.formats)
-    geom = Geometry(args.width, args.height)
+    geom = Geometry()
     labelled, dropped = None, None
 
     if args.panel == "combined":

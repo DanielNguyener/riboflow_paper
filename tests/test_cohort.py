@@ -209,7 +209,7 @@ def built_cohort(inputs, tmp_path):
                         "--regions", str(inputs.regions),
                         "--qc-genome", str(inputs.qc_genome),
                         "--qc-txome", str(inputs.qc_txome),
-                        "--output", str(out), "--gzip-level", "1"])
+                        "--output", str(out)])
     return code, out, manifest, inputs
 
 
@@ -238,7 +238,7 @@ def test_the_recorded_checksum_matches_the_file_on_disk(built_cohort):
     _code, out, _manifest, _inputs = built_cohort
     row = next(csv.DictReader(open(out / "coverage_checksums.tsv"), delimiter="\t"))
     path = out / row["filename"]
-    assert cohort.sha256_file(path) == row["sha256"]
+    assert cohort.sha256_of(path) == row["sha256"]
     assert path.stat().st_size == int(row["bytes"])
 
 
@@ -267,7 +267,7 @@ def test_without_skip_existing_the_file_is_rebuilt(built_cohort):
                         "--regions", str(inputs.regions),
                         "--qc-genome", str(inputs.qc_genome),
                         "--qc-txome", str(inputs.qc_txome),
-                        "--output", str(out), "--gzip-level", "1"])
+                        "--output", str(out)])
     assert code == 0
     assert path.stat().st_mtime_ns != before
 
@@ -282,7 +282,7 @@ def test_a_rebuild_from_the_same_inputs_has_the_same_provenance_digest(built_coh
                  "--regions", str(inputs.regions),
                  "--qc-genome", str(inputs.qc_genome),
                  "--qc-txome", str(inputs.qc_txome),
-                 "--output", str(out), "--gzip-level", "1"])
+                 "--output", str(out)])
     second = next(csv.DictReader(open(out / "coverage_checksums.tsv"), delimiter="\t"))
     assert first["provenance_sha256"] == second["provenance_sha256"]
 
@@ -300,7 +300,7 @@ def test_a_changed_annotation_changes_the_provenance_digest(built_cohort, tmp_pa
                  "--regions", str(inputs.regions),
                  "--qc-genome", str(inputs.qc_genome),
                  "--qc-txome", str(inputs.qc_txome),
-                 "--output", str(out), "--gzip-level", "1"])
+                 "--output", str(out)])
     second = next(csv.DictReader(open(out / "coverage_checksums.tsv"), delimiter="\t"))
     assert first["provenance_sha256"] != second["provenance_sha256"]
 

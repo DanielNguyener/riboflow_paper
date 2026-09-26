@@ -113,42 +113,6 @@ def load_panel_fold():
     return inputs.import_from(REPO / "code" / "panels", "plot_gene_read_partition")
 
 
-# ── gene spans ───────────────────────────────────────────────────────────────
-
-def build_span_table(exon_gene_df):
-    """Version-stripped gene id -> (chromosome, start, end, n_chromosomes).
-
-    Exactly the aggregation `gene_locus` performs per call, done once for every gene: it
-    rescans a 1.4-million-row frame with a string split on each call, ~1.2 s per gene.
-    """
-    base = exon_gene_df["gene_id"].astype(str).str.split(".").str[0]
-    return exon_gene_df.assign(_base=base).groupby("_base").agg(
-        chrom=("Chromosome", "first"), start=("Start", "min"),
-        end=("End", "max"), n_chrom=("Chromosome", "nunique"))
-
-
-def install_locus_cache(partition_lib, spans):
-    """Serve `gene_locus` from `spans`; both PartitionError messages are reproduced."""
-    def cached_gene_locus(exon_gene_df, gene_id):
-        base = str(gene_id).split(".", 1)[0]
-        try:
-            row = spans.loc[base]
-        except KeyError:
-            raise partition_lib.PartitionError(
-                "gene %r has no exon in the annotation" % gene_id)
-        if int(row["n_chrom"]) != 1:
-            members = exon_gene_df.loc[
-                exon_gene_df["gene_id"].astype(str).str.split(".").str[0] == base,
-                "Chromosome"].unique()
-            raise partition_lib.PartitionError(
-                "gene %r spans %d chromosomes (%s); this is not handled"
-                % (gene_id, len(members), ", ".join(map(str, members))))
-        return str(row["chrom"]), int(row["start"]), int(row["end"])
-
-    partition_lib.gene_locus = cached_gene_locus
-    log("gene_locus served from a precomputed span table (%d genes)" % len(spans))
-
-
 # ── the gene universe ────────────────────────────────────────────────────────
 
 def gene_universe(annotation, spans, log):
@@ -190,8 +154,7 @@ def transcript_names(log):
 
 def classify_gene(partition_lib, fold, libs, annotation, state, tid):
     """(n_union, {segment: count}) for one gene. The chain and the fold, unchanged."""
-    locus = partition_lib.gene_locus(
-        annotation["exon_gene_df"], annotation["table"][tid]["gene_id"])
+    locus = partition_lib.gene_locus(annotation, annotation["table"][tid]["gene_id"])
     genome_side = state.gene_side(*locus)
     txome_side = state.transcript_side(tid)
 
@@ -414,9 +377,8 @@ def main(argv=None):
     log("loading the annotation the chain uses")
     libs = partition_lib.load_libraries()
     annotation = partition_lib.load_annotation(libs)
-    spans = build_span_table(annotation["exon_gene_df"])
     names = transcript_names(log)
-    tids, gene_of, dropped = gene_universe(annotation, spans, log)
+    tids, gene_of, dropped = gene_universe(annotation, annotation["spans"], log)
 
     wanted = [g.strip() for g in args.genes.split(",") if g.strip()]
     if wanted:
@@ -434,7 +396,6 @@ def main(argv=None):
     else:
         selected = tids[:args.limit] if args.limit else tids
 
-    install_locus_cache(partition_lib, spans)
     with read_state_module.ReadState(state_path) as state:
         log("read state %s: %d reads, %d alignments"
             % (state_path.name, state.n_reads,

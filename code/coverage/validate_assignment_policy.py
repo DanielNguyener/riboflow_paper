@@ -2,9 +2,6 @@
 """Measure how often the assignment RULE, rather than the data, decides a read's transcript."""
 from __future__ import annotations
 
-import argparse
-import json
-import sys
 import time
 from pathlib import Path
 
@@ -133,48 +130,3 @@ def measure(sample, genome_bam, gtf, appris, regions, qc_genome, annotation_cach
         },
         "elapsed_minutes": round((time.time() - started) / 60, 2),
     }
-
-def _build_parser():
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--sample", required=True)
-    parser.add_argument("--genome-bam", required=True, type=Path)
-    parser.add_argument("--gtf", required=True, type=Path)
-    parser.add_argument("--appris", required=True, type=Path)
-    parser.add_argument("--regions", type=Path, default=None)
-    parser.add_argument("--qc-genome", required=True, type=Path,
-                        help="genome readlen_window_qc.csv")
-    parser.add_argument("--annotation-cache", type=Path, default=None)
-    parser.add_argument("--output", type=Path, default=None,
-                        help="optionally write the full JSON report here. The numbers are "
-                             "printed either way; this is a validation program and its "
-                             "report is not a pipeline artifact.")
-    return parser
-
-def main(argv=None):
-    args = _build_parser().parse_args(argv)
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    for label, path in (("--genome-bam", args.genome_bam), ("--gtf", args.gtf),
-                        ("--appris", args.appris), ("--qc-genome", args.qc_genome)):
-        if not path.exists():
-            raise SystemExit("%s does not exist: %s" % (label, path))
-
-    report = measure(args.sample, args.genome_bam, args.gtf, args.appris, args.regions,
-                     args.qc_genome, args.annotation_cache)
-
-    for name, policy in report["policies"].items():
-        print("  %-10s %s" % (name, policy["rule"]))
-        print("      reads with a candidate   %12d" % policy["n_candidates_total"])
-        print("      ambiguous (>= 2)         %12d  %6.3f %%"
-              % (policy["n_ambiguous"], policy["pct_ambiguous"]))
-        print("      tied under the criterion %12d  %6.3f %%"
-              % (policy["n_tied"], policy["pct_tied"]))
-
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-        log("wrote %s" % args.output)
-    return 0
-
-if __name__ == "__main__":
-    sys.exit(main())

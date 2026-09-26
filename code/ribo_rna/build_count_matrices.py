@@ -83,10 +83,6 @@ def run_sample(row, args):
     """One sample through count_transcript_reads.py. Returns the sample id on failure."""
     sample = row["sample_id"]
     target = counts_path(sample, args.output)
-    if args.skip_existing and target.exists():
-        log("[skip] %s (already counted)" % sample)
-        return None
-
     command = [sys.executable, str(COUNTER), "--sample", sample,
                "--gtf", str(args.gtf), "--appris", str(args.appris),
                "--qc-genome", str(args.qc_genome), "--qc-txome", str(args.qc_txome),
@@ -124,7 +120,7 @@ def build_matrices(samples, output):
     for sample in samples:
         path = counts_path(sample, output)
         if not path.exists():
-            raise BuildError("%s was never written; rerun without --skip-existing" % path)
+            raise BuildError("%s was never written" % path)
         frame = pd.read_csv(path, sep="\t")
         frame = frame.set_index("transcript_id")
         per_sample[sample] = frame
@@ -206,12 +202,6 @@ def _build_parser():
     parser.add_argument("--workers", type=int, default=2,
                         help="concurrent samples; each holds one sample's annotation and "
                              "four open BAMs, so 2 is the tested setting")
-    parser.add_argument("--skip-existing", action="store_true",
-                        help="leave already-written per-sample count tables alone")
-    parser.add_argument("--no-check", action="store_true",
-                        help="skip the comparison against the shipped matrices")
-    parser.add_argument("--pivot-only", action="store_true",
-                        help="rebuild the matrices from existing per-sample tables")
     return parser
 
 def main(argv=None):
@@ -228,19 +218,17 @@ def main(argv=None):
     if not samples:
         raise BuildError("no samples selected")
 
-    if not args.pivot_only:
-        require_inputs(manifest, args)
-        log("counting %d sample(s) with %d worker(s): %s"
-            % (len(samples), args.workers, ", ".join(samples)))
-        rows = [row for _, row in manifest.iterrows()]
-        with ThreadPoolExecutor(max_workers=max(1, min(args.workers, len(rows)))) as pool:
-            failed = [s for s in pool.map(lambda r: run_sample(r, args), rows) if s]
-        if failed:
-            raise BuildError("these samples failed: %s" % ", ".join(failed))
+    require_inputs(manifest, args)
+    log("counting %d sample(s) with %d worker(s): %s"
+        % (len(samples), args.workers, ", ".join(samples)))
+    rows = [row for _, row in manifest.iterrows()]
+    with ThreadPoolExecutor(max_workers=max(1, min(args.workers, len(rows)))) as pool:
+        failed = [s for s in pool.map(lambda r: run_sample(r, args), rows) if s]
+    if failed:
+        raise BuildError("these samples failed: %s" % ", ".join(failed))
 
     build_matrices(samples, args.output)
-    if not args.no_check:
-        check_against_reference(samples, args.output)
+    check_against_reference(samples, args.output)
     return 0
 
 if __name__ == "__main__":

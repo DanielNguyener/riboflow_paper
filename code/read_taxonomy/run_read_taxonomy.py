@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import glob
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -15,7 +14,6 @@ import taxonomy_lib as tl
 fc = tl.fc
 
 DEFAULT_WORKERS = 2
-TX_GLOB = "*/transcriptome/alignment_ribo/merged/*.transcriptome.post_dedup.bam"
 
 def _out(*parts):
     return fc.output_root().joinpath("read_taxonomy", *parts)
@@ -38,21 +36,10 @@ ANALYSES = {
     },
 }
 
-def discover_samples():
-    """Samples with BOTH a transcriptome and a genome ribo BAM."""
-    found = []
-    for path in sorted(glob.glob(str(fc.bams_root() / TX_GLOB))):
-        sample = Path(path).name[: -len(".transcriptome.post_dedup.bam")]
-        if fc.genome_bam(sample).exists():
-            found.append(sample)
-    return found
 
-def run_sample(analysis, sample, skip_existing):
+def run_sample(analysis, sample):
     spec = ANALYSES[analysis]
     staged = spec["staging"] / ("%s.tsv" % sample)
-    if skip_existing and staged.exists():
-        print("  [%s] [skip] staged" % sample, flush=True)
-        return None
     command = [sys.executable, str(HERE / spec["worker"]), "--sample", sample]
     try:
         subprocess.run(command, check=True)
@@ -96,13 +83,9 @@ def main(argv=None):
                         help="which read-taxonomy analysis to run over the cohort")
     parser.add_argument("--samples", default=None, help="comma-separated subset")
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
-    parser.add_argument("--skip-existing", action="store_true",
-                        help="skip samples that already have a staged TSV")
-    parser.add_argument("--aggregate-only", action="store_true",
-                        help="rebuild the master from existing staging, run nothing")
     args = parser.parse_args(argv)
 
-    samples = discover_samples()
+    samples = fc.discover_samples()
     if args.samples:
         wanted = {s.strip() for s in args.samples.split(",") if s.strip()}
         samples = [s for s in samples if s in wanted]
@@ -112,15 +95,11 @@ def main(argv=None):
     spec = ANALYSES[args.analysis]
     spec["staging"].mkdir(parents=True, exist_ok=True)
 
-    if args.aggregate_only:
-        aggregate(args.analysis, samples)
-        return 0
-
     print("[%s] %d sample(s), %d worker(s)"
           % (args.analysis, len(samples), args.workers), flush=True)
     failures = []
     with ThreadPoolExecutor(max_workers=min(args.workers, len(samples))) as pool:
-        futures = {pool.submit(run_sample, args.analysis, s, args.skip_existing): s
+        futures = {pool.submit(run_sample, args.analysis, s): s
                    for s in samples}
         for future in as_completed(futures):
             failed = future.result()

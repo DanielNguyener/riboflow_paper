@@ -53,11 +53,8 @@ def load_pair(genome_qc, txome_qc, value_column):
 
 def gsm_labels(samples_csv, samples):
     """GSM accessions for the y axis, tolerating spaced or underscored cell-line names."""
-    frame = pd.read_csv(samples_csv, usecols=["cell_line", "ribo_GSM"])
-    mapping = {}
-    for cell_line, gsm in zip(frame["cell_line"], frame["ribo_GSM"]):
-        mapping[cell_line] = gsm
-        mapping[str(cell_line).replace(" ", "_")] = gsm
+    import panel_style as ps
+    mapping = ps.gsm_map(samples_csv)
     return [mapping.get(s, s) for s in samples]
 
 def draw_grid(axis, matrix, cmap, norm):

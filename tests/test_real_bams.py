@@ -201,7 +201,7 @@ def test_no_psite_lands_on_a_base_its_read_does_not_cover(built):
             covered = {ref for _q, ref in read.get_aligned_pairs(matches_only=True)}
             assert position in covered, read.query_name
             checked += 1
-            if "N" in psite_placement.cigar_signature(read):
+            if any(op == 3 for op, _n in read.cigartuples or []):  # N: spliced
                 spliced += 1
             if checked >= 200_000:
                 break

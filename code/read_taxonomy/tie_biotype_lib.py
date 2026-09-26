@@ -117,10 +117,6 @@ def categorize_reads(records_by_qname, exon_pr, gene_pr):
     """
     return _labels_from_loci(_classify_loci(records_by_qname, exon_pr, gene_pr))
 
-def categorize_reads_frame(base, exon_pr, gene_pr):
-    """`categorize_reads` for a caller that already holds the flat locus frame."""
-    return _labels_from_loci(classify_loci_frame(base, exon_pr, gene_pr))
-
 def _labels_from_loci(loci):
     """The tie test itself: a primary score-tied with a secondary of the other biotype."""
     if loci.empty:

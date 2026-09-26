@@ -2,7 +2,6 @@
 """Figure 4 B -- composition of the union of read IDs across the two routes."""
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -99,36 +98,3 @@ def draw(prepared, figsize=(6.4, 8.6), show_labels=True, show_key=True):
     bottom, top = common.stack_axes_fractions(figsize[1])
     figure.subplots_adjust(bottom=bottom, top=top)     # the box panel A also draws in
     return figure, axis, [inset]
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--taxonomy", required=True, type=Path)
-    parser.add_argument("--samples-csv", type=Path)
-    parser.add_argument("--hide-labels", action="store_true",
-                        help="omit the y tick labels (panel A carries them in the figure)")
-    parser.add_argument("--figsize", nargs=2, type=float, default=(6.4, 8.6))
-    parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--format", dest="formats", default="pdf")
-    parser.add_argument("--force", action="store_true")
-    args = parser.parse_args(argv)
-
-    sys.path.insert(0, str(HERE))
-    import panel_style as ps
-
-    prepared = prepare(args.taxonomy, args.samples_csv)
-    print("[panel] %d cell lines, order %s"
-          % (len(prepared["order"]), prepared["order_provenance"]))
-    medians = {c: float(np.median(prepared["frame"]["pct_" + c])) for c, _l, _x in SEGMENTS}
-    for column, _label, _colour in SEGMENTS:
-        print("[panel]   %-20s median %5.2f%%" % (column, medians[column]))
-
-    figure, _axis, extra = draw(prepared, tuple(args.figsize), not args.hide_labels)
-    written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
-                      extra_artists=extra, tight=False)
-    for path in written:
-        print("[panel] wrote %s" % path)
-    return 0
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -103,8 +103,7 @@ def check_expected(prepared):
                           % (gene, key, entry["counts"][key], expected))
 
 
-def write(prepared, segments, mapping, reads_path, sample, gsm, output_stem,
-          record_input_paths):
+def write(prepared, segments, mapping, reads_path, sample, gsm, output_stem):
     label_of = {s["key"]: s["label"] for s in segments}
     with open(output_stem + ".tsv", "w", newline="") as handle:
         writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
@@ -143,8 +142,6 @@ def write(prepared, segments, mapping, reads_path, sample, gsm, output_stem,
                                 "--dump-reads"},
         "builder": "code/alignment_fate/build_gene_partition_data.py",
     }
-    if record_input_paths:
-        meta["source"]["path"] = os.path.abspath(reads_path)
     with open(output_stem + ".json", "w") as handle:
         handle.write(json.dumps(meta, indent=2, sort_keys=True) + "\n")
 
@@ -155,10 +152,8 @@ def main(argv=None):
     parser.add_argument("--reads", required=True, help="*_gene_read_partition_reads.tsv")
     parser.add_argument("--sample", default="HeLa")
     parser.add_argument("--gsm", default="GSM2100602")
-    parser.add_argument("--genes", default=",".join(GENE_ORDER))
     parser.add_argument("--output", default=DEFAULT_OUTPUT,
                         help="output stem (.tsv and .json are appended)")
-    parser.add_argument("--record-input-paths", action="store_true")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 
@@ -168,12 +163,10 @@ def main(argv=None):
                   "--dump-reads first" % reads)
     if os.path.exists(args.output + ".tsv") and not args.force:
         paths.die("%s.tsv exists; pass --force" % args.output)
-    genes = [g.strip() for g in args.genes.split(",") if g.strip()]
-    prepared, segments, mapping = fold(reads, args.sample, genes)
+    prepared, segments, mapping = fold(reads, args.sample, list(GENE_ORDER))
     check_expected(prepared)
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
-    write(prepared, segments, mapping, reads, args.sample, args.gsm, args.output,
-          args.record_input_paths)
+    write(prepared, segments, mapping, reads, args.sample, args.gsm, args.output)
     for entry in prepared["entries"]:
         print("[tables] %-8s union %5d  %s"
               % (entry["gene_name"], entry["n_union"],

@@ -33,12 +33,12 @@ LOCUS_GENE = "LRRFIP1"
 CLUSTER_K = 4
 PSEUDOGENE_GTF = "clustering/gencode.v34.2wayconspseudos.gtf.gz"
 
+_bam_inputs = inputs.import_from(REPO / "code" / "common", "bam_inputs")
 BAM_TEMPLATES = {
-    "ribo_genome_bam": "{s}/genome/alignment_ribo/merged/{s}.post_dedup.bam",
-    "ribo_txome_bam": "{s}/transcriptome/alignment_ribo/merged/{s}.transcriptome.post_dedup.bam",
-    "rna_genome_bam": "{s}/rnaseq/genome/alignment_ribo/merged/{s}.rnaseq.post_dedup.bam",
-    "rna_txome_bam": ("{s}/rnaseq/transcriptome/alignment_ribo/merged/"
-                      "{s}.rnaseq.transcriptome.post_dedup.bam"),
+    "ribo_genome_bam": _bam_inputs.GENOME_BAM_TEMPLATE,
+    "ribo_txome_bam": _bam_inputs.TXOME_BAM_TEMPLATE,
+    "rna_genome_bam": _bam_inputs.RNA_GENOME_BAM_TEMPLATE,
+    "rna_txome_bam": _bam_inputs.RNA_TXOME_BAM_TEMPLATE,
 }
 
 log = inputs.make_log("make_tables")
@@ -55,7 +55,6 @@ def prepare_environment(args, create_dirs=True):
     if args.appris:
         os.environ["RIBOFLOW_PAPER_APPRIS"] = str(Path(args.appris).resolve())
     os.environ.setdefault("MPLBACKEND", "Agg")
-    os.environ.setdefault("RIBOFLOW_PAPER_SAMPLES_CSV", str(SAMPLES_CSV))
 
     if create_dirs:
         for directory in (out / "ribo_seq_qc" / "genome",
@@ -119,19 +118,12 @@ def stage_annotation(samples, args):
 def stage_qc(samples, args):
     qc = CODE / "ribo_seq_qc"
     selection = ["--samples", ",".join(samples)] if samples else []
-    plots = ["--plots"] if args.qc_plots else []
     code = sh([sys.executable, qc / "run_pipeline.py",
                "--bam-dir", args.bams, "--steps", "qc,cds_frame",
-               "--bam-glob", "*/genome/alignment_ribo/merged/*.post_dedup.bam"]
-              + selection + plots)
+               "--bam-glob", "*/genome/alignment_ribo/merged/*.post_dedup.bam"] + selection)
     code |= sh([sys.executable, qc / "run_pipeline.py", "--route", "transcriptome",
-                "--bam-dir", args.bams] + selection + plots)
+                "--bam-dir", args.bams] + selection)
     return code
-
-def stage_offsets(samples, args):
-    """Record which detector branch produced each `psite_offset`; consumed by no stage."""
-    return sh([sys.executable, CODE / "ribo_seq_qc" / "determine_offset_method.py",
-               "--workers", str(args.workers)])
 
 def stage_orf_catalog(samples, args):
     reference = samples[0] if samples else EXAMPLE_SAMPLE
@@ -141,9 +133,6 @@ def stage_orf_catalog(samples, args):
 
 def stage_coverage(samples, args):
     """The shared-coordinate coverage HDF5, one per sample; a durable product, never deleted."""
-    if not (args.gtf and args.appris):
-        log("  the coverage stage needs --gtf and --appris")
-        return 1
     command = [sys.executable, CODE / "coverage" / "build_cohort_coverage.py",
                "--manifest", args.manifest, "--bams", args.bams,
                "--gtf", args.gtf, "--appris", args.appris,
@@ -184,9 +173,6 @@ def _qc_tables(args):
 
 def stage_te_counts(samples, args):
     """Four transcripts x samples CDS count matrices, one count program per sample."""
-    if not (args.gtf and args.appris):
-        log("  the te_counts stage needs --gtf and --appris")
-        return 1
     qc_genome, qc_txome = _qc_tables(args)
     command = [sys.executable, CODE / "ribo_rna" / "build_count_matrices.py",
                "--bams", args.bams, "--gtf", args.gtf, "--appris", args.appris,
@@ -201,16 +187,12 @@ def stage_te_counts(samples, args):
 
 def stage_te_normalize(samples, args):
     rscript = _rscript()
-    if not rscript:
-        return 1
     return sh([rscript, CODE / "te_route" / "normalization.R",
                "--counts", args.out / "ribo_rna" / "counts",
                "--output", args.out / "te_route" / "normalized"])
 
 def stage_te_stats(samples, args):
     rscript = _rscript()
-    if not rscript:
-        return 1
     return sh([rscript, CODE / "te_route" / "te_statistics.R",
                "--normalized", args.out / "te_route" / "normalized",
                "--orf-catalog", args.out / "annotation" / "orf_catalog.tsv",
@@ -238,9 +220,6 @@ def stage_gene_partition(samples, args):
 
 def stage_locus(samples, args):
     """Figure 5B: the LRRFIP1 locus coverage artifact."""
-    if not (args.gtf and args.appris):
-        log("  the locus stage needs --gtf and --appris")
-        return 1
     qc_genome, qc_txome = _qc_tables(args)
     return sh([sys.executable, CODE / "alignment_fate" / "build_locus_data.py",
                "--gene", LOCUS_GENE, "--sample", EXAMPLE_SAMPLE, "--gsm", EXAMPLE_GSM,
@@ -253,12 +232,7 @@ def stage_clustering(samples, args):
     """Figure 6: every HeLa gene's five-fate read composition, the Ward tree and its k = 4
     cut, and the three per-gene validation tables. The read-state store (~20 min) is a
     durable product: it is reused when present, like the coverage HDF5."""
-    if not (args.gtf and args.appris):
-        log("  the clustering stage needs --gtf and --appris")
-        return 1
     rscript = _rscript()
-    if not rscript:
-        return 1
     clustering = CODE / "clustering"
     out = args.out / "clustering"
     stem = "%s.post_dedup" % EXAMPLE_SAMPLE
@@ -310,8 +284,6 @@ STAGES = [
       "ribo_seq_qc/genome/tables/cds_psite_frame.csv",
       "ribo_seq_qc/transcriptome/tables/readlen_window_qc.csv",
       "ribo_seq_qc/transcriptome/tables/cds_psite_frame.csv")),
-    ("offsets",      stage_offsets,      ("qc",),                  True,
-     ("ribo_seq_qc/offsets/offset_method_per_length.tsv",)),
     ("orf_catalog",  stage_orf_catalog,  ("annotation",),          True,
      ("annotation/orf_catalog.tsv",)),
     ("coverage",     stage_coverage,     ("annotation", "qc"),     True,  ()),
@@ -373,6 +345,8 @@ EXTERNAL_INPUTS = {
 STAGE_ORDER = [name for name, _run, _needs, _anno, _out in STAGES]
 STAGE_RUN = {name: run for name, run, _needs, _anno, _out in STAGES}
 NEEDS_ANNOTATION = {name for name, _r, _n, anno, _o in STAGES if anno}
+NEEDS_GTF = {"coverage", "te_counts", "locus", "clustering"}
+NEEDS_R = {"te_normalize", "te_stats", "clustering"}
 STAGE_OUTPUTS = {name: outs for name, _r, _n, _a, outs in STAGES}
 OUTPUTS = [rel for _n, _r, _nd, _a, outs in STAGES for rel in outs]
 
@@ -441,13 +415,6 @@ def build_parser():
                         help="parallel samples; memory-heavy stages cap at 2 regardless")
     parser.add_argument("--skip-existing", action="store_true",
                         help="the coverage stage skips samples whose HDF5 already exists")
-    parser.add_argument("--qc-plots", action="store_true",
-                        help="also write the per-sample metagene PDFs from the QC stage. "
-                             "Off by default: they are diagnostics, and the window and "
-                             "offsets they illustrate are in the QC tables.")
-    parser.add_argument("--keep-intermediates", action="store_true",
-                        help="keep the per-sample _staging/ directories. They are merged "
-                             "into the master tables and deleted once their stage succeeds.")
     parser.add_argument("--validate", action="store_true",
                         help="report the discovered samples and exit without computing")
     parser.add_argument("--into-data", action="store_true",
@@ -537,9 +504,15 @@ def main(argv=None):
     for stage in selected:
         log("-- stage %s" % stage)
         started = time.time()
-        code = STAGE_RUN[stage](samples, args)
+        if stage in NEEDS_GTF and not (args.gtf and args.appris):
+            log("  the %s stage needs --gtf and --appris" % stage)
+            code = 1
+        elif stage in NEEDS_R and not _rscript():
+            code = 1
+        else:
+            code = STAGE_RUN[stage](samples, args)
         results.append((stage, code, (time.time() - started) / 60))
-        if code == 0 and not args.keep_intermediates:
+        if code == 0:
             prune_staging(stage, args.out)
         if code:
             log("stage %s FAILED (exit %d) -- stopping; later stages depend on it"

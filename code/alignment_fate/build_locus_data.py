@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import argparse
 import collections
-import csv
 import gzip
 import json
 import os
@@ -50,6 +49,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "common"))
 import inputs as paths  # noqa: E402
 from inputs import die  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "coverage"))
+import psite_placement  # noqa: E402
+from intervals import merge, subtract  # noqa: E402
 
 #: The shipped QC tables: the one input that legitimately defaults into the repository.
 QC_GENOME_DEFAULT = "data/ribo_seq_qc/genome/tables/readlen_window_qc.csv"
@@ -63,20 +65,10 @@ INTRON_GAP = 90.0
 # ── QC tables ────────────────────────────────────────────────────────────────
 
 def read_window_and_offsets(qc_csv, sample):
-    """The sample's selected read lengths and their P-site offsets, from the QC table."""
-    offsets = {}
-    with open(qc_csv) as handle:
-        for row in csv.DictReader(handle):
-            if row["sample"] != sample or row["in_phase1"] != "True":
-                continue
-            length = int(row["read_length"])
-            raw = row.get("psite_offset", "")
-            if raw in ("", "NA", "None"):
-                die("%s: read length %d is selected but has no P-site offset in %s"
-                    % (sample, length, qc_csv))
-            offsets[length] = int(float(raw))
-    if not offsets:
-        die("no selected read lengths for %s in %s" % (sample, qc_csv))
+    """The sample's selected read lengths and their P-site offsets, from the QC table.
+
+    `psite_placement.load_offsets` is the one reader of the QC master tables."""
+    offsets = psite_placement.load_offsets(qc_csv, sample)
     return set(offsets), offsets
 
 
@@ -114,15 +106,6 @@ def selected_transcript(appris_path, gene_name):
     return hits[0]
 
 
-def transcript_to_genome(exons, strand):
-    ordered = sorted(exons) if strand == "+" else sorted(exons, reverse=True)
-    out = []
-    for start, end in ordered:
-        out.append(np.arange(start, end) if strand == "+"
-                   else np.arange(end - 1, start - 1, -1))
-    return np.concatenate(out) if out else np.array([], dtype=int)
-
-
 def gene_transcripts(gtf_path, gene_name):
     """{transcript_id: [(start, end), ...]} (0-based half-open) for one gene, + chrom, strand."""
     exons = collections.defaultdict(list)
@@ -145,57 +128,6 @@ def gene_transcripts(gtf_path, gene_name):
     if not exons:
         die("%s has no exon in %s" % (gene_name, gtf_path))
     return {t: sorted(v) for t, v in exons.items()}, chrom, strand
-
-
-def transcript_exons(gtf_path, transcript_id):
-    """[(start, end), ...] (0-based half-open), chrom, strand, gene_name of ONE transcript
-    of any gene -- for a forced alternative model that belongs to another gene id, e.g. a
-    readthrough gene over the same locus."""
-    needle = 'transcript_id "%s"' % transcript_id
-    exons, chrom, strand, name = [], None, None, None
-    opener = gzip.open if str(gtf_path).endswith(".gz") else open
-    with opener(gtf_path, "rt") as handle:
-        for line in handle:
-            if line[0] == "#" or needle not in line:
-                continue
-            fields = line.rstrip("\n").split("\t")
-            if fields[2] != "exon" or needle not in fields[8]:
-                continue
-            exons.append((int(fields[3]) - 1, int(fields[4])))
-            chrom, strand = fields[0], fields[6]
-            name = fields[8].split('gene_name "', 1)[1].split('"', 1)[0]
-    if not exons:
-        die("%s has no exon in %s" % (transcript_id, gtf_path))
-    return sorted(exons), chrom, strand, name
-
-
-def merge(intervals):
-    out = []
-    for start, end in sorted(intervals):
-        if out and start <= out[-1][1]:
-            out[-1][1] = max(out[-1][1], end)
-        else:
-            out.append([start, end])
-    return [(s, e) for s, e in out]
-
-
-def subtract(intervals, holes):
-    out = []
-    for start, end in intervals:
-        pieces = [(start, end)]
-        for h_start, h_end in holes:
-            nxt = []
-            for p_start, p_end in pieces:
-                if h_end <= p_start or h_start >= p_end:
-                    nxt.append((p_start, p_end))
-                    continue
-                if p_start < h_start:
-                    nxt.append((p_start, h_start))
-                if h_end < p_end:
-                    nxt.append((h_end, p_end))
-            pieces = nxt
-        out.extend(pieces)
-    return [(s, e) for s, e in out if e > s]
 
 
 def exonic_bases(blocks, strand):
@@ -435,7 +367,7 @@ def layer_coverage(members, layer_qnames, positions, signal):
 
 # ── driver ───────────────────────────────────────────────────────────────────
 
-def build(gene, sample, inputs, qc_genome, qc_txome, signal, alt_transcript=None):
+def build(gene, sample, inputs, qc_genome, qc_txome, signal):
     lengths, offsets = read_window_and_offsets(qc_genome, sample)
     t_lengths, t_offsets = read_window_and_offsets(qc_txome, sample)
     print("[locus] %s signal=%s   genome lengths %s offsets %s"
@@ -454,7 +386,7 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal, alt_transcript=None
           % (gene, chrom, span_start, span_end, strand, len(transcripts), sel_tid,
              len(sel_exons)))
 
-    tx2genome = transcript_to_genome(sel_exons, strand)
+    tx2genome = exonic_bases(sel_exons, strand)
     if len(tx2genome) != sel_len:
         die("%s: GTF exons give a spliced length of %d, but the transcriptome reference "
             "declares %d -- the projection would be wrong" % (sel_tid, len(tx2genome), sel_len))
@@ -483,40 +415,27 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal, alt_transcript=None
 
     # Alternative isoform: most genome-only unique reads on non-selected sequence.
     scores = {}
-    alt_gene = gene
-    if alt_transcript:
-        alt_tid = alt_transcript
-        if alt_tid not in transcripts:
-            # A model of another gene id over the same locus (a readthrough gene, a second
-            # gene model): allowed when it lies on the gene's chromosome and strand.
-            alt_ex, alt_chrom, alt_strand, alt_gene = transcript_exons(inputs["gtf"], alt_tid)
-            if (alt_chrom, alt_strand) != (chrom, strand):
-                die("%s (%s, %s%s) is not on %s's chromosome and strand"
-                    % (alt_tid, alt_gene, alt_chrom, alt_strand, gene))
-            transcripts[alt_tid] = alt_ex
-            print("[locus] forced alternative %s belongs to %s, not %s" % (alt_tid, alt_gene, gene))
-    else:
-        for tid, exons in transcripts.items():
-            if tid == sel_tid:
-                continue
-            extra = subtract(merge(exons), sel_exons)
-            if not extra:
-                continue
-            n = 0
-            for qname in genome_only:
-                blocks, _psite = members[qname]["alignments"][0]   # NH==1: the primary
-                if any(b_s < e_e and e_s < b_e
-                       for b_s, b_e in blocks for e_s, e_e in extra):
-                    n += 1
-            scores[tid] = n
-        if not scores or max(scores.values()) == 0:
-            die("no annotated transcript of %s carries genome-only reads outside the "
-                "selected isoform; this gene is not an example of the effect" % gene)
-        alt_tid = max(scores, key=lambda t: (scores[t], len(transcripts[t])))
-        print("[locus] alternative isoform support (genome-only reads on non-selected "
-              "sequence):")
-        for tid, n in sorted(scores.items(), key=lambda kv: -kv[1])[:5]:
-            print("          %-22s %6d%s" % (tid, n, "   <- chosen" if tid == alt_tid else ""))
+    for tid, exons in transcripts.items():
+        if tid == sel_tid:
+            continue
+        extra = subtract(merge(exons), sel_exons)
+        if not extra:
+            continue
+        n = 0
+        for qname in genome_only:
+            blocks, _psite = members[qname]["alignments"][0]   # NH==1: the primary
+            if any(b_s < e_e and e_s < b_e
+                   for b_s, b_e in blocks for e_s, e_e in extra):
+                n += 1
+        scores[tid] = n
+    if not scores or max(scores.values()) == 0:
+        die("no annotated transcript of %s carries genome-only reads outside the "
+            "selected isoform; this gene is not an example of the effect" % gene)
+    alt_tid = max(scores, key=lambda t: (scores[t], len(transcripts[t])))
+    print("[locus] alternative isoform support (genome-only reads on non-selected "
+          "sequence):")
+    for tid, n in sorted(scores.items(), key=lambda kv: -kv[1])[:5]:
+        print("          %-22s %6d%s" % (tid, n, "   <- chosen" if tid == alt_tid else ""))
 
     alt_exons = merge(transcripts[alt_tid])
     absent_blocks = subtract(alt_exons, sel_exons)
@@ -588,7 +507,7 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal, alt_transcript=None
                                               format(union[-1][1], ","), strand)},
         "selected_transcript": sel_tid, "selected_length": sel_len,
         "alternative_transcript": alt_tid,
-        "alternative_gene": alt_gene,
+        "alternative_gene": gene,
         "alternative_chosen_by": "forced" if alt_transcript else
                                  "most genome-only unique reads on non-selected sequence",
         "alternative_support_top5": dict(sorted(scores.items(), key=lambda kv: -kv[1])[:5]),
@@ -678,11 +597,7 @@ def main(argv=None):
                         help="repo-relative or absolute; the genome route's QC table")
     parser.add_argument("--qc-txome", default=QC_TXOME_DEFAULT,
                         help="the transcriptome route's QC table")
-    parser.add_argument("--signal", choices=("psite", "footprint"), default="psite")
-    parser.add_argument("--alt-transcript", help="force the alternative isoform")
     parser.add_argument("--output", help="output stem; default results/alignment_fate/locus_<GENE>")
-    parser.add_argument("--record-input-paths", action="store_true",
-                        help="also record the absolute input paths in the JSON")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 
@@ -697,8 +612,7 @@ def main(argv=None):
     if os.path.exists(stem + ".npz") and not args.force:
         die("%s.npz exists; pass --force" % stem)
 
-    arrays, meta = build(args.gene, args.sample, inputs, qc_genome, qc_txome, args.signal,
-                         args.alt_transcript)
+    arrays, meta = build(args.gene, args.sample, inputs, qc_genome, qc_txome, "psite")
     meta["gsm"] = args.gsm
     meta["inputs"] = {key: {"file": os.path.basename(inputs[key]),
                             "sha256": paths.sha256_of(inputs[key])}
@@ -707,9 +621,6 @@ def main(argv=None):
                                    "sha256": paths.sha256_of(qc_genome)}
     meta["inputs"]["qc_txome"] = {"file": os.path.relpath(qc_txome, str(paths.REPO)),
                                   "sha256": paths.sha256_of(qc_txome)}
-    if args.record_input_paths:
-        for key in ("ribo_genome", "ribo_txome", "gtf", "appris"):
-            meta["inputs"][key]["path"] = os.path.abspath(inputs[key])
     meta["builder"] = "code/alignment_fate/build_locus_data.py"
 
     os.makedirs(os.path.dirname(stem), exist_ok=True)

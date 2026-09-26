@@ -291,15 +291,6 @@ def test_the_alignment_fate_loader_resolves_its_siblings():
         assert Path(module.__file__).parent == CODE / "read_taxonomy", module.__file__
 
 
-def test_the_offset_method_detector_imports_without_pythonpath():
-    """It is spawned as a bare subprocess by `make_tables.py --stages offsets`, so it has to
-    find `config`, `psite_offset` and `bam_inputs` on its own."""
-    script = CODE / "ribo_seq_qc" / "determine_offset_method.py"
-    result = subprocess.run([sys.executable, str(script), "--help"],
-                            capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
-    assert result.returncode == 0, result.stderr
-
-
 # ── configuration is passed, not inherited ───────────────────────────────────
 
 def code_only(path):
@@ -398,9 +389,8 @@ def figure_stem(number):
 def test_the_panel_manifest_declares_exact_output_paths():
     document = load_manifest()
     outputs = [p["output"] for p in document["panels"] if p.get("generator")]
-    # S1A-B, 2A-D, 3 (+ its three single panels), 4A-D (+ the four page-size renders),
-    # 5A-B, 6.
-    assert len(outputs) == 21, "expected 21 panel outputs, found %d" % len(outputs)
+    # S1A-B, 2A-D, 3 (+ its three single panels), 4A-D page-size renders, 5A-B, 6.
+    assert len(outputs) == 17, "expected 17 panel outputs, found %d" % len(outputs)
     assert len(set(outputs)) == len(outputs), "duplicate output paths"
     for output in outputs:
         assert not ORIGINAL_PROJECT.search(output), output
@@ -502,26 +492,6 @@ def test_the_launcher_does_not_glob_for_its_outputs():
     tokens = [text for _line, text in code_only(CODE / "make_panels.py")]
     assert "rglob" not in tokens
     assert "glob" not in tokens
-
-
-# ── the sample-panel lookup needs no particular layout ───────────────────────
-
-def test_sample_to_gsm_resolves_without_a_staging_tree():
-    """A read-only mode must not create the directories a build would write to."""
-    import importlib.util
-    for directory in ("code/read_taxonomy", "code/common", "code/common/ribo_seq_qc"):
-        path = str(REPO / directory)
-        if path not in sys.path:
-            sys.path.insert(0, path)
-    spec = importlib.util.spec_from_file_location(
-        "taxonomy_lib", REPO / "code" / "read_taxonomy" / "taxonomy_lib.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    mapping = module.sample_to_gsm()
-    assert len(mapping) == 24
-    assert mapping["HeLa"] == "GSM2100602"
-    assert "Cybrid_Cells" in mapping, "spaced cell-line names must be normalised"
 
 
 # ── every module still imports ───────────────────────────────────────────────

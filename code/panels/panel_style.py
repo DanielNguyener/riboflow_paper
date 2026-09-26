@@ -164,3 +164,14 @@ def require_columns(frame, columns, source):
             "%s is missing %d required column(s): %s\nPresent: %s"
             % (source, len(missing), ", ".join(missing), ", ".join(map(str, frame.columns))))
     return frame
+
+def gsm_map(samples_csv):
+    """{cell_line: ribo_GSM} from the sample table, keyed both spaced and underscored."""
+    import pandas as pd
+    frame = require_columns(pd.read_csv(samples_csv), ("cell_line", "ribo_GSM"),
+                            str(samples_csv))
+    out = {}
+    for cell_line, gsm in zip(frame["cell_line"], frame["ribo_GSM"]):
+        out[str(cell_line)] = str(gsm)
+        out[str(cell_line).replace(" ", "_")] = str(gsm)
+    return out

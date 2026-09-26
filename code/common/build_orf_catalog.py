@@ -13,6 +13,8 @@ import pysam
 import bam_inputs as fc
 
 _CDS_RE = re.compile(r"\|CDS:(\d+)-(\d+)\|")
+#: ±nt around an internal exon boundary counted as junction-proximal.
+JUNC_WIN = 3
 
 def txome_ref_transcripts(bam_path) -> set:
     """base ENST present as @SQ in the transcriptome reference (with a CDS header)."""
@@ -29,8 +31,6 @@ def main() -> int:
     ap.add_argument("--txome-bam", default=None,
                     help="Any transcriptome BAM (for the @SQ reference set). "
                          "Default: first discovered sample.")
-    ap.add_argument("--junc-win", type=int, default=3,
-                    help="±nt around an internal exon boundary counted as junction-proximal.")
     ap.add_argument("--out-dir", default=str(fc.output_root()))
     args = ap.parse_args()
 
@@ -93,8 +93,8 @@ def main() -> int:
             continue
         mask = np.zeros(L, dtype=bool)
         for b in junctions[tid]:
-            lo = max(0, b - args.junc_win)
-            hi = min(L, b + args.junc_win)
+            lo = max(0, b - JUNC_WIN)
+            hi = min(L, b + JUNC_WIN)
             mask[lo:hi] = True
         jp += int(mask.sum())
 
@@ -104,7 +104,7 @@ def main() -> int:
     print(f"  CDS length divisible by 3:                  {n_div3:,}  ({100*n_div3/n:.1f}%)  "
           f"-> {n-n_div3} flagged not-divisible")
     print(f"  length_filtered==True (carried, not dropped): {n_lf:,}")
-    print(f"junction-proximal CDS positions (±{args.junc_win} nt): "
+    print(f"junction-proximal CDS positions (±{JUNC_WIN} nt): "
           f"{jp:,} / {tot_pos:,}  ({100*jp/tot_pos:.1f}%)")
 
     cat_path = out / "orf_catalog.tsv"

@@ -46,10 +46,9 @@ print(f"=== [03 cds_frame{' (transcriptome)' if TX else ''}] sample={SAMPLE} ===
 # ── 1. Load phase1 lengths, P-site offsets ────────────────────────────────────
 print("Loading phase1 lengths and P-site offsets from step 01...", flush=True)
 qc_df = pd.read_csv(QC_CSV)
-_as_bool = lambda s: s.map(lambda x: str(x).strip().lower() in ("true", "1"))
 
-phase1_mask  = _as_bool(qc_df["in_phase1"])
-periodic_mask = _as_bool(qc_df["periodic"])
+phase1_mask  = fc._as_bool(qc_df["in_phase1"])
+periodic_mask = fc._as_bool(qc_df["periodic"])
 
 phase1_rows = qc_df[phase1_mask]
 phase1_lengths   = set(phase1_rows["read_length"].astype(int).tolist())

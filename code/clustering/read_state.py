@@ -407,6 +407,14 @@ def build(sample, genome_bam, txome_bam, base2ver, path, log):
     return Path(path)
 
 
+def _find(sorted_values, key):
+    """Index of `key` in a sorted int array, or None."""
+    index = np.searchsorted(sorted_values, key)
+    if index < len(sorted_values) and sorted_values[index] == key:
+        return int(index)
+    return None
+
+
 class _Membership:
     """`qname in genome_present` over a sorted int array, without a 13-million-entry set."""
 
@@ -414,8 +422,7 @@ class _Membership:
         self._values = sorted_values
 
     def __contains__(self, key):
-        index = np.searchsorted(self._values, key)
-        return index < len(self._values) and self._values[index] == key
+        return _find(self._values, key) is not None
 
     def __len__(self):
         return len(self._values)
@@ -430,10 +437,7 @@ class _TxomeMap:
         self._names = tid_names
 
     def _row(self, key):
-        index = np.searchsorted(self._reads, key)
-        if index < len(self._reads) and self._reads[index] == key:
-            return int(index)
-        return None
+        return _find(self._reads, key)
 
     def __contains__(self, key):
         return self._row(key) is not None
@@ -571,18 +575,15 @@ class ReadState:
 
     @property
     def primary(self):
-        return _PrimaryView(self)
+        return _LazyView(self.primary_dict)
 
     @property
     def records(self):
-        return _RecordsView(self)
+        return _LazyView(self.records_dict)
 
     # -- the two dictionaries the chain consumes ----------------------------
     def _primary_row(self, read_index):
-        index = np.searchsorted(self._p_read, read_index)
-        if index < len(self._p_read) and self._p_read[index] == read_index:
-            return int(index)
-        return None
+        return _find(self._p_read, read_index)
 
     def primary_dict(self, read_indices):
         """read id -> (chromosome, strand, blocks, NH, AS), as `classify_union` expects."""
@@ -618,35 +619,14 @@ class ReadState:
         return out
 
 
-class _PrimaryView:
-    """`primary.get(read)` -> (chromosome, strand, blocks, NH, AS)."""
+class _LazyView:
+    """`view.get(read)` / `view[read]` over a per-read fetch method taking an index list."""
 
-    def __init__(self, state):
-        self._state = state
-
-    def get(self, key, default=None):
-        found = self._state.primary_dict([key])
-        return found.get(int(key), default)
-
-    def __getitem__(self, key):
-        found = self.get(key)
-        if found is None:
-            raise KeyError(key)
-        return found
-
-    def __contains__(self, key):
-        return self.get(key) is not None
-
-
-class _RecordsView:
-    """`records[read]` -> [(chromosome, pos5, AS, is_secondary), ...] over every locus."""
-
-    def __init__(self, state):
-        self._state = state
+    def __init__(self, fetch):
+        self._fetch = fetch
 
     def get(self, key, default=None):
-        found = self._state.records_dict([key])
-        return found.get(int(key), default)
+        return self._fetch([key]).get(int(key), default)
 
     def __getitem__(self, key):
         found = self.get(key)

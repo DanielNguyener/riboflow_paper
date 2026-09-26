@@ -207,24 +207,6 @@ def test_a_negative_offset_is_rejected_rather_than_wrapping():
         pp.place(read("30M"), -1)
 
 
-# ── CIGAR helpers ────────────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("cigar,expected", [
-    ("30M", "M"), ("5S25M", "MS"), ("10M2I18M", "IM"), ("10M2D20M", "DM"),
-    ("10M940N20M", "MN"), ("3S10M2D15M2S", "DMS"),
-])
-def test_cigar_signature(cigar, expected):
-    assert pp.cigar_signature(read(cigar)) == expected
-
-
-@pytest.mark.parametrize("cigar,pure", [
-    ("30M", True), ("30=", True), ("15=15X", True),
-    ("5S25M", False), ("10M2I18M", False), ("10M940N20M", False),
-])
-def test_is_pure_match(cigar, pure):
-    assert pp.is_pure_match(read(cigar)) is pure
-
-
 # ── the recorded policy ──────────────────────────────────────────────────────
 
 def test_there_is_exactly_one_placement_rule():
@@ -246,58 +228,6 @@ def test_no_builder_offers_a_placement_choice():
         text = (COVERAGE / name).read_text()
         assert "--psite-placement" not in text, name
         assert "reference_offset" not in text, name
-
-
-# ── summarize_placements over a real BAM ─────────────────────────────────────
-
-def _write_bam(path, records):
-    head = {"HD": {"VN": "1.6", "SO": "coordinate"},
-            "SQ": [{"SN": CONTIG, "LN": CONTIG_LENGTH}]}
-    with pysam.AlignmentFile(str(path), "wb", header=head) as out:
-        for i, segment in enumerate(sorted(records, key=lambda s: s.reference_start)):
-            segment.query_name = "read%d" % i
-            out.write(segment)
-    pysam.index(str(path))
-    return path
-
-
-def test_summarize_placements_counts_each_shape(tmp_path):
-    records = [read("30M", pos=1000), read("30M", pos=2000),
-               read("10M940N20M", pos=3000), read("10M2D20M", pos=5000),
-               read("10M2I18M", pos=6000), read("5S25M", pos=7000),
-               read("25S5M", pos=8000),                       # undefined at offset 12
-               read("30M", pos=9000, nh=2, mapq=1)]           # a multimapper, excluded
-    bam = _write_bam(tmp_path / "s.bam", records)
-
-    result = pp.summarize_placements(bam, {30: 12, 35: 12})
-    counts = result["counts"]
-    assert counts["considered"] == 7, "the NH:i:2 read must be excluded"
-    assert counts["pure_match"] == 2
-    assert counts["spliced"] == 1
-    assert counts["deletion"] == 1
-    assert counts["insertion"] == 1
-    assert counts["soft_clipped"] == 2                          # 5S25M and 25S5M
-    assert counts["undefined"] == 1                             # 25S5M has 5 aligned bases
-    assert counts["placed"] == 6
-    assert result["undefined_by_cigar_signature"] == {"MS": 1}
-    assert result["psite_placement"] == "cigar_aware"
-    assert result["bam"] == "s.bam", "the report must not embed the full path"
-
-
-def test_summarize_placements_skips_lengths_without_an_offset(tmp_path):
-    bam = _write_bam(tmp_path / "s.bam", [read("30M", pos=1000), read("40M", pos=2000)])
-    result = pp.summarize_placements(bam, {30: 12})
-    assert result["counts"]["considered"] == 1
-
-
-def test_summarize_placements_skips_secondary_and_supplementary(tmp_path):
-    secondary = read("30M", pos=2000)
-    secondary.flag |= 256
-    supplementary = read("30M", pos=3000)
-    supplementary.flag |= 2048
-    bam = _write_bam(tmp_path / "s.bam",
-                     [read("30M", pos=1000), secondary, supplementary])
-    assert pp.summarize_placements(bam, {30: 12})["counts"]["considered"] == 1
 
 
 # ── load_offsets ─────────────────────────────────────────────────────────────

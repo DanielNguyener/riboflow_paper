@@ -15,10 +15,6 @@ from panel_style import die
 
 REPO = Path(__file__).resolve().parents[2]
 
-MARGIN_PT = 4.0
-GUTTER_PT = 6.0
-ROW_GAP_PT = 10.0
-LETTER_PT = 10.0
 
 FIT_TOL_PT = 0.4
 FIT_MAX_ITER = 6
@@ -27,12 +23,8 @@ FIT_MAX_ITER = 6
 FIT_SETTLE_PT = 1.0
 
 
-def ink_box(pdf, dpi=144, pad_pt=1.0):
-    """The panel's drawn extent HORIZONTALLY, over its full page height.
-
-    Vertical bounds are not trimmed: cropping would break the cohort
-    panels' declared-from-page-top row alignment.
-    """
+def _drawn(pdf, dpi):
+    """(drawn-pixel coordinates, page rect) from one rasterisation of the PDF's page."""
     import fitz
     import numpy as np
     from PIL import Image
@@ -42,33 +34,28 @@ def ink_box(pdf, dpi=144, pad_pt=1.0):
         pixmap = page.get_pixmap(dpi=dpi, alpha=False)
         page_rect = fitz.Rect(page.rect)
     grey = np.array(Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("L"))
-    drawn = np.argwhere(grey < 250)
+    return np.argwhere(grey < 250), page_rect
+
+
+def ink_box(pdf, dpi=144, pad_pt=1.0, trim_bottom=False):
+    """The panel's drawn extent HORIZONTALLY, over its full page height.
+
+    The TOP is never trimmed: cropping would break the cohort panels'
+    declared-from-page-top row alignment. `trim_bottom` also trims below the ink.
+    """
+    import fitz
+
+    drawn, page_rect = _drawn(pdf, dpi)
     if not len(drawn):
         return page_rect
     scale = dpi / 72.0
     left = drawn[:, 1].min() / scale
     right = (drawn[:, 1].max() + 1) / scale
+    bottom = page_rect.y1
+    if trim_bottom:
+        bottom = min(page_rect.y1, (drawn[:, 0].max() + 1) / scale + pad_pt)
     return fitz.Rect(max(page_rect.x0, left - pad_pt), page_rect.y0,
-                     min(page_rect.x1, right + pad_pt), page_rect.y1)
-
-
-def ink_box_trim_bottom(pdf, dpi=144, pad_pt=1.0):
-    """`ink_box`, and also trim the BOTTOM -- but never the top (see `ink_box`)."""
-    import fitz
-    import numpy as np
-    from PIL import Image
-
-    box = ink_box(pdf, dpi=dpi, pad_pt=pad_pt)
-    with fitz.open(pdf) as document:
-        page = document[0]
-        pixmap = page.get_pixmap(dpi=dpi, alpha=False)
-        page_rect = fitz.Rect(page.rect)
-    grey = np.array(Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("L"))
-    drawn = np.argwhere(grey < 250)
-    if not len(drawn):
-        return box
-    bottom = (drawn[:, 0].max() + 1) / (dpi / 72.0)
-    return fitz.Rect(box.x0, box.y0, box.x1, min(page_rect.y1, bottom + pad_pt))
+                     min(page_rect.x1, right + pad_pt), bottom)
 
 
 def render(command, label, cwd=None):
@@ -115,8 +102,7 @@ def arial_bold():
                                  fallback_to_default=False)
 
 
-def compose(rows, letters, output_pdf, margin_pt=MARGIN_PT, gutter_pt=GUTTER_PT,
-            row_gap_pt=ROW_GAP_PT, letter_pt=LETTER_PT):
+def compose(rows, letters, output_pdf, margin_pt, gutter_pt, row_gap_pt, letter_pt):
     """Place the panels 1:1 with bold letters in a reserved band above each row.
 
     `rows` is a list of rows, each a list of {"pdf", "clip", "stem"}.

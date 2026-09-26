@@ -543,18 +543,4 @@ def cds_interior(coverage, tid, signal, trim=TRIM):
     return coverage.get_track(index, signal)[start + trim:end - trim]
 
 
-# ── the coverage builder, loaded by path ─────────────────────────────────────
-
-@pytest.fixture(scope="session")
-def bsc():
-    """`build_shared_coverage`, for the accumulator unit tests."""
-    import importlib.util
-    directory = Path(__file__).resolve().parents[1] / "code" / "coverage"
-    if str(directory) not in sys.path:
-        sys.path.insert(0, str(directory))
-    spec = importlib.util.spec_from_file_location(
-        "build_shared_coverage", directory / "build_shared_coverage.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 

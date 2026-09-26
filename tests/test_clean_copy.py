@@ -33,7 +33,6 @@ REPO = Path(__file__).resolve().parents[1]
 #: Panels that need only files shipped in the repository.
 SELF_CONTAINED = ["figS1A", "figS1B", "fig02C", "fig02D",
                   "fig03", "fig03A", "fig03B", "fig03C",
-                  "fig04A", "fig04B", "fig04C", "fig04D",
                   "fig04A_plos", "fig04B_plos", "fig04C_plos", "fig04D_plos",
                   "fig05A", "fig05B", "fig06"]
 #: Figures reproducible from shipped tables alone; Figure 2 needs the coverage HDF5.

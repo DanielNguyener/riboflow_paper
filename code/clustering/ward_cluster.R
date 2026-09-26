@@ -23,31 +23,13 @@
 #
 # Base R only; `here` is derived from Rscript's --file= so it runs from any directory.
 
-suppressWarnings(suppressMessages({library(stats); library(utils)}))
 options(digits = 15)   # so the heights round-trip through the TSV unchanged
 
 # ── arguments ──────────────────────────────────────────────────────────────────────────
-parse_args <- function(defaults) {
-  raw <- commandArgs(TRUE)
-  if (length(raw) && raw[1] %in% c("--help", "-h")) {
-    cat("usage: Rscript ward_cluster.R",
-        paste(sprintf("[--%s VALUE]", names(defaults)), collapse = " "), "\n")
-    for (k in names(defaults)) cat(sprintf("  --%-18s default %s\n", k,
-                                           if (nzchar(defaults[[k]])) defaults[[k]] else "(none)"))
-    quit(status = 0)
-  }
-  if (length(raw) %% 2 != 0) stop("arguments come in --key value pairs")
-  for (i in seq_len(length(raw) %/% 2) * 2 - 1) {
-    key <- sub("^--", "", raw[i])
-    if (!key %in% names(defaults)) stop("unknown argument --", key)
-    defaults[[key]] <- raw[i + 1]
-  }
-  defaults
-}
-require_arg <- function(opts, key) {
-  if (!nzchar(opts[[key]])) stop("--", key, " is required")
-  opts[[key]]
-}
+here <- dirname(normalizePath(sub("^--file=", "",
+                                  grep("^--file=", commandArgs(FALSE), value = TRUE))[1]))
+root <- dirname(dirname(here))
+source(file.path(root, "code", "common", "cli_args.R"))
 log_line <- function(fmt, ...) cat(sprintf("[clustering/ward] %s\n", sprintf(fmt, ...)))
 
 # ── the five fates ─────────────────────────────────────────────────────────────────────

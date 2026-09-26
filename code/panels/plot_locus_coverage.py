@@ -14,6 +14,8 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "common"))
+from intervals import merge  # noqa: E402
 from panel_style import die  # noqa: E402
 
 #: Type scale, module constants so one caller can rebind them (PLOS allows 8-12 pt).
@@ -43,14 +45,6 @@ SELECTED_COLOUR = "#000000"
 ALT_COLOUR = "#000000"
 
 
-def merge(intervals):
-    out = []
-    for start, end in sorted(intervals):
-        if out and start <= out[-1][1]:
-            out[-1][1] = max(out[-1][1], end)
-        else:
-            out.append([start, end])
-    return [(s, e) for s, e in out]
 
 
 class SplicedAxis:

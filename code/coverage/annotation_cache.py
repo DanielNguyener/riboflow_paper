@@ -11,14 +11,13 @@ from pathlib import Path
 _COMMON = str(Path(__file__).resolve().parent.parent / "common")
 if _COMMON not in sys.path:
     sys.path.insert(0, _COMMON)
-from inputs import sha256_of  # noqa: E402
+from inputs import make_log, sha256_of  # noqa: E402
 
 CACHE_VERSION = 1
 
 SOURCE_MODULES = ("transcript_coords.py", "transcript_regions.py", "annotation_cache.py")
 
-def log(message):
-    print("[annotation] %s" % message, flush=True)
+log = make_log("annotation")
 
 def fingerprint(gtf, appris, regions, left_span, right_span):
     """A content digest of everything that determines the bundle."""

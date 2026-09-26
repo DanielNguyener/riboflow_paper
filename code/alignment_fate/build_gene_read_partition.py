@@ -26,7 +26,6 @@ def main(argv=None):
                         help="coordinate-sorted and INDEXED: the gene side is a region fetch")
     parser.add_argument("--transcriptome-bam", required=True, type=Path)
     parser.add_argument("--gene-id", default="", help="comma-separated gene IDs")
-    parser.add_argument("--transcript-id", default="", help="comma-separated transcript IDs")
     parser.add_argument("--coverage", type=Path,
                         help="a shared_coverage.h5, used only to resolve gene IDs and names")
     parser.add_argument("--output", type=Path, default=Path("results/alignment_fate"))
@@ -39,9 +38,8 @@ def main(argv=None):
     import gene_read_partition_lib as lib
 
     genes = [g.strip() for g in args.gene_id.split(",") if g.strip()]
-    transcripts = [t.strip() for t in args.transcript_id.split(",") if t.strip()]
-    if not genes and not transcripts:
-        raise SystemExit("give --gene-id and/or --transcript-id")
+    if not genes:
+        raise SystemExit("give --gene-id")
 
     coverage = None
     if args.coverage:
@@ -49,11 +47,10 @@ def main(argv=None):
         import coverage_schema
         coverage = coverage_schema.open_coverage(args.coverage)
     try:
-        log("%s: resolving %d gene(s) and %d transcript(s)"
-            % (args.sample, len(genes), len(transcripts)))
+        log("%s: resolving %d gene(s)" % (args.sample, len(genes)))
         wide, tidy, dump = lib.compute_partition(
             args.sample, args.genome_bam, args.transcriptome_bam,
-            gene_ids=genes, transcript_ids=transcripts, coverage=coverage, log=log)
+            gene_ids=genes, coverage=coverage, log=log)
     finally:
         if coverage is not None:
             coverage.close()

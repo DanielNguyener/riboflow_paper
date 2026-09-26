@@ -71,7 +71,7 @@ INTEGER_COLUMNS = ["reads", "max_consec", "Start length", "End length",
                    "Read counts (15-40)", "Read counts (27-30)", "Read counts (dynamic)"]
 ROUNDED_COLUMNS = ["periodicity", "cds_cov", "norm_depth"]
 
-def load_qc(rda=None, qc_csv=None, dump_to=None):
+def load_qc(rda=None, qc_csv=None):
     """The ribobaser QC table: either a previous CSV dump, or `Rscript` over the .rda.
 
     The .rda is an R binary; `Rscript`'s `write.csv` is how the original selection read it,
@@ -95,9 +95,8 @@ def load_qc(rda=None, qc_csv=None, dump_to=None):
                 "or dump the table elsewhere and pass --qc-csv:\n"
                 "  Rscript -e 'load(\"%s\"); write.csv(Ribobase_QC_dedup_data, \"qc.csv\", "
                 "row.names=FALSE)'" % rda)
-        handle, path = tempfile.mkstemp(suffix=".csv")
-        os.close(handle)
-        try:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "qc.csv")
             script = ('load("%s"); write.csv(Ribobase_QC_dedup_data, "%s", row.names=FALSE)'
                       % (rda, path))
             result = subprocess.run(["Rscript", "-e", script], capture_output=True)
@@ -105,11 +104,6 @@ def load_qc(rda=None, qc_csv=None, dump_to=None):
                 raise SystemExit("Rscript failed reading %s:\n%s"
                                  % (rda, result.stderr.decode("utf-8", "replace")))
             frame = pd.read_csv(path)
-            if dump_to:
-                Path(dump_to).parent.mkdir(parents=True, exist_ok=True)
-                Path(dump_to).write_bytes(Path(path).read_bytes())
-        finally:
-            os.unlink(path)
 
     required = ["Experiment", "Study", "Cell line", "Species"] + QC_PASSTHROUGH
     missing = [c for c in required if c not in frame.columns]
@@ -269,11 +263,7 @@ def build_table(qc, metadata, apply_override=True):
     return table
 
 def sha256(path):
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
@@ -287,8 +277,6 @@ def main(argv=None):
                              "temporary path to inspect it, or "
                              "supporting_information/S1_Table/samples.csv to replace the "
                              "shipped copy.")
-    parser.add_argument("--dump-qc", type=Path,
-                        help="also save the Rscript dump of the QC table here")
     parser.add_argument("--no-override", action="store_true",
                         help="the automatic selection alone, WITHOUT the MCF10A quality "
                              "override -- 24 rows that are not the published panel")
@@ -298,7 +286,7 @@ def main(argv=None):
     parser.add_argument("--force", action="store_true", help="overwrite --output")
     args = parser.parse_args(argv)
 
-    qc = load_qc(args.rda, args.qc_csv, args.dump_qc)
+    qc = load_qc(args.rda, args.qc_csv)
     metadata = load_matched_rna(args.xlsx)
     table = build_table(qc, metadata, apply_override=not args.no_override)
 
@@ -321,37 +309,14 @@ def main(argv=None):
                       "script was written")
             return 0
         print("[s1] DIFFERS from %s" % reference, file=sys.stderr)
-        _report_difference(table, reference)
+        _report_difference(args.output, reference)
         return 1
     return 0
 
-def _report_difference(table, reference):
-    """Name what differs, rather than leaving a reader to diff 24 rows by hand."""
-    expected = pd.read_csv(reference, dtype=str)
-    produced = table.astype(str)
-    if list(produced.columns) != list(expected.columns):
-        print("  columns differ:\n    produced: %s\n    expected: %s"
-              % (list(produced.columns), list(expected.columns)), file=sys.stderr)
-        return
-    if len(produced) != len(expected):
-        print("  row count: produced %d, expected %d" % (len(produced), len(expected)),
-              file=sys.stderr)
-    produced_gsms, expected_gsms = list(produced["ribo_GSM"]), list(expected["ribo_GSM"])
-    if produced_gsms != expected_gsms:
-        only_produced = [g for g in produced_gsms if g not in expected_gsms]
-        only_expected = [g for g in expected_gsms if g not in produced_gsms]
-        print("  membership/order: produced-only %s, expected-only %s"
-              % (only_produced or "-", only_expected or "-"), file=sys.stderr)
-    shared = [g for g in produced_gsms if g in expected_gsms]
-    produced_i, expected_i = produced.set_index("ribo_GSM"), expected.set_index("ribo_GSM")
-    for gsm in shared:
-        for column in produced.columns:
-            if column == "ribo_GSM":
-                continue
-            a, b = produced_i.loc[gsm, column], expected_i.loc[gsm, column]
-            if a != b:
-                print("  %s %-24s produced=%r expected=%r" % (gsm, column, a, b),
-                      file=sys.stderr)
-
-if __name__ == "__main__":
-    sys.exit(main())
+def _report_difference(produced_csv, reference):
+    """A unified diff of the produced CSV against the reference, on stderr."""
+    import difflib
+    sys.stderr.writelines(difflib.unified_diff(
+        Path(reference).read_text().splitlines(keepends=True),
+        Path(produced_csv).read_text().splitlines(keepends=True),
+        fromfile=str(reference), tofile=str(produced_csv)))

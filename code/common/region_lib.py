@@ -2,7 +2,6 @@
 """Transcript-region classification: the five-way ribopy scheme, applied to both routes."""
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
@@ -16,8 +15,6 @@ for _entry in (str(_HERE), str(_HERE / "ribo_seq_qc")):
         sys.path.insert(0, _entry)
 import bam_inputs as fc
 
-_UTR5_RE = re.compile(r"\|UTR5:(\d+)-(\d+)\|")
-_CDS_RE = re.compile(r"\|CDS:(\d+)-(\d+)\|")
 
 DEFAULT_LEFT_SPAN = 35
 DEFAULT_RIGHT_SPAN = 10

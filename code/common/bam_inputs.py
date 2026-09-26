@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -27,7 +26,6 @@ RNA_TXOME_BAM_TEMPLATE = ("{s}/rnaseq/transcriptome/alignment_ribo/merged/"
 #: Transcriptome BAMs carry no NH tag; Bowtie2 MAPQ 42 = confident unique (~94 % of reads).
 DEFAULT_TXOME_MIN_MAPQ = 42
 
-_CDS_HEADER = re.compile(r"\|CDS:(\d+)-(\d+)\|")
 
 class InputError(RuntimeError):
     pass
@@ -54,7 +52,7 @@ def output_root() -> Path:
     return Path(os.environ.get("RIBOFLOW_PAPER_OUT", REPO / "results"))
 
 def txome_min_mapq() -> int:
-    return int(os.environ.get("RIBOFLOW_PAPER_TXOME_MIN_MAPQ", DEFAULT_TXOME_MIN_MAPQ))
+    return DEFAULT_TXOME_MIN_MAPQ
 
 # ── the one uniqueness policy ────────────────────────────────────────────────
 # Genome uniqueness is `NH == 1` from the tag, never inferred from MAPQ; a missing NH is
@@ -87,24 +85,17 @@ def is_unique_txome_read(read) -> bool:
         return False
     return read.mapping_quality >= txome_min_mapq()
 
-def _template(name, default):
-    return os.environ.get(name, default)
-
 def genome_bam(sample: str) -> Path:
-    return bams_root() / _template(
-        "RIBOFLOW_PAPER_GENOME_BAM_TPL", GENOME_BAM_TEMPLATE).format(s=sample)
+    return bams_root() / GENOME_BAM_TEMPLATE.format(s=sample)
 
 def txome_bam(sample: str) -> Path:
-    return bams_root() / _template(
-        "RIBOFLOW_PAPER_TXOME_BAM_TPL", TXOME_BAM_TEMPLATE).format(s=sample)
+    return bams_root() / TXOME_BAM_TEMPLATE.format(s=sample)
 
 def rna_genome_bam(sample: str) -> Path:
-    return bams_root() / _template(
-        "RIBOFLOW_PAPER_RNA_GENOME_BAM_TPL", RNA_GENOME_BAM_TEMPLATE).format(s=sample)
+    return bams_root() / RNA_GENOME_BAM_TEMPLATE.format(s=sample)
 
 def rna_txome_bam(sample: str) -> Path:
-    return bams_root() / _template(
-        "RIBOFLOW_PAPER_RNA_TXOME_BAM_TPL", RNA_TXOME_BAM_TEMPLATE).format(s=sample)
+    return bams_root() / RNA_TXOME_BAM_TEMPLATE.format(s=sample)
 
 def discover_samples() -> list:
     """Samples with BOTH a genome and a transcriptome ribo BAM present."""

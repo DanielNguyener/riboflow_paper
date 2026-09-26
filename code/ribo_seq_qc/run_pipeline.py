@@ -137,8 +137,6 @@ def main():
                              "they illustrate are in the QC table.")
     parser.add_argument("--skip-existing", action="store_true",
                         help="Skip a step if its staging output already exists.")
-    parser.add_argument("--aggregate-only", action="store_true",
-                        help="Skip the per-sample steps; rebuild the masters from staging.")
     args = parser.parse_args()
 
     steps = [s.strip() for s in args.steps.split(",") if s.strip()]
@@ -159,11 +157,6 @@ def main():
                          % (sorted(wanted), args.bam_dir))
 
     os.makedirs(os.path.join(out_dir(args.route), "tables", "_staging"), exist_ok=True)
-
-    if args.aggregate_only:
-        aggregate([s for s, _ in samples], args.route)
-        print("\nDone. Aggregation only -- no per-sample steps run.")
-        return
 
     print("Discovered %d %s sample(s): %s" % (len(samples), args.route, [s for s, _ in samples]))
     print("Steps: %s" % steps)

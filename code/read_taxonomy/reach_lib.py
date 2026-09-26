@@ -33,23 +33,6 @@ REACH_CATEGORIES = [
     "other_unclassified",
 ]
 
-CATEGORY_LABEL = {
-    "representable_not_present_in_dedup_bam": "representable, not in dedup'd txome BAM",
-    "splice_junction_absent": "splice junction absent from selected isoform",
-    "nonselected_isoform_exon": "exon of a nonselected isoform",
-    "protein_coding_gene_omitted": "protein-coding gene omitted from transcriptome",
-    "pseudogene": "pseudogene",
-    "non_protein_coding_gene": "non-protein-coding gene",
-    "intronic": "intronic",
-    "intergenic": "intergenic",
-    "other_unclassified": "other/unclassified",
-}
-
-UNREACHABLE_CATEGORIES = [
-    "splice_junction_absent", "nonselected_isoform_exon", "protein_coding_gene_omitted",
-    "pseudogene", "non_protein_coding_gene", "intronic", "intergenic", "other_unclassified",
-]
-
 def read_genome_blocks(bam_path, qnames):
     """qname -> (chrom, strand, blocks) for the given qname set only."""
     out = {}
@@ -84,31 +67,7 @@ def omitted_pc_genes(exon_gene_df, selected_genes):
 # that is absent from that gene's selected transcript. Strand-agnostic, indifferent to
 # junctions and to whether the rest of the alignment fits the selected transcript.
 
-def _merge(intervals):
-    """Sorted, merged [start, end) intervals (as in gene_read_partition_lib)."""
-    out = []
-    for start, end in sorted(intervals):
-        if out and start <= out[-1][1]:
-            out[-1][1] = max(out[-1][1], end)
-        else:
-            out.append([start, end])
-    return [tuple(i) for i in out]
-
-def _subtract(intervals, holes):
-    """Merged `intervals` minus merged `holes` (as in gene_read_partition_lib)."""
-    out = []
-    holes = _merge(holes)
-    for start, end in _merge(intervals):
-        cursor = start
-        for h_start, h_end in holes:
-            if h_end <= cursor or h_start >= end:
-                continue
-            if h_start > cursor:
-                out.append((cursor, h_start))
-            cursor = max(cursor, h_end)
-        if cursor < end:
-            out.append((cursor, end))
-    return out
+from intervals import merge as _merge, subtract as _subtract  # noqa: E402
 
 def build_omitted_exon_index(exon_gene_df, table):
     """{chrom: (starts, ends)}: the union, over every gene with a selected transcript, of

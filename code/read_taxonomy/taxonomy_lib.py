@@ -16,26 +16,6 @@ for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc")):
         sys.path.insert(0, _entry)
 import bam_inputs as fc
 
-def sample_to_gsm(samples_csv=None):
-    """sample name -> ribo_GSM, from the sample table.
-
-    `cell_line` uses spaces where sample names use underscores, so the key is normalised.
-    """
-    if samples_csv is None:
-        samples_csv = os.environ.get("RIBOFLOW_PAPER_SAMPLES_CSV")
-    if samples_csv is None:
-        samples_csv = (Path(__file__).resolve().parents[2] / "supporting_information"
-                       / "S1_Table" / "samples.csv")
-    samples_csv = Path(samples_csv)
-    if not samples_csv.exists():
-        raise SystemExit(
-            "sample table not found: %s\nPass an explicit path, set "
-            "RIBOFLOW_PAPER_SAMPLES_CSV, or keep the table at "
-            "supporting_information/S1_Table/samples.csv" % samples_csv)
-    frame = pd.read_csv(samples_csv)
-    return {row["cell_line"].replace(" ", "_"): row["ribo_GSM"]
-            for _, row in frame.iterrows()}
-
 GENOME_STATES = ("unique", "multi", "absent")
 TXOME_STATES = ("present", "absent")
 #: The five cells of the read-ID taxonomy: genome status x transcriptome presence, minus

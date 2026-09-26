@@ -29,7 +29,7 @@ figures:
     composer: rows_1to1             # native size, letters above each row
     rows: [[fig04A_plos, fig04B_plos, fig04C_plos, fig04D_plos]]
     letters: ABCD
-    page: {max_width_pt: 540.0, max_height_pt: 630.0, margin_pt: 4.0, gutter_pt: 6.0,
+    page: {max_width_pt: 540.0, margin_pt: 4.0, gutter_pt: 6.0,
            row_gap_pt: 10.0, letter_pt: 10.0}
     raster: {kind: fitz, dpi: 600}
     output: figures/published/Fig4
@@ -37,7 +37,7 @@ figures:
     composer: rows_1to1
     rows: [[fig05A], [fig05B]]
     letters: AB
-    page: {max_width_pt: 540.0, max_height_pt: 630.0, margin_pt: 4.0, gutter_pt: 6.0,
+    page: {max_width_pt: 540.0, margin_pt: 4.0, gutter_pt: 6.0,
            row_gap_pt: 10.0, letter_pt: 10.0}
     raster: {kind: fitz, dpi: 600}
     output: figures/published/Fig5
@@ -45,7 +45,7 @@ figures:
     composer: rows_1to1             # one generator page; its seven letters are drawn by the generator
     rows: [[fig06]]
     letters: [""]
-    page: {max_width_pt: 540.0, max_height_pt: 630.0, margin_pt: 4.0, gutter_pt: 6.0,
+    page: {max_width_pt: 540.0, margin_pt: 4.0, gutter_pt: 6.0,
            row_gap_pt: 10.0, letter_pt: 10.0}
     raster: {kind: fitz, dpi: 600}
     output: figures/published/Fig6
@@ -186,49 +186,6 @@ panels:
     output: results/panels/fig03C_assay_plane
 
   # ── Figure 4 ────────────────────────────────────────────────────────────────
-  - id: fig04A
-    figure: 4
-    panel: A
-    title: Distinct mapped read IDs per route
-    generator: code/panels/plot_route_read_counts.py
-    inputs:
-      taxonomy:  data/read_taxonomy/taxonomy/taxonomy_all.tsv
-      samples_csv: supporting_information/S1_Table/samples.csv
-    output: results/panels/fig04A_route_read_counts
-
-  - id: fig04B
-    figure: 4
-    panel: B
-    title: Read-ID union composition
-    generator: code/panels/plot_read_id_union.py
-    inputs:
-      taxonomy:    data/read_taxonomy/taxonomy/taxonomy_all.tsv
-      samples_csv: supporting_information/S1_Table/samples.csv
-    args: {hide_labels: true}
-    output: results/panels/fig04B_read_id_union
-
-  - id: fig04C
-    figure: 4
-    panel: C
-    title: Protein-coding to pseudogene tie share of genome multimappers
-    generator: code/panels/plot_cohort_share.py
-    args: {panel: C}
-    inputs:
-      tie_master: data/read_taxonomy/multimap_biotype/multimap_tie_biotype_all.tsv
-      taxonomy:   data/read_taxonomy/taxonomy/taxonomy_all.tsv
-    output: results/panels/fig04C_multimap_tie_biotype
-
-  - id: fig04D
-    figure: 4
-    panel: D
-    title: Omitted alternative-exon overlap of genome-only unique reads
-    generator: code/panels/plot_cohort_share.py
-    args: {panel: D}
-    inputs:
-      reach_master: data/read_taxonomy/reach/genome_anchored_reach_all.tsv
-      taxonomy:     data/read_taxonomy/taxonomy/taxonomy_all.tsv
-    output: results/panels/fig04D_nonselected_isoform_reach
-
   - id: fig04A_plos
     figure: 4
     panel: A

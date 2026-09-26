@@ -249,31 +249,8 @@ def build_annotation_cache(gtf=None, appris=None):
     _cols = ["Chromosome", "Start", "End", "Strand"]
     all_gene_bodies_df = pd.DataFrame(gene_rows) if gene_rows else pd.DataFrame(columns=_cols)
 
-    payloads = {"appris_cds": cds_df, "appris_meta": meta_df, "appris_utr": utr_df,
-                "appris_gene_body": gene_body_df, "all_gene_bodies": all_gene_bodies_df}
-    _write_bundle(payloads, gtf, appris)
-    return payloads
-
-def _write_bundle(payloads, gtf, appris):
-    """Write the bundle atomically (temp file + os.replace) so readers never see a partial pickle."""
-    import pickle
-    import tempfile
-
-    target = bundle_path()
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    document = {"schema_version": CACHE_SCHEMA_VERSION,
-                "fingerprint": bundle_fingerprint(gtf, appris),
-                "payloads": payloads}
-    handle, temporary = tempfile.mkstemp(dir=os.path.dirname(target), suffix=".tmp")
-    try:
-        with os.fdopen(handle, "wb") as stream:
-            pickle.dump(document, stream, protocol=4)
-        os.replace(temporary, target)
-    except BaseException:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
-        raise
-    return target
+    return {"appris_cds": cds_df, "appris_meta": meta_df, "appris_utr": utr_df,
+            "appris_gene_body": gene_body_df, "all_gene_bodies": all_gene_bodies_df}
 
 def annotation_fingerprint(extra=()):
     """Content digest of the GTF + APPRIS + `extra` terms, for annotation-derived caches
@@ -316,21 +293,12 @@ def cached_frame(path, fingerprint, build):
 
 def load_bundle(gtf=None, appris=None):
     """The five tables, rebuilding whenever the cached bundle is not the current one
-    (absent, unreadable, different schema version, inputs or builder)."""
-    import pickle
+    (absent, unreadable, different schema version, inputs or builder).
 
-    path = bundle_path()
-    if os.path.exists(path):
-        try:
-            with open(path, "rb") as stream:
-                document = pickle.load(stream)
-            if (document.get("schema_version") == CACHE_SCHEMA_VERSION
-                    and document.get("fingerprint") == bundle_fingerprint(gtf, appris)
-                    and set(document.get("payloads", {})) == set(BUNDLE_PAYLOADS)):
-                return document["payloads"]
-        except Exception:
-            pass
-    return build_annotation_cache(gtf=gtf, appris=appris)
+    `bundle_fingerprint` covers the schema version, the inputs and the builder source, so
+    `cached_frame`'s fingerprint test is the whole validity test."""
+    return cached_frame(bundle_path(), bundle_fingerprint(gtf, appris),
+                        lambda: build_annotation_cache(gtf=gtf, appris=appris))
 
 def load_annotation(gtf=None, appris=None):
     """The per-CDS-exon annotation table for APPRIS principal isoforms."""

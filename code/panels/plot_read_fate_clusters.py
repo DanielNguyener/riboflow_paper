@@ -78,14 +78,6 @@ def r_merge_to_linkage(merge, height):
     return Z
 
 
-def linkage_to_r_merge(Z):
-    """The inverse: R's merge matrix and heights from a scipy linkage matrix."""
-    n = len(Z) + 1
-    ids = Z[:, :2].astype(int)
-    merge = np.where(ids < n, -(ids + 1), ids - n + 1)
-    return merge, Z[:, 2].copy()
-
-
 def same_partition(a, b):
     """True when two labellings induce the same partition (labels may differ)."""
     table = pd.crosstab(np.asarray(a), np.asarray(b))
@@ -423,7 +415,6 @@ def main(argv=None):
                         help="<stem>.omitted_sequence_genes.tsv: panel F")
     parser.add_argument("--reference-duplication", type=Path,
                         help="<stem>.reference_duplication_entries.tsv: panel G")
-    parser.add_argument("--figsize", nargs=2, type=float, default=FIGSIZE)
     parser.add_argument("--output", required=True, type=Path, help="stem, no extension")
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
@@ -434,7 +425,7 @@ def main(argv=None):
           % (args.clusters.name, k, len(clusters)))
     ps.apply_rcparams()
     ps.resolve_font()
-    fig, _legend = draw(k, clusters, centroids, X, Z, validation, tuple(args.figsize))
+    fig, _legend = draw(k, clusters, centroids, X, Z, validation)
     for path in ps.save(fig, args.output, ps.resolve_formats(args.formats), args.force):
         print("[panel] wrote %s" % path)
     return 0

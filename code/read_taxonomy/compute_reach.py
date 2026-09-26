@@ -16,7 +16,7 @@ fc = rl.fc
 
 STAGING = rl.OUTDIR / "_staging"
 TAXONOMY_TSV = fc.output_root() / "read_taxonomy" / "taxonomy" / "taxonomy_all.tsv"
-def compute_sample(sample, dump_reads=False, log=print):
+def compute_sample(sample, log=print):
     tax_row = pd.read_csv(TAXONOMY_TSV, sep="\t").set_index("sample").loc[sample]
 
     n_genome_unique = int(tax_row["n_genome_unique"])
@@ -73,11 +73,6 @@ def compute_sample(sample, dump_reads=False, log=print):
     out = STAGING / f"{sample}.tsv"
     pd.DataFrame([row]).to_csv(out, sep="\t", index=False)
     log(f"[{sample}] wrote {out}")
-
-    if dump_reads:
-        _dump_read_table(sample, gUtA_qnames, genome_blocks, table, gene2tid, exon_gene_pr,
-                         labels, overlap_qnames)
-
     return row
 
 def _all_gene_body_pr():
@@ -85,42 +80,11 @@ def _all_gene_body_pr():
     df = fc.config.load_all_gene_bodies()
     return pr.PyRanges(df.reset_index(drop=True))
 
-def _dump_read_table(sample, gUtA_qnames, genome_blocks, table, gene2tid, exon_gene_pr,
-                     labels, overlap_qnames):
-    """Debug dump: one row per gU_tA read, per the user's requested ~20-column schema.
-    Single-sample only: `gU_tA` alone is ~1M rows per sample."""
-    import pyranges as pr
-
-    rows = []
-    for q in gUtA_qnames:
-        rec = genome_blocks.get(q)
-        if rec is None:
-            continue
-        chrom, strand, blocks = rec
-        rows.append({
-            "sample_id": sample, "read_id": q,
-            "genome_chromosome": chrom,
-            "genome_start": min(b[0] for b in blocks),
-            "genome_end": max(b[1] for b in blocks),
-            "genome_strand": strand,
-            "genome_n_blocks": len(blocks),
-            "comparison_category": labels.get(q, "other_unclassified"),
-            "overlaps_omitted_exonic_sequence": q in overlap_qnames,
-            "present_in_deduplicated_transcriptome_bam": False,
-            "transcriptome_mapping_status": "absent",
-        })
-    df = pd.DataFrame(rows)
-    out = rl.OUTDIR / f"{sample}_gUtA_read_dump.tsv"
-    df.to_csv(out, sep="\t", index=False)
-    print(f"[{sample}] wrote debug read dump {out} ({len(df)} rows)")
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--sample", required=True)
-    ap.add_argument("--dump-reads", action="store_true",
-                    help="also write a per-read debug TSV for this sample only")
     args = ap.parse_args()
-    compute_sample(args.sample, dump_reads=args.dump_reads)
+    compute_sample(args.sample)
 
 if __name__ == "__main__":
     main()
