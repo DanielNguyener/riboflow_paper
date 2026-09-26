@@ -15,7 +15,6 @@ Run with `python` (3.9).
 """
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
 
@@ -77,24 +76,14 @@ def bams(tmp_path_factory):
     return genome, txome
 
 
-def _load(path, name):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @pytest.fixture(scope="module")
 def lib():
-    return _load(CODE / "alignment_fate" / "gene_read_partition_lib.py",
-                 "gene_read_partition_lib")
+    import gene_read_partition_lib
+    return gene_read_partition_lib
 
 
 @pytest.fixture(scope="module")
 def tie_lib():
-    for entry in (CODE / "read_taxonomy", CODE / "common", CODE / "common" / "ribo_seq_qc"):
-        if str(entry) not in sys.path:
-            sys.path.insert(0, str(entry))
     import tie_biotype_lib
     return tie_biotype_lib
 
@@ -144,7 +133,7 @@ def test_read_state_gene_side_matches_the_fetch(bams, expected, tmp_path):
 
 
 def test_locus_status_uses_the_same_rule(bams, expected):
-    locus = _load(CODE / "alignment_fate" / "build_locus_data.py", "build_locus_data")
+    import build_locus_data as locus
     _members, status, audit = locus.locus_ribo_reads(
         str(bams[0]), CHROM, *GENE, lengths={30}, offsets={30: 12})
     assert set(status) == expected
@@ -239,6 +228,6 @@ def test_chain_rejects_a_genome_side_read_without_a_primary(lib):
     "genome_unique_absent_nonselected_isoform_exon"))
 def test_retired_categories_fail_validation(lib, category):
     assert category not in lib.PARTITION_CATEGORIES
-    fold = _load(CODE / "panels" / "plot_gene_read_partition.py", "plot_gene_read_partition")
+    import plot_gene_read_partition as fold
     with pytest.raises(SystemExit, match="unknown chain category"):
         fold._route7_segment(category, True)

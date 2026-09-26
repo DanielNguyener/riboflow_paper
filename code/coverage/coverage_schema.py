@@ -563,11 +563,6 @@ class CoverageFile:
             raise SchemaError("unknown signal %r" % name)
         return self.handle["coverage"][name][:]
 
-    def cds_window_sums(self, values, trim: int = 0) -> np.ndarray:
-        """Per-transcript sum of a full-coordinate array over the CDS trimmed by `trim`."""
-        return window_sums(values, self._offset, self._cds_start + trim,
-                           self._cds_end - trim)
-
     def close(self):
         self.handle.close()
 

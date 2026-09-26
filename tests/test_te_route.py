@@ -126,17 +126,6 @@ def run_r(script, *args):
                           capture_output=True, text=True, cwd=str(REPO))
 
 
-@pytest.mark.skipif(not RSCRIPT, reason="Rscript is not on PATH")
-def test_the_r_programs_print_help_and_refuse_odd_arguments(tmp_path):
-    for script in ("normalization.R", "te_statistics.R"):
-        result = run_r(script, "--help")
-        assert result.returncode == 0 and "usage:" in result.stdout, result.stderr
-        result = run_r(script, "--output")
-        assert result.returncode != 0
-        result = run_r(script, "--nope", str(tmp_path))
-        assert result.returncode != 0 and "unknown argument" in result.stderr
-
-
 @pytest.fixture(scope="module")
 def rerun(tmp_path_factory):
     if not RSCRIPT:

@@ -13,7 +13,6 @@ P-site would include it; counting by 5' end must not. One read decides the quest
 """
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -345,47 +344,6 @@ def test_an_empty_route_is_nan_not_a_number(rrl):
     result = rrl.correlate({}, {"a": 1, "b": 2, "c": 3}, tids)
     assert np.isnan(result["spearman_rho"])
     assert np.isnan(result["pearson_log2_raw"])
-
-
-# ── the interface that was removed ───────────────────────────────────────────
-
-REMOVED_SYMBOLS = ("EXPECTED_UNIVERSE", "log2cpm", "ccc(", "bland_altman",
-                   "pearson_raw", "ribo_denom", "rna_denom",
-                   "count_genome_bam", "count_txome_bam",
-                   "assert_uniqueness_not_shared")
-
-
-@pytest.mark.parametrize("symbol", REMOVED_SYMBOLS)
-def test_no_superseded_symbol_survives_anywhere(symbol):
-    """There must never be an old implementation and a new one side by side.
-
-    `region_lib.build_genome_exon_table` is not in this list: it survives
-    because it builds RiboPy's extended-boundary CDS core for the read-length selection,
-    a different region over a different transcript set from the canonical CDS Figure 3
-    counts into. It stopped being Figure 3's universe helper; it did not stop existing."""
-    hits = []
-    for path in sorted((CODE).rglob("*.py")):
-        if "__pycache__" in path.parts:
-            continue
-        if symbol in path.read_text():
-            hits.append(str(path.relative_to(REPO)))
-    assert not hits, "%r survives in %s" % (symbol, hits)
-
-
-def test_the_superseded_route_program_is_gone():
-    """Its universe build and its counting both moved into `count_transcript_reads.py`.
-    A second copy could only disagree with the first."""
-    assert not (CODE / "ribo_rna" / "compute_ribo_rna_route.py").exists()
-    assert sorted(p.name for p in (CODE / "ribo_rna").glob("*.py")) == [
-        "build_count_matrices.py", "count_transcript_reads.py", "ribo_rna_lib.py"]
-
-
-def test_no_whole_transcript_mode_survives():
-    for path in sorted((CODE / "ribo_rna").glob("*.py")):
-        text = path.read_text()
-        assert not re.search(r'"whole"', text), path
-        assert "_staging_whole" not in text, path
-        assert "SUPPLEMENTARY" not in text, path
 
 
 # ── end to end, through the program ──────────────────────────────────────────

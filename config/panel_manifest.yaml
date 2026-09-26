@@ -136,8 +136,11 @@ panels:
 
   # ── Figure 3 ────────────────────────────────────────────────────────────────
   # One generator draws the combined page and the single panels from the same geometry.
-  # The combined page is the published figure; the singles are for panel-level verify.
+  # The combined page IS the published figure (assemble_figures pages it into
+  # Fig3_plos.pdf / Fig3.tif, which the clean-copy test checks byte-for-byte), so it
+  # keeps no separate reference PDF; the singles are the panel-level references.
   - id: fig03
+    reference: false
     figure: 3
     panel: null
     title: Alignment route and translation efficiency, three panels

@@ -48,8 +48,12 @@ COVERAGE_CODE = CODE / "coverage"
 
 # Import the pipeline modules the ordinary way: they are plain modules in one directory
 # that import each other by bare name. No sys.modules pre-registration, no loader tricks.
+# No two modules across these directories share a file name, so one path list serves
+# every test.
 for _entry in (COVERAGE_CODE, CODE / "panels", CODE / "common",
-               CODE / "common" / "ribo_seq_qc"):
+               CODE / "common" / "ribo_seq_qc", CODE / "alignment_fate",
+               CODE / "read_taxonomy", CODE / "clustering", CODE / "ribo_rna",
+               REPO / "supporting_information" / "S1_Table"):
     if str(_entry) not in sys.path:
         sys.path.insert(0, str(_entry))
 
@@ -399,10 +403,6 @@ def build_qc_master(path: Path, sample=SAMPLE, offset=OFFSET):
 # A second geometry, identical in shape but with TX_PLUS's second exon moved. Used to
 # write DIFFERENT content to the SAME GTF path: the annotation change a path comparison
 # cannot see and a digest comparison must.
-VARIANT_EXONS = dict(EXONS)
-VARIANT_EXONS[TX_PLUS] = [(970, 1060), (3000, 3110)]
-VARIANT_GEOMETRY = dict(GEOMETRY)
-VARIANT_GEOMETRY[TX_PLUS] = ("chr1", "+", [(1000, 1060), (3000, 3036)], 96, 66)
 
 
 # ── the build fixtures ────────────────────────────────────────────────────────
@@ -477,18 +477,7 @@ def expected_psite(tid, trim=TRIM):
             full[rel] += 1
     if tid == TX_PLUS:
         full[JUNCTION_PSITE_CDS_REL] += 1
-    return full[trim:total - trim] if trim else full
-
-
-def expected_psite_txome(tid, trim=TRIM):
-    """The transcriptome route sees the same plan minus the junction spanner, which has
-    no transcriptome counterpart -- a spliced reference contains no introns to span."""
-    total = GEOMETRY[tid][3]
-    full = np.zeros(total, dtype=np.int32)
-    for other, rel, _n in PSITE_PLAN:
-        if other == tid:
-            full[rel] += 1
-    return full[trim:total - trim] if trim else full
+    return full[trim:total - trim]
 
 
 def expected_footprint_genome(tid, trim=TRIM):
@@ -510,30 +499,7 @@ def expected_footprint_genome(tid, trim=TRIM):
     }[tid]
     for start, length in spans:
         full[start:start + length] += 1
-    return full[trim:total - trim].astype(np.int32) if trim else full.astype(np.int32)
-
-
-def expected_footprint_txome(tid, trim=TRIM):
-    """Hand-computed CDS-interior footprint vector on the transcriptome route.
-
-    The same plan as the genome route, minus the junction spanner, plus the two
-    CDS-boundary-straddling reads clipped to the CDS. The two wholly-UTR reads cover no
-    CDS base and so do not appear here (they DO appear in the UTR regions of the stored
-    full-transcript vector, which is what makes the CDS slice a slice and not a filter).
-    """
-    total = GEOMETRY[tid][3]
-    full = np.zeros(total, dtype=np.int64)
-    spans = {
-        TX_PLUS: [(8, READ_LEN), (8, READ_LEN2),
-                  (28, READ_LEN),
-                  (0, 23),
-                  (0, 20),                 # clip5: transcript 20..50 -> cds_rel 0..19
-                  (80, 16)],               # clip3: transcript 110..140 -> cds_rel 80..95
-        TX_MINUS: [(18, 30), (38, 30)],
-    }[tid]
-    for start, length in spans:
-        full[start:min(start + length, total)] += 1
-    return full[trim:total - trim].astype(np.int32) if trim else full.astype(np.int32)
+    return full[trim:total - trim].astype(np.int32)
 
 
 def cds_interior(coverage, tid, signal, trim=TRIM):

@@ -203,12 +203,12 @@ def main(argv=None):
             continue
         primary = REPO / (entry["output"] + "." + formats[0])
         verdict = detail = None
-        if args.accept:
+        if args.accept and entry.get("reference", True):
             REFERENCES.mkdir(parents=True, exist_ok=True)
             destination = REFERENCES / primary.name
             destination.write_bytes(primary.read_bytes())
             log("  accepted as reference: %s" % destination.relative_to(REPO))
-        if args.verify:
+        if args.verify and entry.get("reference", True):
             verdict, detail = compare_to_reference(primary, REFERENCES / primary.name)
             log("  vs reference: %s -- %s" % (verdict, detail))
         results.append((panel_id, True, verdict, detail))

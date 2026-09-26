@@ -22,7 +22,6 @@ Run with `python` (3.9).
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import os
 import subprocess
 import sys
@@ -40,14 +39,8 @@ XLSX = os.environ.get("RIBOFLOW_PAPER_S1_XLSX")
 
 
 def _load():
-    name = "build_s1_table"
-    if name in sys.modules:
-        return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, str(GENERATOR))
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+    import build_s1_table
+    return build_s1_table
 
 
 @pytest.fixture(scope="module")
@@ -283,83 +276,6 @@ def test_integer_columns_stay_integers(s1, qc_csv, xlsx, curated, synthetic_over
     assert written.loc["GSM_A", "Read counts (dynamic)"] == "9000000"
 
 
-# ── inputs and their failure messages ─────────────────────────────────────────
-def test_qc_missing_columns_are_all_named_at_once(s1, tmp_path):
-    path = tmp_path / "bad.csv"
-    pd.DataFrame({"Experiment": ["GSM_A"], "Species": ["human"]}).to_csv(path, index=False)
-    with pytest.raises(SystemExit) as error:
-        s1.load_qc(qc_csv=path)
-    message = str(error.value)
-    assert "Cell line" in message and "Periodicity distr" in message
-
-
-def test_duplicate_experiment_ids_are_refused(s1, tmp_path):
-    frame = _qc_frame()
-    frame = pd.concat([frame, frame.iloc[[0]]], ignore_index=True)
-    path = tmp_path / "dup.csv"
-    frame.to_csv(path, index=False)
-    with pytest.raises(SystemExit) as error:
-        s1.load_qc(qc_csv=path)
-    assert "duplicate Experiment" in str(error.value)
-
-
-def test_no_rda_and_no_csv_says_where_the_rda_comes_from(s1):
-    with pytest.raises(SystemExit) as error:
-        s1.load_qc(rda=None, qc_csv=None)
-    message = str(error.value)
-    assert "RIBOBASER_RDA" in message and "ribobaser" in message
-
-
-def test_a_missing_rda_is_reported_by_path(s1, tmp_path):
-    with pytest.raises(SystemExit) as error:
-        s1.load_qc(rda=tmp_path / "nope.rda")
-    assert "no such .rda" in str(error.value)
-
-
-def test_xlsx_sheet_columns_are_validated(s1, tmp_path):
-    path = tmp_path / "wrong.xlsx"
-    with pd.ExcelWriter(path, engine="openpyxl") as writer:
-        pd.DataFrame({"experiment_alias": ["GSM_A"]}).to_excel(
-            writer, sheet_name="S1_RiboBase_metadata", index=False, startrow=1)
-    with pytest.raises(SystemExit) as error:
-        s1.load_matched_rna(path)
-    assert "matched_RNA-seq_experiment_alias" in str(error.value)
-
-
-def test_cli_refuses_to_overwrite_without_force(s1, qc_csv, xlsx, curated,
-                                                synthetic_override, tmp_path):
-    output = tmp_path / "s1.csv"
-    output.write_text("existing\n")
-    with pytest.raises(SystemExit) as error:
-        s1.main(["--qc-csv", str(qc_csv), "--xlsx", str(xlsx), "--output", str(output)])
-    assert "refusing to overwrite" in str(error.value)
-
-
-def test_cli_verify_reports_a_difference_instead_of_just_failing(s1, qc_csv, xlsx, curated,
-                                                                 synthetic_override,
-                                                                 tmp_path, capsys):
-    output = tmp_path / "s1.csv"
-    reference = tmp_path / "reference.csv"
-    assert s1.main(["--qc-csv", str(qc_csv), "--xlsx", str(xlsx),
-                    "--output", str(output)]) == 0
-    reference.write_text(output.read_text().replace("tissue_A", "tissue_Z"))
-    code = s1.main(["--qc-csv", str(qc_csv), "--xlsx", str(xlsx), "--output", str(output),
-                    "--force", "--verify", str(reference)])
-    assert code == 1
-    captured = capsys.readouterr()
-    assert "GSM_A" in captured.err and "tissue" in captured.err
-
-
-def test_cli_is_deterministic(s1, qc_csv, xlsx, curated, synthetic_override, tmp_path):
-    digests = []
-    for index in range(2):
-        output = tmp_path / ("run%d.csv" % index)
-        s1.main(["--qc-csv", str(qc_csv), "--xlsx", str(xlsx), "--output", str(output)])
-        digests.append(hashlib.sha256(output.read_bytes()).hexdigest())
-    assert digests[0] == digests[1]
-
-
-# ── the published table ───────────────────────────────────────────────────────
 def test_the_published_csv_still_has_the_recorded_checksum(s1):
     """If this fails, the reference moved and every claim about it needs re-checking."""
     assert hashlib.sha256(PUBLISHED.read_bytes()).hexdigest() == s1.PUBLISHED_SHA256

@@ -9,7 +9,6 @@ caches so that the spliced length equals the reference length for every transcri
 """
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
 
@@ -20,20 +19,9 @@ REPO = Path(__file__).resolve().parents[1]
 COVERAGE_DIR = REPO / "code" / "coverage"
 
 
-def _load(name):
-    """Load a coverage module by path. Ordinary deterministic import -- no sys.modules
-    pre-registration, which code in this repository does not use."""
-    if str(COVERAGE_DIR) not in sys.path:
-        sys.path.insert(0, str(COVERAGE_DIR))
-    spec = importlib.util.spec_from_file_location(name, COVERAGE_DIR / ("%s.py" % name))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @pytest.fixture(scope="module")
 def tc():
-    return _load("transcript_coords")
+    return __import__("transcript_coords")
 
 
 # ── synthetic geometry ───────────────────────────────────────────────────────
