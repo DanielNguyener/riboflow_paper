@@ -4,9 +4,30 @@
 Per-base P-site coverage of both routes over the merged exons of the selected isoform and
 the best-supported alternative isoform (the one carrying the most genome-only unique reads
 on non-selected sequence). Writes <output>.npz (coverage vectors + exon blocks) and
-<output>.json (metadata). Introns are drawn as a constant 90-unit gap. The BAM template,
-MAPQ >= 42 rule and cigar-aware P-site are re-implemented here, identically to `common/`
-and `coverage/`.
+<output>.json (metadata). Introns are drawn as a constant 90-unit gap. The BAM template
+and cigar-aware P-site are re-implemented here, identically to `common/` and `coverage/`.
+The transcriptome half counts every primary alignment on the selected transcript: the
+post-dedup BAM is already RiboFlow_v2's MAPQ >= 10 set, and no stricter cut is applied
+(the same rule as Figures 4-6).
+
+Each route's coverage is also split into the read populations of the Figure 5A partition
+(`panels/plot_gene_read_partition.ROUTE7_KEY`), so the two panels share one colour
+vocabulary. "Shared" is read-level presence in both BAMs, exactly as in 5A:
+  genome half   = shared_unique      (genome NH==1, read present in the transcriptome BAM)
+                + shared_multi       (genome NH>1, present in the transcriptome BAM)
+                + genome_only        (genome NH==1, absent from the transcriptome BAM)
+                + genome_only_multi  (genome NH>1, absent from the transcriptome BAM)
+  txome half    = shared_unique (txome primary on the selected transcript, a top-score
+                                 genome placement at the locus, NH==1)
+                + shared_multi  (..., a top-score genome placement at the locus, NH>1)
+                + txome_only    (..., no top-score genome placement at the locus)
+A top-score placement is the read's genome primary or a secondary whose AS equals the
+primary's (any read length): 5A's gene-membership rule. NH is the primary's, as in Figures
+3-4. A lower-scoring secondary at the locus places nothing; neither does a secondary whose
+read has no primary record or no AS. Genome-track coverage places each member read AT MOST
+ONCE, from its qualifying (top-score, at-locus) placements only: identical P-sites collapse
+to one count, disagreeing P-sites omit the read from position-resolved coverage (counted
+per layer in the JSON), and no placement is ever picked arbitrarily.
 
 Published locus: LRRFIP1, chr2:237,627,586-237,781,643 (+), selected ENST00000308482.14,
 alternative ENST00000244815.9 (3,619 nt absent from the selected reference).
@@ -17,6 +38,7 @@ from __future__ import annotations
 import argparse
 import collections
 import csv
+import gzip
 import json
 import os
 import sys
@@ -34,7 +56,6 @@ QC_GENOME_DEFAULT = "data/ribo_seq_qc/genome/tables/readlen_window_qc.csv"
 QC_TXOME_DEFAULT = "data/ribo_seq_qc/transcriptome/tables/readlen_window_qc.csv"
 
 #: Transcriptome-route uniqueness (bowtie2 emits no NH tag): the project-wide rule.
-TXOME_MIN_MAPQ = 42
 #: Fixed width, in plotted units, of the dashed intron connector; recorded in the artifact.
 INTRON_GAP = 90.0
 
@@ -107,7 +128,8 @@ def gene_transcripts(gtf_path, gene_name):
     exons = collections.defaultdict(list)
     chrom = strand = None
     needle = 'gene_name "%s"' % gene_name
-    with open(gtf_path) as handle:
+    opener = gzip.open if str(gtf_path).endswith(".gz") else open
+    with opener(gtf_path, "rt") as handle:
         for line in handle:
             if line[0] == "#" or needle not in line:
                 continue
@@ -123,6 +145,28 @@ def gene_transcripts(gtf_path, gene_name):
     if not exons:
         die("%s has no exon in %s" % (gene_name, gtf_path))
     return {t: sorted(v) for t, v in exons.items()}, chrom, strand
+
+
+def transcript_exons(gtf_path, transcript_id):
+    """[(start, end), ...] (0-based half-open), chrom, strand, gene_name of ONE transcript
+    of any gene -- for a forced alternative model that belongs to another gene id, e.g. a
+    readthrough gene over the same locus."""
+    needle = 'transcript_id "%s"' % transcript_id
+    exons, chrom, strand, name = [], None, None, None
+    opener = gzip.open if str(gtf_path).endswith(".gz") else open
+    with opener(gtf_path, "rt") as handle:
+        for line in handle:
+            if line[0] == "#" or needle not in line:
+                continue
+            fields = line.rstrip("\n").split("\t")
+            if fields[2] != "exon" or needle not in fields[8]:
+                continue
+            exons.append((int(fields[3]) - 1, int(fields[4])))
+            chrom, strand = fields[0], fields[6]
+            name = fields[8].split('gene_name "', 1)[1].split('"', 1)[0]
+    if not exons:
+        die("%s has no exon in %s" % (transcript_id, gtf_path))
+    return sorted(exons), chrom, strand, name
 
 
 def merge(intervals):
@@ -167,32 +211,105 @@ def exonic_bases(blocks, strand):
 # ── reads ────────────────────────────────────────────────────────────────────
 
 def locus_ribo_reads(bam_path, chrom, start, end, lengths, offsets):
-    """{qname: (blocks, nh, psite)} for every primary ribo alignment at the locus, in window."""
-    out = {}
-    dropped = 0
+    """One region fetch (+ one genome pass) -> (members, status, audit).
+
+    `status` holds the primary NH of every read with a TOP-SCORE placement overlapping the
+    locus -- its primary, or a secondary tied with the primary's AS -- with no length
+    filter: Figure 5A's gene-membership rule
+    (`gene_read_partition_lib.resolve_genome_side`), reused to label the transcriptome
+    track's reads. A secondary-only read needs its primary's AS, which may lie anywhere, so
+    those reads get one full genome pass.
+
+    `members` restricts `status` to reads in the read-length window and carries, per read,
+    every QUALIFYING placement at the locus -- the primary when it lies here, plus every
+    secondary whose AS ties the primary's. A lower-scoring secondary places nothing, and no
+    placement is ever picked arbitrarily: {qname: {"nh": int,
+    "alignments": [(blocks, psite or None), ...]}}. The P-site is cigar_aware per
+    placement; the caller collapses a read's placements to at most one count.
+    """
+    primary_here = {}                                  # qname -> (score, blocks, psite)
+    status = {}
+    secondaries = collections.defaultdict(list)        # qname -> [(score, qlen, blocks, psite)]
     bam = pysam.AlignmentFile(bam_path, "rb")
     try:
         if not bam.has_index():
             die("%s has no index; the locus view is a region fetch" % bam_path)
         for read in bam.fetch(chrom, start, end):
-            if read.is_unmapped or read.is_secondary or read.is_supplementary:
+            if read.is_unmapped or read.is_supplementary:
                 continue
-            if read.query_length not in lengths:
-                continue
+            score = int(read.get_tag("AS")) if read.has_tag("AS") else None
+            qlen = read.query_length or read.infer_query_length() or 0
             blocks = read.get_blocks()
-            if not blocks:
+            psite = (psite_reference_position(read, offsets[qlen])
+                     if qlen in lengths and blocks else None)
+            if read.is_secondary:
+                secondaries[read.query_name].append((score, qlen, blocks, psite))
                 continue
             try:
                 nh = int(read.get_tag("NH"))
             except KeyError:
                 die("%s has an alignment with no NH tag" % bam_path)
-            psite = psite_reference_position(read, offsets[read.query_length])
-            if psite is None:
-                dropped += 1
-            out[read.query_name] = (blocks, nh, psite)
+            if read.query_name in status:
+                die("%s: read %s has two primary alignments" % (bam_path, read.query_name))
+            status[read.query_name] = nh
+            if blocks:
+                primary_here[read.query_name] = (score, qlen, blocks, psite)
     finally:
         bam.close()
-    return out, dropped
+
+    audit = {"joined_by_tied_secondary_only": 0, "secondary_only_no_primary": 0,
+             "secondary_only_lower_score": 0, "missing_as": 0}
+    primary_score_of = {q: rec[0] for q, rec in primary_here.items()}
+    pending = set(secondaries) - set(status)
+    primaries = genome_primaries(bam_path, pending) if pending else {}
+    for qname in sorted(pending):
+        scores = [score for score, _l, _b, _p in secondaries[qname]]
+        found = primaries.get(qname)
+        if found is None:
+            audit["secondary_only_no_primary"] += 1
+            continue
+        nh, primary_score = found
+        missing = primary_score is None or any(score is None for score in scores)
+        if missing:
+            audit["missing_as"] += 1
+        if primary_score is not None and primary_score in scores:
+            status[qname] = nh
+            primary_score_of[qname] = primary_score
+            audit["joined_by_tied_secondary_only"] += 1
+        elif not missing:
+            audit["secondary_only_lower_score"] += 1
+
+    members = {}
+    for qname, nh in status.items():
+        qualifying = []
+        if qname in primary_here:
+            _score, qlen, blocks, psite = primary_here[qname]
+            if qlen in lengths:
+                qualifying.append((blocks, psite))
+        top = primary_score_of.get(qname)
+        for score, qlen, blocks, psite in secondaries.get(qname, ()):
+            if qlen in lengths and blocks and score is not None and score == top:
+                qualifying.append((blocks, psite))
+        if qualifying:
+            members[qname] = {"nh": nh, "alignments": qualifying}
+    return members, status, audit
+
+
+def genome_primaries(bam_path, qnames):
+    """{qname: (NH, AS or None)} of the primary genome record of each read in `qnames`."""
+    found = {}
+    bam = pysam.AlignmentFile(bam_path, "rb")
+    try:
+        for read in bam.fetch(until_eof=True):
+            if read.is_unmapped or read.is_secondary or read.is_supplementary:
+                continue
+            if read.query_name in qnames:
+                found[read.query_name] = (int(read.get_tag("NH")),
+                                          int(read.get_tag("AS")) if read.has_tag("AS")
+                                          else None)
+    finally:
+        bam.close()
+    return found
 
 
 def txome_present(bam_path, wanted):
@@ -210,10 +327,15 @@ def txome_present(bam_path, wanted):
     return found
 
 
-def txome_unique_coverage(bam_path, reference, lengths, offsets, tx2genome, signal,
-                          min_mapq=TXOME_MIN_MAPQ):
-    """Genomic per-base depth from the transcriptome route's uniquely mapping reads."""
-    depth = collections.Counter()
+def txome_coverage(bam_path, reference, lengths, offsets, tx2genome, signal):
+    """Per-read genomic positions from the transcriptome route's primary alignments on
+    `reference` (every one: the post-dedup BAM is already RiboFlow_v2's MAPQ >= 10 set).
+
+    Returns ({qname: [genomic position, ...]}, n_reads, dropped): one position per read for
+    the P-site signal, every covered base for the footprint signal. Kept per read so the
+    track can be split by each read's genome status.
+    """
+    hits = collections.defaultdict(list)
     n_reads = 0
     dropped = 0
     bam = pysam.AlignmentFile(bam_path, "rb")
@@ -225,8 +347,6 @@ def txome_unique_coverage(bam_path, reference, lengths, offsets, tx2genome, sign
         for read in bam.fetch(reference):
             if read.is_unmapped or read.is_secondary or read.is_supplementary:
                 continue
-            if read.mapping_quality < min_mapq:
-                continue
             if read.query_length not in lengths:
                 continue
             n_reads += 1
@@ -235,29 +355,82 @@ def txome_unique_coverage(bam_path, reference, lengths, offsets, tx2genome, sign
                 if psite is None or not (0 <= psite < len(tx2genome)):
                     dropped += 1
                     continue
-                depth[int(tx2genome[psite])] += 1
+                hits[read.query_name].append(int(tx2genome[psite]))
             else:
                 lo = max(read.reference_start, 0)
                 hi = min(read.reference_end, len(tx2genome))
-                for pos in tx2genome[lo:hi]:
-                    depth[int(pos)] += 1
+                hits[read.query_name].extend(int(pos) for pos in tx2genome[lo:hi])
     finally:
         bam.close()
-    return depth, n_reads, dropped
+    return dict(hits), n_reads, dropped
 
 
-def coverage_over(reads, positions, signal):
-    """Depth at `positions` from {qname: (blocks, nh, psite)}; psite = one count per read."""
+def depth_over(hits, positions):
+    """Depth at `positions` from {qname: [genomic position, ...]}."""
     depth = collections.Counter()
-    for blocks, _nh, psite in reads.values():
-        if signal == "psite":
-            if psite is not None:
-                depth[int(psite)] += 1
-        else:
-            for start, end in blocks:
-                for pos in range(start, end):
-                    depth[pos] += 1
+    for placed in hits.values():
+        for pos in placed:
+            depth[pos] += 1
     return np.array([depth.get(int(p), 0) for p in positions], dtype=float)
+
+
+#: The Figure 5A populations each track is split into, in stacking order (nearest the
+#: baseline first). Keys match `panels/plot_gene_read_partition.ROUTE7_KEY` wording:
+#: SH-U, SH-M, GO-U, GO-M on the genome track; SH-U, SH-M, TO on the transcriptome track.
+GENOME_LAYERS = ("shared_unique", "shared_multi", "genome_only", "genome_only_multi")
+TXOME_LAYERS = ("shared_unique", "shared_multi", "txome_only")
+
+
+def txome_read_layer(qname, genome_status):
+    """Which 5A population a transcriptome-track read belongs to, from its primary NH when it
+    has a top-score genome placement at the locus (none: transcriptome-only at the gene)."""
+    nh = genome_status.get(qname)
+    if nh is None:
+        return "txome_only"
+    return "shared_unique" if nh == 1 else "shared_multi"
+
+
+def member_positions(entry, signal):
+    """The one set of genomic positions a member read contributes, or its exclusion.
+
+    Every qualifying (top-score, at-locus) placement of the read votes; identical votes
+    collapse to one. Returns None when the placements disagree (POSITION-AMBIGUOUS: the
+    read is omitted from position-resolved coverage, never assigned arbitrarily), [] when
+    no placement resolves a P-site, else the positions counted exactly once.
+    """
+    if signal == "psite":
+        votes = {int(psite) for _blocks, psite in entry["alignments"] if psite is not None}
+        if len(votes) > 1:
+            return None
+        return [votes.pop()] if votes else []
+    votes = {tuple(sorted({pos for start, end in blocks for pos in range(start, end)}))
+             for blocks, _psite in entry["alignments"]}
+    if len(votes) > 1:
+        return None
+    return list(votes.pop()) if votes else []
+
+
+def layer_coverage(members, layer_qnames, positions, signal):
+    """(depth vector, n placed, n position-ambiguous, n P-site-unresolved) for one layer.
+
+    One read contributes at most once: `member_positions` collapses tied placements and
+    excludes disagreeing ones.
+    """
+    depth = collections.Counter()
+    placed = ambiguous = unresolved = 0
+    for qname in layer_qnames:
+        positions_of_read = member_positions(members[qname], signal)
+        if positions_of_read is None:
+            ambiguous += 1
+            continue
+        if not positions_of_read:
+            unresolved += 1
+            continue
+        placed += 1
+        for pos in positions_of_read:
+            depth[pos] += 1
+    vector = np.array([depth.get(int(p), 0) for p in positions], dtype=float)
+    return vector, placed, ambiguous, unresolved
 
 
 # ── driver ───────────────────────────────────────────────────────────────────
@@ -286,33 +459,42 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal, alt_transcript=None
         die("%s: GTF exons give a spliced length of %d, but the transcriptome reference "
             "declares %d -- the projection would be wrong" % (sel_tid, len(tx2genome), sel_len))
 
-    reads, g_dropped = locus_ribo_reads(inputs["ribo_genome"], chrom, span_start, span_end,
-                                       lengths, offsets)
-    genome_unique = {q for q, (_b, nh, _p) in reads.items() if nh == 1}
-    print("[locus] %d ribo reads at the locus in the window, %d uniquely mapping"
-          % (len(reads), len(genome_unique)))
-    if g_dropped:
-        print("[locus]   %d genome reads have no resolvable P-site and are dropped" % g_dropped)
+    members, genome_status, membership_audit = locus_ribo_reads(
+        inputs["ribo_genome"], chrom, span_start, span_end, lengths, offsets)
+    genome_unique = {q for q, entry in members.items() if entry["nh"] == 1}
+    genome_multi = set(members) - genome_unique
+    print("[locus] %d member reads at the locus in the window (%d unique, %d multimapping;"
+          " %d read ids with a top-score placement at the locus at any length)"
+          % (len(members), len(genome_unique), len(genome_multi), len(genome_status)))
+    print("[locus]   membership: %s" % ", ".join("%s %d" % kv for kv in membership_audit.items()))
 
-    txome_depth, n_txome, t_dropped = txome_unique_coverage(
+    txome_hits, n_txome, t_dropped = txome_coverage(
         inputs["ribo_txome"], sel_header, t_lengths, t_offsets, tx2genome, signal)
-    print("[locus] %d transcriptome-route reads on %s (MAPQ >= %d), projected onto the "
-          "genome axis" % (n_txome, sel_tid, TXOME_MIN_MAPQ))
+    print("[locus] %d transcriptome-route reads on %s, projected onto the genome axis"
+          % (n_txome, sel_tid))
     if t_dropped:
         print("[locus]   %d transcriptome reads dropped for the same reason" % t_dropped)
 
     print("[locus] one transcriptome pass to find which genome reads are genome-only ...")
-    present = txome_present(inputs["ribo_txome"], set(reads))
+    present = txome_present(inputs["ribo_txome"], set(members))
     genome_only = {q for q in genome_unique if q not in present}
     print("[locus] genome-only uniquely mapping: %d of %d unique"
           % (len(genome_only), len(genome_unique)))
 
     # Alternative isoform: most genome-only unique reads on non-selected sequence.
     scores = {}
+    alt_gene = gene
     if alt_transcript:
         alt_tid = alt_transcript
         if alt_tid not in transcripts:
-            die("%s is not an annotated transcript of %s" % (alt_tid, gene))
+            # A model of another gene id over the same locus (a readthrough gene, a second
+            # gene model): allowed when it lies on the gene's chromosome and strand.
+            alt_ex, alt_chrom, alt_strand, alt_gene = transcript_exons(inputs["gtf"], alt_tid)
+            if (alt_chrom, alt_strand) != (chrom, strand):
+                die("%s (%s, %s%s) is not on %s's chromosome and strand"
+                    % (alt_tid, alt_gene, alt_chrom, alt_strand, gene))
+            transcripts[alt_tid] = alt_ex
+            print("[locus] forced alternative %s belongs to %s, not %s" % (alt_tid, alt_gene, gene))
     else:
         for tid, exons in transcripts.items():
             if tid == sel_tid:
@@ -322,7 +504,7 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal, alt_transcript=None
                 continue
             n = 0
             for qname in genome_only:
-                blocks, _nh, _psite = reads[qname]
+                blocks, _psite = members[qname]["alignments"][0]   # NH==1: the primary
                 if any(b_s < e_e and e_s < b_e
                        for b_s, b_e in blocks for e_s, e_e in extra):
                     n += 1
@@ -344,8 +526,48 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal, alt_transcript=None
     # Per-base vectors exactly as the panel draws them: union exonic bases, 5'->3' order.
     union = merge(list(sel_exons) + list(alt_exons))
     gs = exonic_bases(union, strand)
-    genome_cov = coverage_over({q: reads[q] for q in genome_unique}, gs, signal)
-    txome_cov = np.array([txome_depth.get(int(p), 0) for p in gs], dtype=float)
+    txome_cov = depth_over(txome_hits, gs)
+
+    # The tracks split into the Figure 5A populations. Genome track: unique vs multi is the
+    # primary NH, shared vs genome-only is transcriptome presence; multimapper positions
+    # come only from top-score placements at the locus, one count per read, disagreeing
+    # placements omitted (member_positions). Transcriptome track: the NH of each read with
+    # a top-score genome placement at the locus, from the status fetch.
+    genome_members = {"shared_unique": genome_unique - genome_only,
+                      "shared_multi": genome_multi & present,
+                      "genome_only": genome_only,
+                      "genome_only_multi": genome_multi - present}
+    genome_layers, genome_placed, genome_ambiguous, genome_unresolved = {}, {}, {}, {}
+    for name in GENOME_LAYERS:
+        (genome_layers[name], genome_placed[name],
+         genome_ambiguous[name], genome_unresolved[name]) = layer_coverage(
+            members, genome_members[name], gs, signal)
+    genome_cov = sum(genome_layers.values())
+    g_dropped = sum(genome_unresolved.values())
+    txome_members = {name: set() for name in TXOME_LAYERS}
+    for qname in txome_hits:
+        txome_members[txome_read_layer(qname, genome_status)].add(qname)
+    txome_layers = {name: depth_over({q: txome_hits[q] for q in members_}, gs)
+                    for name, members_ in txome_members.items()}
+    if not np.array_equal(sum(genome_layers.values()), genome_cov):
+        die("the genome layers do not sum to the genome track")
+    if not np.array_equal(sum(txome_layers.values()), txome_cov):
+        die("the transcriptome layers do not sum to the transcriptome track")
+    if signal == "psite":
+        # No read is counted twice within a track: one P-site count per placed read.
+        if float(genome_cov.sum()) > sum(genome_placed.values()):
+            die("the genome track carries more P-site counts than placed reads")
+        if float(txome_cov.sum()) != float(sum(len(v) for v in txome_hits.values())):
+            die("the transcriptome track carries more P-site counts than reads")
+        if any(len(v) != 1 for v in txome_hits.values()):
+            die("a transcriptome read carries more than one P-site")
+    for name in GENOME_LAYERS:
+        print("[locus] genome track %-18s %6d reads, %d placed, %d position-ambiguous "
+              "omitted, %d without a resolvable P-site"
+              % (name, len(genome_members[name]), genome_placed[name],
+                 genome_ambiguous[name], genome_unresolved[name]))
+    print("[locus] transcriptome track by 5A population: %s"
+          % ", ".join("%s %d reads" % (n, len(txome_members[n])) for n in TXOME_LAYERS))
 
     arrays = {
         "genomic_position": gs.astype(np.int64),
@@ -355,6 +577,10 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal, alt_transcript=None
         "alt_exons": np.array(alt_exons, dtype=np.int64).reshape(-1, 2),
         "absent_blocks": np.array(absent_blocks, dtype=np.int64).reshape(-1, 2),
     }
+    for name in GENOME_LAYERS:
+        arrays["genome_cov_%s" % name] = genome_layers[name].astype(np.float64)
+    for name in TXOME_LAYERS:
+        arrays["txome_cov_%s" % name] = txome_layers[name].astype(np.float64)
     meta = {
         "gene": gene, "chrom": chrom, "strand": strand,
         "locus": {"start": int(union[0][0]), "end": int(union[-1][1]),
@@ -362,6 +588,7 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal, alt_transcript=None
                                               format(union[-1][1], ","), strand)},
         "selected_transcript": sel_tid, "selected_length": sel_len,
         "alternative_transcript": alt_tid,
+        "alternative_gene": alt_gene,
         "alternative_chosen_by": "forced" if alt_transcript else
                                  "most genome-only unique reads on non-selected sequence",
         "alternative_support_top5": dict(sorted(scores.items(), key=lambda kv: -kv[1])[:5]),
@@ -369,25 +596,71 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal, alt_transcript=None
         "sample": sample,
         "signal": signal,
         "intron_gap_plot_units": INTRON_GAP,
-        "txome_min_mapq": TXOME_MIN_MAPQ,
+        "txome_reads": "every primary alignment in the post-dedup BAM (RiboFlow_v2 MAPQ>=10)",
         "genome_window": {"lengths": sorted(lengths),
                           "offsets": {str(k): v for k, v in sorted(offsets.items())}},
         "txome_window": {"lengths": sorted(t_lengths),
                          "offsets": {str(k): v for k, v in sorted(t_offsets.items())}},
-        "counts": {"genome_reads_at_locus_in_window": len(reads),
+        "counts": {"genome_member_reads_in_window": len(members),
+                   "status_membership_audit": membership_audit,
                    "genome_unique": len(genome_unique),
+                   "genome_multi": len(genome_multi),
                    "genome_only_unique": len(genome_only),
                    "genome_psite_dropped": g_dropped,
-                   "txome_unique_on_selected": n_txome,
+                   "txome_on_selected": n_txome,
                    "txome_psite_dropped": t_dropped,
                    "genome_cov_total": float(genome_cov.sum()),
-                   "txome_cov_total": float(txome_cov.sum())},
+                   "txome_cov_total": float(txome_cov.sum()),
+                   "genome_track_reads_by_layer":
+                       {n: len(genome_members[n]) for n in GENOME_LAYERS},
+                   "genome_track_placed_by_layer":
+                       {n: genome_placed[n] for n in GENOME_LAYERS},
+                   "genome_track_position_ambiguous_by_layer":
+                       {n: genome_ambiguous[n] for n in GENOME_LAYERS},
+                   "genome_track_psite_unresolved_by_layer":
+                       {n: genome_unresolved[n] for n in GENOME_LAYERS},
+                   "txome_track_reads_by_layer":
+                       {n: len(txome_members[n]) for n in TXOME_LAYERS},
+                   "genome_track_cov_by_layer":
+                       {n: float(genome_layers[n].sum()) for n in GENOME_LAYERS},
+                   "txome_track_cov_by_layer":
+                       {n: float(txome_layers[n].sum()) for n in TXOME_LAYERS}},
         "coverage_semantics": {
-            "genome_cov": "genome route, NH==1 primaries in the read-length window, one "
-                          "count per read at its P-site (cigar_aware)",
-            "txome_cov": "transcriptome route, MAPQ>=42 primaries on the selected "
-                         "transcript, P-site projected through the transcript->genome map",
-            "order": "5'->3' over the merged exons of both models (SplicedAxis order)"},
+            "genome_cov": "genome route, reads with a top-score placement at the locus in "
+                          "the read-length window, at most one count per read at its "
+                          "P-site (cigar_aware). Only placements tied for the read's "
+                          "highest genomic score qualify; identical P-sites from several "
+                          "qualifying placements collapse to one count; disagreeing "
+                          "P-sites omit the read from position-resolved coverage "
+                          "(counted in genome_track_position_ambiguous_by_layer), never "
+                          "an arbitrary pick",
+            "txome_cov": "transcriptome route, every primary on the selected transcript "
+                         "(post-dedup BAM, RiboFlow_v2 MAPQ>=10), P-site projected through "
+                         "the transcript->genome map",
+            "order": "5'->3' over the merged exons of both models (SplicedAxis order)",
+            "layers": {
+                "genome_cov_shared_unique": "genome_cov, NH==1, reads present in the "
+                                            "transcriptome BAM (partition: shared, unique)",
+                "genome_cov_shared_multi": "genome_cov, NH>1, reads present in the "
+                                           "transcriptome BAM (partition: shared, "
+                                           "multimapping)",
+                "genome_cov_genome_only": "genome_cov, NH==1, reads absent from the "
+                                          "transcriptome BAM (partition: genome-only, "
+                                          "unique)",
+                "genome_cov_genome_only_multi": "genome_cov, NH>1, reads absent from the "
+                                                "transcriptome BAM (partition: "
+                                                "genome-only, multimapping)",
+                "txome_cov_shared_unique": "txome_cov, reads with a top-score genome "
+                                           "placement at the locus and NH==1 (partition: "
+                                           "shared, unique)",
+                "txome_cov_shared_multi": "txome_cov, reads with a top-score genome "
+                                          "placement at the locus and NH>1 (partition: "
+                                          "shared, multimapping)",
+                "txome_cov_txome_only": "txome_cov, reads with no top-score genome "
+                                        "placement at the locus (partition: "
+                                        "transcriptome-only at gene)",
+                "stacking": "GENOME_LAYERS / TXOME_LAYERS order, baseline first; each "
+                            "route's layers sum exactly to its track"}},
     }
     return arrays, meta
 

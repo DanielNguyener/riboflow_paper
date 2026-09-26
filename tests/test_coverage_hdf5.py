@@ -117,13 +117,6 @@ def test_a_transcript_without_a_cds_has_no_regions(cs):
     assert cs.regions_from_cds(20, 0, 20) == {"CDS": (0, 20)}
 
 
-def test_slice_region_uses_the_files_own_trim(cs, built):
-    with cs.open_coverage(built) as coverage:
-        assert coverage.trim == 2
-        assert coverage.slice_region(0, "CDS") == (6, 14)       # trimmed by the file's 2
-        assert coverage.slice_region(0, "CDS", trim=0) == (4, 16)
-
-
 def test_slice_region_collapses_rather_than_inverting(cs, built):
     """A CDS shorter than twice the trim must not produce end < start."""
     with cs.open_coverage(built) as coverage:

@@ -4,7 +4,7 @@ A legend anchored at a constant *axes fraction* (`bbox_to_anchor=(0.5, -0.16)`) 
 with a two-line x label on a short axes, because tick labels and the label occupy a
 constant number of *points*. `panel_style.below_axis_anchor` measures instead. These tests
 pin that at every axes height, and pin the one type scale and the shared cohort plot box
-the Figure 5 panels depend on. Pure matplotlib; no BAM, no annotation, no reference render.
+the Figure 4 panels depend on. Pure matplotlib; no BAM, no annotation, no reference render.
 
 Run with `python` (3.9).
 """
@@ -14,7 +14,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
@@ -180,9 +179,9 @@ def test_export_contains_a_legend_placed_below(ps, tmp_path):
 def test_no_panel_hard_codes_a_font_size():
     """Every size comes from `panel_style`, so the panels share one type scale.
 
-    Figure 2 carried six literals -- 7 pt ticks and 9 pt axis labels against the shared
+    S1 Fig carried six literals -- 7 pt ticks and 9 pt axis labels against the shared
     9 / 11, plus 6.5 and 5.3 pt in-cell text -- so its type rendered visibly smaller than
-    Figures 3-5 once the panels were assembled at one scale. Nothing caught it: each panel
+    Figures 2-4 once the panels were assembled at one scale. Nothing caught it: each panel
     rendered fine on its own, and the mismatch only existed *between* panels.
 
     A literal is the failure mode, not a particular wrong number: `fontsize=9` and
@@ -247,33 +246,32 @@ def _cohort_figures():
     samples = SAMPLES if SAMPLES.exists() else None
     panel_a = _load("plot_route_read_counts")
     panel_b = _load("plot_read_id_union")
-    panel_c = _load("plot_multimap_biotype")
-    panel_d = _load("plot_nonselected_isoform_reach")
-    side = _load("_fig05_side_panel")
+    share = _load("plot_cohort_share")
+    side = _load("_cohort_side_panel")
     return {
         "A": panel_a.draw(panel_a.prepare(TAXONOMY, samples))[0],
         "B": panel_b.draw(panel_b.prepare(TAXONOMY, samples), show_labels=False)[0],
         # C and D share one helper and pass their own labels in from `main`; the geometry
         # under test is the helper's, so the test calls it the way they do.
         "C": side.draw_side_panel(
-            panel_c.prepare(TIE_MASTER, TAXONOMY, samples)["values"], [""] * 24, "#1a7d1a",
+            share.prepare("C", TIE_MASTER, TAXONOMY, samples)["values"], [""] * 24, "#1a7d1a",
             "protein-coding\npseudogene tie", "% of multimapper\nreads (primary)")[0],
         "D": side.draw_side_panel(
-            panel_d.prepare(REACH_MASTER, TAXONOMY, samples)["values"], [""] * 24, "#7fb9da",
+            share.prepare("D", REACH_MASTER, TAXONOMY, samples)["values"], [""] * 24, "#7fb9da",
             "alternative\nisoform exon", "% of genome-only\nunique reads")[0],
     }
 
 
 @pytest.mark.skipif(not (TAXONOMY.exists() and TIE_MASTER.exists() and REACH_MASTER.exists()),
                     reason="needs the shipped read-taxonomy masters")
-def test_fig05_cohort_panels_share_one_plot_box():
+def test_cohort_panels_share_one_plot_box():
     """A, B, C and D draw the same 24 cell lines, and only A carries the tick labels.
 
     So every row has to sit at the same height once the panels are stacked side by side, and
     the assembler stacks them by their page TOP. Two things must therefore match: the box
     height (or the rows sit at different pitches) and the box's offset below the page top (or
     equal pitches still start at different heights -- C and D have a title band above their
-    axes and A does not). Both come from `fig05_common`. A quarter point is a rounding
+    axes and A does not). Both come from `cohort_common`. A quarter point is a rounding
     allowance, not room to drift.
     """
     boxes = {}

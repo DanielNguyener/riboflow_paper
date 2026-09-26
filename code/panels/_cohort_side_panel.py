@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The horizontal-bar idiom shared by Figure 5 panels C and D."""
+"""The horizontal-bar idiom shared by Figure 4 panels C and D."""
 from __future__ import annotations
 
 import sys
@@ -13,7 +13,7 @@ def draw_side_panel(values, labels, colour, title, xlabel, figsize=(3.0, 8.0),
                     show_labels=False):
     import matplotlib.pyplot as plt
     sys.path.insert(0, str(HERE))
-    import fig05_common as common
+    import cohort_common as common
     import panel_style as ps
 
     ps.apply_rcparams()

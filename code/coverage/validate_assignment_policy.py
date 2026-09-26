@@ -14,6 +14,8 @@ import pandas as pd
 def log(message):
     print("[assignment] %s" % message, flush=True)
 
+_NO_CANDIDATES = {"n_candidates_total": 0, "n_ambiguous": 0, "n_tied": 0}
+
 def psite_exposure(chroms, positions, strands, cds_pr):
     """Candidate counts for the P-site rule, over the stage-1 CDS join.
 
@@ -22,13 +24,13 @@ def psite_exposure(chroms, positions, strands, cds_pr):
     import pyranges as pr
 
     if not len(chroms):
-        return {"n_candidates_total": 0, "n_ambiguous": 0, "n_tied": 0}
+        return dict(_NO_CANDIDATES)
     reads = pr.PyRanges(pd.DataFrame({
         "Chromosome": chroms, "Start": positions, "End": positions + 1,
         "Strand": strands, "read_idx": np.arange(len(chroms), dtype=np.int64)}))
     joined = reads.join(cds_pr, strandedness="same").df
     if joined.empty:
-        return {"n_candidates_total": 0, "n_ambiguous": 0, "n_tied": 0}
+        return dict(_NO_CANDIDATES)
 
     per_read = joined.groupby("read_idx", sort=False)["transcript_id"].nunique()
     n_ambiguous = int((per_read >= 2).sum())
@@ -45,20 +47,20 @@ def footprint_exposure(blocks, cds_pr):
 
     chroms, starts, ends, strands, read_ids, _n_reads = blocks
     if not len(chroms):
-        return {"n_candidates_total": 0, "n_ambiguous": 0, "n_tied": 0}
+        return dict(_NO_CANDIDATES)
     block_pr = pr.PyRanges(pd.DataFrame({
         "Chromosome": chroms, "Start": starts, "End": ends,
         "Strand": strands, "read_idx": read_ids}))
     joined = block_pr.join(cds_pr, strandedness="same").df
     if joined.empty:
-        return {"n_candidates_total": 0, "n_ambiguous": 0, "n_tied": 0}
+        return dict(_NO_CANDIDATES)
 
     overlap = (np.minimum(joined["End"].to_numpy(), joined["End_b"].to_numpy())
                - np.maximum(joined["Start"].to_numpy(), joined["Start_b"].to_numpy()))
     joined = joined.assign(olen=overlap)
     joined = joined[joined["olen"] > 0]
     if joined.empty:
-        return {"n_candidates_total": 0, "n_ambiguous": 0, "n_tied": 0}
+        return dict(_NO_CANDIDATES)
 
     totals = joined.groupby(["read_idx", "transcript_id"], sort=False)["olen"].sum()
     totals = totals.reset_index()

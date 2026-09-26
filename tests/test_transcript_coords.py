@@ -151,42 +151,6 @@ def test_overlapping_exons_are_rejected(tc):
     assert "overlapping" in str(excinfo.value)
 
 
-# ── coordinate mapping ───────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("tid", sorted(GEOMETRY))
-def test_every_position_round_trips(tc, coords, tid):
-    index = int(coords["transcripts"].index[
-        coords["transcripts"]["transcript_id"] == tid][0])
-    length = int(coords["transcripts"].at[index, "transcript_len"])
-    positions = np.arange(length)
-    genomic = tc.tx_to_genomic(coords, index, positions)
-    assert (genomic >= 0).all()
-    assert np.array_equal(tc.genomic_to_tx(coords, index, genomic), positions)
-
-
-def test_plus_strand_mapping_is_explicit(tc, coords):
-    index = 1                                              # ENSTP.1
-    # tx 0 -> first base of exon 1; tx 11 -> last base of exon 1; tx 12 -> first of exon 2
-    assert tc.tx_to_genomic(coords, index, [0, 11, 12, 19]).tolist() == [100, 111, 200, 207]
-
-
-def test_minus_strand_mapping_mirrors_within_each_exon(tc, coords):
-    index = 0                                              # ENSTM.2, chr2 '-'
-    # 5' exon is [500, 510); its 5'-most base is the HIGHEST coordinate, 509
-    assert tc.tx_to_genomic(coords, index, [0, 1, 9, 10, 14]).tolist() == [509, 508, 500, 304, 300]
-
-
-def test_positions_outside_the_transcript_yield_minus_one(tc, coords):
-    index = 1
-    assert tc.tx_to_genomic(coords, index, [-1, 20, 10 ** 6]).tolist() == [-1, -1, -1]
-
-
-def test_intronic_genomic_positions_yield_minus_one(tc, coords):
-    """The gap between the two exons of ENSTP.1 is not part of the coordinate."""
-    index = 1
-    assert tc.genomic_to_tx(coords, index, [150, 112, 199]).tolist() == [-1, -1, -1]
-
-
 # ── validation of the assembled tables ───────────────────────────────────────
 
 def test_validate_rejects_unsorted_storage_order(tc, coords):

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import gzip
-import hashlib
 import re
 from pathlib import Path
 
@@ -30,13 +29,6 @@ EXON_COLUMNS = (
 
 class CoordinateError(RuntimeError):
     """Raised when the exon map cannot be built or fails an invariant."""
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 def parse_gtf_features(gtf: Path, wanted: set) -> dict:
     """One GTF pass -> {tid: {"exon": [...], "CDS": [...]}}, coordinates 0-based half-open.
@@ -232,48 +224,3 @@ def _validate(transcripts: pd.DataFrame, exons: pd.DataFrame) -> None:
         raise CoordinateError("some transcript's first exon does not have exon_index 0")
     if not np.all(exon_index[1:][same_transcript] == exon_index[:-1][same_transcript] + 1):
         raise CoordinateError("exon_index is not consecutive within a transcript")
-
-def transcript_exons(coords: dict, transcript_index: int) -> pd.DataFrame:
-    transcripts, exons = coords["transcripts"], coords["exons"]
-    start = int(transcripts.at[transcript_index, "exon_offset"])
-    count = int(transcripts.at[transcript_index, "n_exons"])
-    return exons.iloc[start:start + count]
-
-def tx_to_genomic(coords: dict, transcript_index: int, positions) -> np.ndarray:
-    """Transcript positions -> genomic positions (0-based), strand-aware; out-of-range yields -1."""
-    strand = coords["transcripts"].at[transcript_index, "strand"]
-    exons = transcript_exons(coords, transcript_index)
-    tx_start = exons["tx_start"].to_numpy()
-    tx_end = exons["tx_end"].to_numpy()
-    g_start = exons["g_start"].to_numpy()
-    g_end = exons["g_end"].to_numpy()
-
-    pos = np.asarray(positions, dtype=np.int64)
-    out = np.full(pos.shape, -1, dtype=np.int64)
-    inside = (pos >= 0) & (pos < tx_end[-1])
-    if not inside.any():
-        return out
-    which = np.searchsorted(tx_start, pos[inside], side="right") - 1
-    offset = pos[inside] - tx_start[which]
-    out[inside] = (g_start[which] + offset if strand == "+"
-                   else g_end[which] - 1 - offset)
-    return out
-
-def genomic_to_tx(coords: dict, transcript_index: int, positions) -> np.ndarray:
-    """Genomic positions -> transcript positions, strand-aware. -1 when not on an exon."""
-    strand = coords["transcripts"].at[transcript_index, "strand"]
-    exons = transcript_exons(coords, transcript_index)
-    tx_start = exons["tx_start"].to_numpy()
-    g_start = exons["g_start"].to_numpy()
-    g_end = exons["g_end"].to_numpy()
-
-    pos = np.asarray(positions, dtype=np.int64)
-    out = np.full(pos.shape, -1, dtype=np.int64)
-    for i in range(len(g_start)):
-        hit = (pos >= g_start[i]) & (pos < g_end[i])
-        if not hit.any():
-            continue
-        offset = (pos[hit] - g_start[i] if strand == "+" else g_end[i] - 1 - pos[hit])
-        out[hit] = tx_start[i] + offset
-    return out
-

@@ -7,10 +7,10 @@ Which stage reads which BAM
 
 | Stage    | ribo genome | ribo txome | RNA genome | RNA txome |
 | -------- | :---------: | :--------: | :--------: | :-------: |
-| Figure 3 |     ●     |     ●     |            |          |
-| Figure 4 |     ●     |     ●     |     ●     |    ●    |
+| Figure 2 |     ●     |     ●     |            |          |
+| Figure 3 |     ●     |     ●     |     ●     |    ●    |
+| Figure 4 |     ●     |     ●     |            |          |
 | Figure 5 |     ●     |     ●     |            |          |
-| Figure6  |     ●     |     ●     |            |          |
 
 ## Default RiboFlow-genome layout
 

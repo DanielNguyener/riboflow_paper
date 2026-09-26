@@ -1,4 +1,4 @@
-"""Figure 6A's compact table: the shipped seven-segment partition carries the validated
+"""Figure 4A's compact table: the shipped seven-segment partition carries the validated
 counts, sums to each gene's union, and the fold program refuses anything else.
 
 No per-read dump is needed: the builder's `check_expected` is exercised on structures
@@ -9,7 +9,6 @@ from __future__ import annotations
 import csv
 import importlib.util
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -99,7 +98,7 @@ def test_the_locus_artifact_describes_the_caption_facts():
     assert locus["selected_transcript"] == "ENST00000308482.14"
     assert locus["alternative_transcript"] == "ENST00000244815.9"
     assert locus["n_absent_nt"] == 3619
-    assert locus["txome_min_mapq"] == 42
+    assert "txome_min_mapq" not in locus and "MAPQ>=10" in locus["txome_reads"]
     assert locus["signal"] == "psite"
     import numpy as np
     with np.load(REPO / "data" / "alignment_fate" / "locus_LRRFIP1.npz") as data:
@@ -108,3 +107,37 @@ def test_the_locus_artifact_describes_the_caption_facts():
         n = len(data["genomic_position"])
         assert len(data["genome_cov"]) == n == len(data["txome_cov"])
         assert float(data["genome_cov"].sum()) == locus["counts"]["genome_cov_total"]
+        assert float(data["txome_cov"].sum()) == locus["counts"]["txome_cov_total"]
+        # Each track is also split into the 6A read populations; the layers must sum to
+        # the track exactly and the JSON must record the same per-layer totals.
+        layers = {"genome_cov": ("shared_unique", "shared_multi",
+                                 "genome_only", "genome_only_multi"),
+                  "txome_cov": ("shared_unique", "shared_multi", "txome_only")}
+        for track, names in layers.items():
+            stack = np.zeros(n)
+            for name in names:
+                layer = data["%s_%s" % (track, name)]
+                assert len(layer) == n and (layer >= 0).all()
+                stack += layer
+            assert np.array_equal(stack, data[track])
+        counts = locus["counts"]
+        for track, key in (("genome_cov", "genome_track_cov_by_layer"),
+                           ("txome_cov", "txome_track_cov_by_layer")):
+            assert set(counts[key]) == set(layers[track])
+            for name, total in counts[key].items():
+                assert float(data["%s_%s" % (track, name)].sum()) == total
+        # The shared-unique split is the same fact seen from both routes: genome-track
+        # shared reads = genome-unique reads present in the transcriptome BAM.
+        assert (counts["genome_track_reads_by_layer"]["shared_unique"]
+                == counts["genome_unique"] - counts["genome_only_unique"])
+        assert (sum(counts["txome_track_reads_by_layer"].values())
+                == counts["txome_on_selected"] - counts["txome_psite_dropped"])
+        # Genome-track multimapper layers place only qualifying top-score placements: per
+        # layer, members = placed + position-ambiguous (omitted) + P-site-unresolved, and
+        # no read is counted twice (the layer total never exceeds its placed reads).
+        for name, n_members in counts["genome_track_reads_by_layer"].items():
+            assert n_members == (counts["genome_track_placed_by_layer"][name]
+                                 + counts["genome_track_position_ambiguous_by_layer"][name]
+                                 + counts["genome_track_psite_unresolved_by_layer"][name])
+            assert counts["genome_track_cov_by_layer"][name] \
+                <= counts["genome_track_placed_by_layer"][name]

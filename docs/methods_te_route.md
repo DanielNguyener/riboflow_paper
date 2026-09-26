@@ -1,4 +1,4 @@
-# Figure 4 methods
+# Figure 3 methods
 
 The mathematics behind `code/te_route/normalization.R`, `te_statistics.R` and
 `plot_te_route_panels.py`. Notation: `c_{g,i}` is the raw count for transcript `g` in cell line
@@ -193,7 +193,7 @@ and C are needed alongside it.
 - **PLOS page.** The figure is one page inside PLOS Computational Biology's 7.5 × 8.75 in
   cap (border included): two rows, A | B above and C with its colorbar below. The axes box is
   solved as the largest square that fits both caps once the margins are taken out (B and C
-  ≈3.4 in square; A to fig03D's proportions but never under 2.1 in, so its tick labels do
+  ≈3.4 in square; A to fig02D's proportions but never under 2.1 in, so its tick labels do
   not touch); a single-panel page reuses the identical box. Type is Arial at 10–11 pt with
   12 pt bold panel letters, inside PLOS's 8–12 pt window. Panel C's key sits inside the plane's
   empty upper-left corner, framed so its sample dot is not read as data. Besides PDF/PNG the program writes a flattened RGB TIFF at

@@ -22,24 +22,6 @@ def _fc():
     import bam_inputs
     return bam_inputs
 
-def require(*packages):
-    """Fail with an actionable message when a declared dependency is missing.
-
-    Never installs anything: auto-installing can silently change pinned versions.
-    """
-    missing = []
-    for package in packages:
-        try:
-            __import__(package)
-        except ImportError:
-            missing.append(package)
-    if missing:
-        raise SystemExit(
-            "missing required package(s): %s\n"
-            "Install the declared environment first:\n"
-            "    python -m pip install -r requirements.txt"
-            % ", ".join(sorted(missing)))
-
 SELECT_MIN_LEN, SELECT_MAX_LEN = 21, 40
 SELECT_CAPTURE = 0.85
 

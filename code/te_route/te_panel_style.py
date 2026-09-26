@@ -17,12 +17,7 @@ FONT_TICK = 10
 FONT_ANNOTATION = 10
 FONT_PANEL_LETTER = 12
 
-#: Linear scale of strokes against the 11-pt base the line widths were drawn at. Marker `s` is
-#: an AREA, so a dot keeps its apparent size only when scaled by the SQUARE of this.
-TYPE_SCALE = FONT_LABEL / 11.0
-MARKER_AREA = TYPE_SCALE ** 2
-
-#: PLOS never wants a stroke that vanishes at print; every scaled line width is clamped here.
+#: PLOS never wants a stroke that vanishes at print; every line width is clamped here.
 MIN_LINEWIDTH = 0.5
 
 #: Page limits in inches, and the pixel limits they become at SAVE_DPI.
@@ -47,8 +42,8 @@ FORMATS = ("pdf", "svg", "png", "tif")
 
 
 def lw(points):
-    """A line width scaled to the print type size, never thinner than MIN_LINEWIDTH."""
-    return max(points * TYPE_SCALE, MIN_LINEWIDTH)
+    """A line width never thinner than MIN_LINEWIDTH."""
+    return max(points, MIN_LINEWIDTH)
 
 
 def apply_rcparams():

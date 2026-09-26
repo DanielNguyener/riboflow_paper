@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Figure 5 A-D at PLOS page size: the four cohort panels re-rendered with 8 pt type.
+"""Figure 4 A-D at PLOS page size: the four cohort panels re-rendered with 8 pt type.
 
-Rebinds `fig05_common` box constants and `panel_style.FONT_*` in-process BEFORE importing
+Rebinds `cohort_common` box constants and `panel_style.FONT_*` in-process BEFORE importing
 the generator modules; one panel per process (`--panel A`).
 """
 from __future__ import annotations
@@ -13,30 +13,28 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+from panel_style import die  # noqa: E402
 
 #: The cohort panels' shared plot box, shrunk from the published 470 / 40 pt.
 BOX_HEIGHT_PT = 240.0
 BOX_TOP_OFFSET_PT = 22.0
 
-#: `plot_read_id_union.SEGMENTS` colours with the verified route-status names.
+#: `plot_read_id_union.SEGMENTS` colours with the route-status abbreviations the
+#: captions define: SH shared, GO genome-only, TO transcriptome-only; U unique, M multimapping.
 UNION_KEY = (
-    ("Shared, unique", "#a6d96a"),
-    ("Shared, multimapping", "#1a7d1a"),
-    ("Genome only, unique", "#7fb9da"),
-    ("Genome only, multimapping", "#0d57a1"),
-    ("Transcriptome only", "#cc3d3d"),
+    ("SH-U", "#a6d96a"),
+    ("SH-M", "#1a7d1a"),
+    ("GO-U", "#7fb9da"),
+    ("GO-M", "#0d57a1"),
+    ("TO", "#cc3d3d"),
 )
 
 MODULES = {"A": "plot_route_read_counts", "B": "plot_read_id_union",
-           "C": "plot_multimap_biotype", "D": "plot_nonselected_isoform_reach"}
-
-
-def die(message):
-    raise SystemExit("error: %s" % message)
+           "C": "plot_cohort_share", "D": "plot_cohort_share"}
 
 
 def patched_panels(font_pt):
-    common = importlib.import_module("fig05_common")
+    common = importlib.import_module("cohort_common")
     common.STACK_AXES_HEIGHT_PT = BOX_HEIGHT_PT
     common.STACK_AXES_TOP_OFFSET_PT = BOX_TOP_OFFSET_PT
     style = importlib.import_module("panel_style")
@@ -50,8 +48,8 @@ def render_panel(letter, width_pt, height_in, inputs, font_pt, output, formats=(
     """One cohort panel to `output.<fmt>`, final labels applied in-process."""
     patched_panels(font_pt)
     style = importlib.import_module("panel_style")
-    side = importlib.import_module("_fig05_side_panel")
-    common = importlib.import_module("fig05_common")
+    side = importlib.import_module("_cohort_side_panel")
+    common = importlib.import_module("cohort_common")
     common.median_iqr = lambda values: ""       # summary statistics belong in the caption
     figsize = (width_pt / 72.0, height_in)
     extras = []
@@ -87,17 +85,18 @@ def render_panel(letter, width_pt, height_in, inputs, font_pt, output, formats=(
         from matplotlib.patches import Patch
         handles = [Patch(facecolor=colour, edgecolor="white", linewidth=0.4, label=label)
                    for label, colour in UNION_KEY]
-        extras.append(style.legend_below(axis, handles=handles, ncol=1,
+        extras.append(style.legend_below(axis, handles=handles, ncol=3,
                                          fontsize=font_pt, handlelength=1.0,
-                                         labelspacing=0.25, borderpad=0.0, pad_pt=4.0))
+                                         labelspacing=0.25, columnspacing=0.8,
+                                         borderpad=0.0, pad_pt=4.0))
 
     elif letter in ("C", "D"):
+        prepared = module.prepare(letter, rp(module.PANELS[letter]["master"]),
+                                  rp("taxonomy"))
         if letter == "C":
-            prepared = module.prepare(rp("tie_master"), rp("taxonomy"))
             colour, title = "#1a7d1a", "Protein-coding–\npseudogene ties"
             xlabel = "Shared genome-\nmultimapping\nreads (%)"
         else:
-            prepared = module.prepare(rp("reach_master"), rp("taxonomy"))
             colour, title = "#7fb9da", "Overlap with omitted\nalternative exons"
             xlabel = "Uniquely mapped\ngenome-only\nreads (%)"
         figure, axis = side.draw_side_panel(

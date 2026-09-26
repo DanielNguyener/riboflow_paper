@@ -8,7 +8,7 @@ So: copy the tree minus everything `.gitignore` excludes, run the panels there, 
 what actually happens.
 
 The two coverage panels need a coverage HDF5, which is not distributed (see the README). They are expected to fail -- with an actionable message, which is
-asserted, not with a traceback. Supply one and all 20 panels and all five figures are
+asserted, not with a traceback. Supply one and all 21 panels and all six figures are
 exercised:
 
     RIBOFLOW_PAPER_COVERAGE_H5=results/coverage/HeLa.shared_coverage.h5 \\
@@ -31,15 +31,23 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 
 #: Panels that need only files shipped in the repository.
-SELF_CONTAINED = ["fig02A", "fig02B", "fig03C", "fig03D",
-                  "fig04", "fig04A", "fig04B", "fig04C",
-                  "fig05A", "fig05B", "fig05C", "fig05D",
-                  "fig05A_plos", "fig05B_plos", "fig05C_plos", "fig05D_plos",
-                  "fig06A", "fig06B"]
-#: Figures reproducible from shipped tables alone; 3 needs the coverage HDF5.
-SELF_CONTAINED_FIGURES = [2, 4, 5, 6]
+SELF_CONTAINED = ["figS1A", "figS1B", "fig02C", "fig02D",
+                  "fig03", "fig03A", "fig03B", "fig03C",
+                  "fig04A", "fig04B", "fig04C", "fig04D",
+                  "fig04A_plos", "fig04B_plos", "fig04C_plos", "fig04D_plos",
+                  "fig05A", "fig05B", "fig06"]
+#: Figures reproducible from shipped tables alone; Figure 2 needs the coverage HDF5.
+SELF_CONTAINED_FIGURES = ["S1", "3", "4", "5", "6"]
+COVERAGE_FIGURE = "2"
+
+
+def figure_stem(number):
+    """`Fig2` / `S1_Fig`, the published stems, from the pipeline's own rule."""
+    sys.path.insert(0, str(REPO / "code"))
+    import make_panels
+    return make_panels.figure_stem(number)
 #: Panels that need a coverage HDF5, which is a documented pipeline product.
-NEEDS_COVERAGE = ["fig03A", "fig03B"]
+NEEDS_COVERAGE = ["fig02A", "fig02B"]
 
 COVERAGE_H5 = os.environ.get("RIBOFLOW_PAPER_COVERAGE_H5")
 
@@ -100,6 +108,9 @@ SHIPS = ("code/make_panels.py",
          "data/coverage/concordance/region_concordance_per_sample.tsv",
          "data/alignment_fate/gene_partition_route7.tsv",
          "data/alignment_fate/locus_LRRFIP1.npz",
+         "data/clustering/HeLa.post_dedup.clusters_k4.tsv",
+         "data/clustering/gencode.v34.2wayconspseudos.gtf.gz",
+         "code/clustering/ward_cluster.R",
          "data/annotation/orf_catalog.tsv",
          "data/ribo_rna/counts/ribo_counts_genome.csv",
          "data/te_route/tables/per_gene_delta.tsv",
@@ -109,19 +120,19 @@ SHIPS = ("code/make_panels.py",
          "config/panel_manifest.yaml",
          "config/inputs.example.yaml",
          "benchmark/summarize_benchmarks.py",
-         "figures/panel_references/fig02A_readlen_psite_selection.pdf",
+         "figures/panel_references/figS1A_readlen_psite_selection.pdf",
          # The published figures ship: they are what the clean-copy test reproduces.
-         "figures/published/Fig2.tif", "figures/published/Fig6.tif",
-         "figures/published/Fig4_plos.pdf",
+         "figures/published/S1_Fig.tif", "figures/published/Fig5.tif",
+         "figures/published/Fig3_plos.pdf",
          "results/coverage/coverage_checksums.tsv",
          "tests/conftest.py", "tests/test_clean_copy.py",
          "pytest.ini", "requirements-dev.txt")
 
 DOES_NOT_SHIP = ("figures/published/Figure5_assembled.pdf",
-                 "figures/published/Fig2.png",
+                 "figures/published/S1_Fig.png",
                  "results/coverage/HeLa.shared_coverage.h5",
                  "results/coverage/concordance/region_concordance_per_sample.tsv",
-                 "results/panels/fig02A.pdf",
+                 "results/panels/figS1A.pdf",
                  "results/te_route/tables/per_gene_delta.tsv",
                  "results/alignment_fate/HeLa.gene_read_partition_reads.tsv",
                  "results/ribo_seq_qc/genome/tables/readlen_window_qc.csv",
@@ -135,6 +146,7 @@ DOES_NOT_SHIP = ("figures/published/Figure5_assembled.pdf",
                  # published .gitignore stays free of them. The test below checks that
                  # mechanism against the real repository instead.
                  "config/local.yaml",
+                 "code/clustering/sensitivity_min_union.py",
                  # a stray HDF5 under data/ must NOT slip past *.h5
                  "data/example.h5",
                  "sample.bam", "sample.bam.bai", "sample.bam.csi", "sample.cram",
@@ -216,7 +228,7 @@ def test_the_clean_copy_contains_the_pipeline_and_its_data(clean_copy):
                      "config/panel_manifest.yaml", "config/cohort_manifest.tsv",
                      "data/alignment_fate/gene_partition_route7.tsv",
                      "data/te_route/tables/per_gene_delta.tsv",
-                     "figures/published/Fig5.tif",
+                     "figures/published/Fig4.tif",
                      "supporting_information/S1_Table/samples.csv",
                      "supporting_information/S1_Table/build_s1_table.py"):
         assert (clean_copy / required).exists(), required
@@ -264,7 +276,7 @@ def test_a_coverage_panel_fails_with_an_actionable_message(clean_copy, panel):
 
 @pytest.mark.skipif(not COVERAGE_H5,
                     reason="set RIBOFLOW_PAPER_COVERAGE_H5 to exercise the coverage panels")
-def test_all_twenty_panels_build_when_a_coverage_file_is_supplied(clean_copy):
+def test_all_panels_build_when_a_coverage_file_is_supplied(clean_copy):
     """The complete claim: given the one documented pipeline product that is too large to
     distribute, a clean copy reproduces every panel."""
     source = Path(COVERAGE_H5).resolve()
@@ -277,7 +289,7 @@ def test_all_twenty_panels_build_when_a_coverage_file_is_supplied(clean_copy):
     result = run_panels(clean_copy, SELF_CONTAINED + NEEDS_COVERAGE)
     output = result.stdout + result.stderr
     assert result.returncode == 0, output[-4000:]
-    assert "20/20 panels produced" in output, output[-2000:]
+    assert "21/21 panels produced" in output, output[-2000:]
 
 
 # ── the published figures, byte for byte ─────────────────────────────────────
@@ -302,7 +314,7 @@ def assembled(clean_copy, self_contained_run):
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.exists():
             shutil.copy2(source, target)
-        figures.append(3)
+        figures.append(COVERAGE_FIGURE)
     argv = [sys.executable, "code/assemble_figures.py", "--check", "--output-dir", str(out)]
     for number in figures:
         argv += ["--figure", str(number)]
@@ -314,30 +326,31 @@ def assembled(clean_copy, self_contained_run):
 def test_every_self_contained_figure_passes_the_plos_check(assembled):
     out, figures = assembled
     for number in figures:
-        assert (out / ("Fig%d.tif" % number)).exists()
-        assert (out / ("Fig%d_plos.pdf" % number)).exists()
+        assert (out / (figure_stem(number) + ".tif")).exists()
+        assert (out / (figure_stem(number) + "_plos.pdf")).exists()
 
 
-@pytest.mark.parametrize("number", SELF_CONTAINED_FIGURES + [3])
+@pytest.mark.parametrize("number", SELF_CONTAINED_FIGURES + [COVERAGE_FIGURE])
 def test_the_published_tiff_is_reproduced_byte_for_byte(assembled, number):
-    """The five TIFFs under figures/published/ are regenerated from shipped inputs and
+    """The TIFFs under figures/published/ are regenerated from shipped inputs and
     compared as files. A pixel compare follows only to make a failure legible."""
     out, figures = assembled
     if number not in figures:
-        pytest.skip("Figure %d needs RIBOFLOW_PAPER_COVERAGE_H5" % number)
-    published = REPO / "figures" / "published" / ("Fig%d.tif" % number)
-    rebuilt = out / ("Fig%d.tif" % number)
+        pytest.skip("Figure %s needs RIBOFLOW_PAPER_COVERAGE_H5" % number)
+    stem = figure_stem(number)
+    published = REPO / "figures" / "published" / (stem + ".tif")
+    rebuilt = out / (stem + ".tif")
     if rebuilt.read_bytes() == published.read_bytes():
         return
     import numpy as np
     (size_a, mode_a, dpi_a, a), (size_b, mode_b, dpi_b, b) = \
         _tiff_pixels(rebuilt), _tiff_pixels(published)
     assert (size_a, mode_a, dpi_a) == (size_b, mode_b, dpi_b), \
-        "Fig%d: %s %s %s vs published %s %s %s" % (number, size_a, mode_a, dpi_a,
+        "%s: %s %s %s vs published %s %s %s" % (stem, size_a, mode_a, dpi_a,
                                                   size_b, mode_b, dpi_b)
     differing = np.argwhere((a != b).any(axis=2))
-    pytest.fail("Fig%d.tif: same geometry, %d pixel(s) differ (first at row %d, col %d)"
-                % (number, len(differing), differing[0][0], differing[0][1]))
+    pytest.fail("%s.tif: same geometry, %d pixel(s) differ (first at row %d, col %d)"
+                % (stem, len(differing), differing[0][0], differing[0][1]))
 
 
 # ── no panel reaches outside the repository ──────────────────────────────────

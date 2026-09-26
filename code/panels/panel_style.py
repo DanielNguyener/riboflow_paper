@@ -16,18 +16,10 @@ FONT_ANNOTATION = 9
 #: tick size on purpose -- an inset is a legend, not a second axis.
 FONT_INSET = 8
 
-#: The single ENLARGED type scale, for panels reproduced large (heatmaps, ribo-vs-RNA).
+#: The single ENLARGED type scale, for panels reproduced large (the S1 Fig heatmaps).
 FONT_LABEL_LARGE = 14
 FONT_TICK_LARGE = 12
 FONT_ANNOTATION_LARGE = 11
-
-#: Linear enlargement of the *_LARGE scale. Marker `s` is an AREA -- scale it by the square.
-LARGE_SCALE = FONT_LABEL_LARGE / FONT_LABEL          # ~1.27
-LARGE_MARKER_AREA = LARGE_SCALE ** 2                 # ~1.62
-
-#: Plot-box edge, in inches, for enlarged-scale panels. It is the AXES box, not the page,
-#: so plot areas line up at assembly regardless of label size.
-LARGE_AXES_BOX = 5.0
 
 GENOME = "#3a923a"
 TXOME = "#cc3d3d"
@@ -44,6 +36,9 @@ SAVE_DPI = 300
 PNG_DPI = SAVE_DPI
 
 LEGEND_PAD_PT = 8.0
+
+def die(message):
+    raise SystemExit("error: %s" % message)
 
 def apply_rcparams():
     """One font family and one set of sizes, with editable text in the PDF."""

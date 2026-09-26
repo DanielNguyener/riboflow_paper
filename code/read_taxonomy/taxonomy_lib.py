@@ -36,49 +36,52 @@ def sample_to_gsm(samples_csv=None):
     return {row["cell_line"].replace(" ", "_"): row["ribo_GSM"]
             for _, row in frame.iterrows()}
 
-STATES = ("unique", "multi", "absent")
+GENOME_STATES = ("unique", "multi", "absent")
+TXOME_STATES = ("present", "absent")
+#: The five cells of the read-ID taxonomy: genome status x transcriptome presence, minus
+#: the empty (absent, absent) cell. Transcriptome presence is a primary alignment in the
+#: post-dedup BAM; RiboFlow_v2 already filtered that BAM at MAPQ >= 10, so no further
+#: threshold is applied here (the MAPQ >= 42 rule belongs to the coverage/TE analyses).
+CELLS = tuple((g, t) for g in GENOME_STATES for t in TXOME_STATES
+              if not (g == "absent" and t == "absent"))
+ABBR = {"unique": "U", "multi": "M", "present": "P", "absent": "A"}
 
-def status_sets(bam_path, kind):
-    """(all_mapped_qnames, unique_qnames) over PRIMARY alignments of one BAM.
+def cell_key(genome_status, txome_status):
+    """`gU_tP`, `gM_tA`, ...: the column stem of one taxonomy cell."""
+    return "g%s_t%s" % (ABBR[genome_status], ABBR[txome_status])
 
-    kind="genome": unique = NH==1 (bam_inputs.is_unique_genome_read).
-    kind="txome" : unique = MAPQ >= TXOME_MIN_MAPQ (bowtie2, no NH tag).
-    """
-    if kind not in ("genome", "txome"):
-        raise ValueError(f"kind must be 'genome' or 'txome', got {kind!r}")
+def genome_status_sets(bam_path):
+    """(all_qnames, unique_qnames) over the primary alignments of a genome BAM;
+    unique = NH == 1 (`bam_inputs.is_unique_genome_read`)."""
     all_q, uniq_q = set(), set()
     bam = pysam.AlignmentFile(str(bam_path), "rb")
     for r in bam.fetch(until_eof=True):
         if r.is_unmapped or r.is_secondary or r.is_supplementary:
             continue
-        q = r.query_name
-        all_q.add(q)
-        if kind == "genome":
-            uniq = fc.is_unique_genome_read(r)
-        else:
-            uniq = r.mapping_quality >= fc.txome_min_mapq()
-        if uniq:
-            uniq_q.add(q)
+        all_q.add(r.query_name)
+        if fc.is_unique_genome_read(r):
+            uniq_q.add(r.query_name)
     bam.close()
     return all_q, uniq_q
 
-def status_of(q, all_q, uniq_q):
-    if q in uniq_q:
-        return "unique"
-    if q in all_q:
-        return "multi"
-    return "absent"
+def txome_present_qnames(bam_path):
+    """Every read id with a primary alignment in the transcriptome BAM."""
+    all_q = set()
+    bam = pysam.AlignmentFile(str(bam_path), "rb")
+    for r in bam.fetch(until_eof=True):
+        if r.is_unmapped or r.is_secondary or r.is_supplementary:
+            continue
+        all_q.add(r.query_name)
+    bam.close()
+    return all_q
 
 def classify_sample(sample, log=print):
-    """Return (counts keyed (genome_status, txome_status), n_universe) for one sample.
-
-    Memory-lean: only the four qname sets are held, never a fifth `universe` set.
-    """
-    g_all, g_uniq = status_sets(fc.genome_bam(sample), "genome")
-    t_all, t_uniq = status_sets(fc.txome_bam(sample), "txome")
+    """Return (counts keyed (genome_status, txome_status), n_universe) for one sample."""
+    g_all, g_uniq = genome_status_sets(fc.genome_bam(sample))
+    t_all = txome_present_qnames(fc.txome_bam(sample))
     if log:
         log(f"  [{sample}] genome mapped={len(g_all):,} unique={len(g_uniq):,} | "
-            f"txome mapped={len(t_all):,} unique={len(t_uniq):,}")
+            f"txome mapped={len(t_all):,}")
 
     inter = len(g_all & t_all)
     smaller = min(len(g_all), len(t_all))
@@ -90,16 +93,11 @@ def classify_sample(sample, log=print):
         log(f"  [{sample}] WARNING: low qname overlap ({frac:.1%} of smaller route) — "
             f"asymmetric read recovery; expect a large `absent` fraction")
 
-    counts = {(gs, ts): 0 for gs in STATES for ts in STATES if not (gs == "absent" and ts == "absent")}
+    counts = {cell: 0 for cell in CELLS}
     for q in g_all:
-        gs = status_of(q, g_all, g_uniq)
-        ts = status_of(q, t_all, t_uniq)
-        counts[(gs, ts)] += 1
-    for q in t_all:
-        if q in g_all:
-            continue
-        ts = status_of(q, t_all, t_uniq)
-        counts[("absent", ts)] += 1
+        gs = "unique" if q in g_uniq else "multi"
+        counts[(gs, "present" if q in t_all else "absent")] += 1
+    counts[("absent", "present")] = len(t_all - g_all)
 
     n_universe = len(g_all | t_all)
     assert sum(counts.values()) == n_universe, \

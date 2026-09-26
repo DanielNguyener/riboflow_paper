@@ -32,7 +32,7 @@ TICKS = (-4, -2, -1, -0.5, -0.2, -0.05, 0, 0.05, 0.2, 0.5, 1)
 PADJ, LFC, STATIC = 0.05, 1.0, 0.5
 EXAMPLES = ("GAPDH", "COMT", "LRRFIP1")
 
-#: Panel A matches fig03D_pooled_concordance's 2.082 x 3.669 in axes-box proportions.
+#: Panel A matches fig02D_pooled_concordance's 2.082 x 3.669 in axes-box proportions.
 A_RATIO = 2.082 / 3.669
 #: ...but never narrower than this: two 10-pt tick labels need ~2 in between centres.
 A_MIN_WIDTH = 2.1
@@ -103,8 +103,9 @@ class Geometry:
                                     w / width, self.height / self.page_height])
         return add
 
-    def combined_page(self, figure_factory):
-        figure = figure_factory((self.width, self.page_height))
+    def combined_page(self):
+        import matplotlib.pyplot as plt
+        figure = plt.figure(figsize=(self.width, self.page_height))
         add = self._adder(figure, self.width)
         y1 = self.bottom + self.height + self.row_gap
         axes = [add(self.left, y1, self.boxes[0]),
@@ -113,12 +114,13 @@ class Geometry:
         cax = add(self.left + self.boxes[2] + self.cbar_pad, self.bottom, self.cbar_w)
         return figure, axes, cax
 
-    def single_page(self, figure_factory, index):
+    def single_page(self, index):
         """One panel on its own page, at exactly its combined-page axes box."""
+        import matplotlib.pyplot as plt
         box = self.boxes[index]
         bar = self.colorbar_width() if index == 2 else 0.0
         width = self.left + box + bar + self.right
-        figure = figure_factory((width, self.page_height))
+        figure = plt.figure(figsize=(width, self.page_height))
         add = self._adder(figure, width)
         axis = add(self.left, self.bottom, box)
         cax = add(self.left + box + self.cbar_pad, self.bottom, self.cbar_w) if index == 2 else None
@@ -189,7 +191,7 @@ def draw_b(ax, genes):
     dress(ax, "B")
 
 
-def draw_c(figure, ax, cax, genes, marker, housekeeping=()):
+def draw_c(figure, ax, cax, genes, housekeeping=()):
     """C: the assay plane, with its density colorbar. Returns (labelled, dropped)."""
     from matplotlib.colors import LinearSegmentedColormap, LogNorm
 
@@ -209,13 +211,13 @@ def draw_c(figure, ax, cax, genes, marker, housekeeping=()):
     edge = np.array([-half - pad, half + pad])
     ax.plot(edge, edge, color=IDENTITY, linewidth=ps.lw(1.0), zorder=2.5,
             label="$y = x$  ($\\Delta$TE $= 0$)")
-    dots = ax.scatter(x[dorder], y[dorder], c=density[dorder], s=7 * marker, cmap=cmap,
+    dots = ax.scatter(x[dorder], y[dorder], c=density[dorder], s=7, cmap=cmap,
                       norm=LogNorm(vmin=vmin, vmax=dhi), linewidths=0, zorder=3,
                       rasterized=True)
     hi_mask = np.isfinite(padj) & (padj < PADJ) & (np.abs(te) > LFC)
     sel = hi_mask[dorder]
     ax.scatter(x[dorder][sel], y[dorder][sel], c=density[dorder][sel], cmap=cmap,
-               norm=dots.norm, s=21 * marker, edgecolors=HILITE,
+               norm=dots.norm, s=21, edgecolors=HILITE,
                linewidths=ps.lw(0.7), zorder=4, rasterized=True,
                label="$p_{adj}$ (BH) < %g, |$\\Delta$TE| > %g" % (PADJ, LFC))
     ax.set_xlim(*edge)
@@ -270,7 +272,7 @@ def draw_c(figure, ax, cax, genes, marker, housekeeping=()):
     placed.append(leg.get_window_extent(renderer))
     disp = ax.transData.transform(np.column_stack([x, y]))
     px = figure.dpi / 72.0
-    radius = np.where(hi_mask, np.sqrt(21 * marker / np.pi), np.sqrt(7 * marker / np.pi)) * px
+    radius = np.where(hi_mask, np.sqrt(21 / np.pi), np.sqrt(7 / np.pi)) * px
 
     def hits_a_dot(b):
         return bool(np.any((disp[:, 0] >= b.x0 - radius) & (disp[:, 0] <= b.x1 + radius)
@@ -368,28 +370,24 @@ def main(argv=None):
 
     ps.apply_rcparams()
     formats = ps.resolve_formats(args.formats)
-    marker = ps.MARKER_AREA
     geom = Geometry(args.width, args.height)
     labelled, dropped = None, None
 
-    def new_figure(size):
-        return plt.figure(figsize=size)
-
     if args.panel == "combined":
-        figure, axes, cax = geom.combined_page(new_figure)
+        figure, axes, cax = geom.combined_page()
         draw_a(axes[0], corr)
         draw_b(axes[1], genes)
-        labelled, dropped = draw_c(figure, axes[2], cax, genes, marker, housekeeping)
+        labelled, dropped = draw_c(figure, axes[2], cax, genes, housekeeping)
         written = ps.save(figure, args.output, formats, args.force, tight=False)
     else:
         index = PANELS.index(args.panel) - 1
-        figure, axis, cax = geom.single_page(new_figure, index)
+        figure, axis, cax = geom.single_page(index)
         if index == 0:
             draw_a(axis, corr)
         elif index == 1:
             draw_b(axis, genes)
         else:
-            labelled, dropped = draw_c(figure, axis, cax, genes, marker, housekeeping)
+            labelled, dropped = draw_c(figure, axis, cax, genes, housekeeping)
         written = ps.save(figure, args.output, formats, args.force, tight=True)
     plt.close(figure)
 

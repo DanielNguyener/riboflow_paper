@@ -234,19 +234,6 @@ def build_regions(headers: dict, stop_codon_ids: set, bed: dict = None) -> tuple
     }
     return rows, summary
 
-def heuristic_stop_codon_ids(headers: dict) -> set:
-    """No-GTF fallback: header UTR3 present, or CDS length % 3 == 0.
-
-    Matches the GTF stop_codon set on the shipped v2 reference, but IS a heuristic
-    (divisibility alone misses 5'-incomplete annotations that carry a UTR3).
-    """
-    out = set()
-    for tid, header in headers.items():
-        cds_start, cds_end = header["hdr_cds"]
-        if header["hdr_utr3"] is not None or (cds_end - cds_start + 1) % 3 == 0:
-            out.add(tid)
-    return out
-
 def build_ribo_region_bins(headers: dict, left_span: int, right_span: int) -> list:
     """ribopy's five-way binning (port of `region_lib.classify` boundaries), derived, not annotation.
 
@@ -281,17 +268,3 @@ def build_ribo_region_bins(headers: dict, left_span: int, right_span: int) -> li
                 "end": end,
             })
     return rows
-
-def ribo_bin_provenance(left_span: int, right_span: int, parameter_source: str) -> dict:
-    """The attributes stored on /ribo_region_bins. Records HOW the spans were chosen."""
-    return {
-        "algorithm": "ribopy_get_extended_boundaries",
-        "left_span": int(left_span),
-        "right_span": int(right_span),
-        "start_site_source": "header_cds_start_minus_1",
-        "stop_site_source": "header_cds_end_stop_inclusive",
-        "parameter_source": parameter_source,
-        "note": "Derived junction windows, NOT annotation. Labels carry ribopy_alias for "
-                "ribopy's UTR5/UTR5J/CDS/UTR3J/UTR3 names.",
-    }
-

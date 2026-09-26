@@ -73,7 +73,7 @@ def load_offsets(qc_csv: Path, sample: str) -> dict:
 def load_selected_lengths(qc_csv: Path, sample: str) -> list:
     """The sample's selected read lengths, ascending -- the window WITHOUT the offsets.
 
-    Same table and filter as `load_offsets`, so Figure 4 (no offset applied) shares the population.
+    Same table and filter as `load_offsets`, so Figure 3 (no offset applied) shares the population.
     """
     return sorted(int(r) for r in _selected_rows(qc_csv, sample, ("read_length",))["read_length"])
 

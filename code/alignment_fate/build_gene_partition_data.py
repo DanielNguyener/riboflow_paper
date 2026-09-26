@@ -16,8 +16,10 @@ Segments (unit: read IDs; denominator: the union of read IDs at the gene on eith
     r7_gonly_multi          genome-only, genome-multimapping
     r7_txonly               transcriptome-only at the gene
 
-Validated counts (GSM2100602), in the order above: COMT 1084/0/34/105/37/26/9 (union
-1,295); GAPDH 1057/2207/805/63/49/64/115 (4,360); LRRFIP1 281/40/18/755/27/388/16 (1,525).
+Validated counts (GSM2100602), in the order above: COMT 1084/0/34/88/54/14/9 (union
+1,283); GAPDH 1057/2326/670/53/59/40/117 (4,322); LRRFIP1 281/44/13/747/35/380/16 (1,516).
+Genome membership is a top-score placement (the primary, or a secondary tied with its AS) on
+the gene's span; every read was re-derived by an independent pysam/GTF recomputation.
 Counts other than these are rejected.
 """
 from __future__ import annotations
@@ -35,20 +37,20 @@ import inputs as paths  # noqa: E402
 
 DEFAULT_OUTPUT = os.path.join(paths.REPO, "results", "alignment_fate", "gene_partition_route7")
 
-#: The validated counts (Fig6A segment semantics audit). Refusing to write anything else
+#: The validated counts (gene-partition segment semantics audit). Refusing to write anything else
 #: is the point: a short bar is the one failure a stacked figure cannot show you.
 EXPECTED_COUNTS = {
     "COMT":    {"r7_shared_unique": 1084, "r7_shared_multi_pp": 0,
-                "r7_shared_multi_other": 34, "r7_gonly_unique_omit": 105,
-                "r7_gonly_unique_other": 37, "r7_gonly_multi": 26, "r7_txonly": 9},
-    "GAPDH":   {"r7_shared_unique": 1057, "r7_shared_multi_pp": 2207,
-                "r7_shared_multi_other": 805, "r7_gonly_unique_omit": 63,
-                "r7_gonly_unique_other": 49, "r7_gonly_multi": 64, "r7_txonly": 115},
-    "LRRFIP1": {"r7_shared_unique": 281, "r7_shared_multi_pp": 40,
-                "r7_shared_multi_other": 18, "r7_gonly_unique_omit": 755,
-                "r7_gonly_unique_other": 27, "r7_gonly_multi": 388, "r7_txonly": 16},
+                "r7_shared_multi_other": 34, "r7_gonly_unique_omit": 88,
+                "r7_gonly_unique_other": 54, "r7_gonly_multi": 14, "r7_txonly": 9},
+    "GAPDH":   {"r7_shared_unique": 1057, "r7_shared_multi_pp": 2326,
+                "r7_shared_multi_other": 670, "r7_gonly_unique_omit": 53,
+                "r7_gonly_unique_other": 59, "r7_gonly_multi": 40, "r7_txonly": 117},
+    "LRRFIP1": {"r7_shared_unique": 281, "r7_shared_multi_pp": 44,
+                "r7_shared_multi_other": 13, "r7_gonly_unique_omit": 747,
+                "r7_gonly_unique_other": 35, "r7_gonly_multi": 380, "r7_txonly": 16},
 }
-EXPECTED_UNION = {"COMT": 1295, "GAPDH": 4360, "LRRFIP1": 1525}
+EXPECTED_UNION = {"COMT": 1283, "GAPDH": 4322, "LRRFIP1": 1516}
 GENE_ORDER = ("COMT", "GAPDH", "LRRFIP1")
 
 COLUMNS = ("sample", "gsm", "gene_order", "gene_name", "transcript_id", "n_union",
@@ -124,7 +126,15 @@ def write(prepared, segments, mapping, reads_path, sample, gsm, output_stem,
         "semantics": {
             "shared": "read id present in BOTH dedup BAMs (global, not gene-local)",
             "genome_only": "read id absent from the transcriptome dedup BAM entirely",
-            "txonly": "no genome alignment AT THIS GENE; the read may align elsewhere",
+            "txonly": "no top-score genome placement AT THIS GENE; the read may align "
+                      "elsewhere",
+            "genome_membership": "a top-score genome placement (the primary, or a secondary "
+                                 "with the primary's AS) overlapping the gene's full span; a "
+                                 "read counts once per gene, and may be in several genes",
+            "pseudogene_tie": "a top-score placement with its 5' base in an exon of THIS "
+                              "gene and another on a processed pseudogene",
+            "omitted_exon": "genome-only unique read with an aligned block on this gene's "
+                            "exonic sequence absent from its selected transcript",
             "unit": "read ids; denominator = union of read ids at the gene on either route"},
         "source": {"file": os.path.basename(reads_path),
                    "sha256": paths.sha256_of(reads_path),

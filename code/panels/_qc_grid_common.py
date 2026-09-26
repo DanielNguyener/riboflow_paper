@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared loading for the two Figure-2 heatmaps: sample x read-length matrices."""
+"""Shared loading for the two S1 Fig heatmaps: sample x read-length matrices."""
 from __future__ import annotations
 
 import sys

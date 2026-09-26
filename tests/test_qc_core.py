@@ -24,25 +24,13 @@ import qc_core  # noqa: E402
 
 # ── the dependency guard ─────────────────────────────────────────────────────
 
-def test_a_present_package_passes():
-    qc_core.require("os", "sys")
-
-
-def test_a_missing_package_is_an_actionable_error_not_an_install():
-    with pytest.raises(SystemExit) as excinfo:
-        qc_core.require("a_package_that_does_not_exist")
-    message = str(excinfo.value)
-    assert "a_package_that_does_not_exist" in message
-    assert "requirements.txt" in message, "the error must say how to fix it"
-
-
 def test_no_qc_script_installs_anything_at_runtime():
     """A script that pip-installs into whatever interpreter is running can silently change
     the versions a published number was produced with."""
     for script in sorted((REPO / "code" / "ribo_seq_qc").glob("*.py")):
         text = script.read_text()
         assert '"-m", "pip"' not in text, script.name
-        assert "pip install" not in text or script.name == "qc_core.py", script.name
+        assert "pip install" not in text, script.name
 
 
 # ── read-length selection ────────────────────────────────────────────────────
@@ -307,9 +295,9 @@ def test_the_transcriptome_step_runs_end_to_end(tmp_path):
                                            str(REPO / "code" / "common" / "ribo_seq_qc"),
                                            str(REPO / "code" / "ribo_seq_qc")]),
                RIBOFLOW_PAPER_QC_TX_OUT=str(out), MPLBACKEND="Agg")
-    script = str(REPO / "code" / "ribo_seq_qc" / "01t_readlen_psite_qc_transcriptome.py")
+    script = str(REPO / "code" / "ribo_seq_qc" / "01_readlen_psite_qc.py")
     result = subprocess.run(
-        [sys.executable, script, "--sample", "SYN", "--bam", str(bam)],
+        [sys.executable, script, "--route", "transcriptome", "--sample", "SYN", "--bam", str(bam)],
         capture_output=True, text=True, env=env)
     assert result.returncode == 0, result.stderr[-3000:]
 
@@ -330,7 +318,8 @@ def test_the_transcriptome_step_runs_end_to_end(tmp_path):
     # overwritten (the step refuses nothing, but re-running would just redo the work).
     plotted = tmp_path / "out_plots"
     result = subprocess.run(
-        [sys.executable, script, "--sample", "SYN", "--bam", str(bam), "--plots"],
+        [sys.executable, script, "--route", "transcriptome", "--sample", "SYN", "--bam", str(bam),
+         "--plots"],
         capture_output=True, text=True,
         env=dict(env, RIBOFLOW_PAPER_QC_TX_OUT=str(plotted)))
     assert result.returncode == 0, result.stderr[-3000:]

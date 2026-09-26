@@ -1,4 +1,4 @@
-"""The CDS-assigned counting rule behind Figure 4.
+"""The CDS-assigned counting rule behind Figure 3.
 
 Everything here runs on the synthetic three-transcript cohort in `conftest.py`, through the
 real annotation bundle and the real BAM readers -- no mock of either. The geometry is known
@@ -23,7 +23,7 @@ import pandas as pd
 import pysam
 import pytest
 
-from conftest import (CDS_START, GEOMETRY, OFFSET, OTHER_LEN, READ_LEN, SAMPLE,
+from conftest import (GEOMETRY, OFFSET, OTHER_LEN, READ_LEN, SAMPLE,
                       TX_MINUS, TX_PLUS, TX_SHORT, cds_rel_to_genomic)
 
 REPO = Path(__file__).resolve().parents[1]
@@ -174,9 +174,9 @@ def test_the_5_prime_end_of_a_reverse_read_is_its_high_coordinate(rrl):
 
 
 def test_no_p_site_offset_reaches_this_module():
-    """Figure 4 must be unable to move when the P-site rule changes.
+    """Figure 3 must be unable to move when the P-site rule changes.
 
-    Figure 3 applies the offset through `psite_placement.place`; Figure 4 shares that
+    Figure 2 applies the offset through `psite_placement.place`; Figure 3 shares that
     module's read-length loader and nothing else from it."""
     source = (CODE / "ribo_rna" / "ribo_rna_lib.py").read_text()
     assert "psite" not in source.lower().replace("p-site", "")
@@ -361,8 +361,8 @@ def test_no_superseded_symbol_survives_anywhere(symbol):
 
     `region_lib.build_genome_exon_table` is not in this list: it survives
     because it builds RiboPy's extended-boundary CDS core for the read-length selection,
-    a different region over a different transcript set from the canonical CDS Figure 4
-    counts into. It stopped being Figure 4's universe helper; it did not stop existing."""
+    a different region over a different transcript set from the canonical CDS Figure 3
+    counts into. It stopped being Figure 3's universe helper; it did not stop existing."""
     hits = []
     for path in sorted((CODE).rglob("*.py")):
         if "__pycache__" in path.parts:

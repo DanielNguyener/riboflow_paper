@@ -3,44 +3,51 @@ schema_version: riboflow_paper/panel-manifest/2
 
 defaults:
   formats: [pdf]
-  overwrite: false           
 
 figures:
+  S1:
+    composer: grid_pair           # two 24 x 9 grids side by side
+    panels: [figS1A, figS1B]
+    page_in: [7.5, 8.75]
+    label_pt: 12
+    raster: {kind: matplotlib_pdf, dpi: 300, border_pt: 2.0}
+    output: figures/published/S1_Fig
   2:
-    composer: fig02_stack           # two 24 x 9 grids side by side
-    panels: [fig02A, fig02B]
+    composer: fitted_rows             # A / B / C|D rows, each panel fitted to its slot
+    panels: [fig02A, fig02B, fig02C, fig02D]
     page_in: [7.5, 8.75]
     label_pt: 12
     raster: {kind: matplotlib_pdf, dpi: 300, border_pt: 2.0}
     output: figures/published/Fig2
+    annotations: docs/Fig2_panel_annotations.md
   3:
-    composer: fig03_fit             # A / B / C|D rows, each panel fitted to its slot
-    panels: [fig03A, fig03B, fig03C, fig03D]
-    page_in: [7.5, 8.75]
-    label_pt: 12
-    raster: {kind: matplotlib_pdf, dpi: 300, border_pt: 2.0}
-    output: figures/published/Fig3
-    annotations: docs/Fig3_panel_annotations.md
-  4:
     composer: single_panel          # one generator page, already PLOS-sized
-    panels: [fig04]
+    panels: [fig03]
     raster: {kind: generator_tiff, dpi: 300, border_pt: 2.0, min_font_pt: 7.0}
-    output: figures/published/Fig4
-  5:
+    output: figures/published/Fig3
+  4:
     composer: rows_1to1             # native size, letters above each row
-    rows: [[fig05A_plos, fig05B_plos, fig05C_plos, fig05D_plos]]
+    rows: [[fig04A_plos, fig04B_plos, fig04C_plos, fig04D_plos]]
     letters: ABCD
     page: {max_width_pt: 540.0, max_height_pt: 630.0, margin_pt: 4.0, gutter_pt: 6.0,
            row_gap_pt: 10.0, letter_pt: 10.0}
-    raster: {kind: fitz, dpi: 600, fallback_dpi: 300}
-    output: figures/published/Fig5
-  6:
+    raster: {kind: fitz, dpi: 600}
+    output: figures/published/Fig4
+  5:
     composer: rows_1to1
-    rows: [[fig06A], [fig06B]]
+    rows: [[fig05A], [fig05B]]
     letters: AB
     page: {max_width_pt: 540.0, max_height_pt: 630.0, margin_pt: 4.0, gutter_pt: 6.0,
            row_gap_pt: 10.0, letter_pt: 10.0}
-    raster: {kind: fitz, dpi: 600, fallback_dpi: 300}
+    raster: {kind: fitz, dpi: 600}
+    output: figures/published/Fig5
+  6:
+    composer: rows_1to1             # one generator page; its seven letters are drawn by the generator
+    rows: [[fig06]]
+    letters: [""]
+    page: {max_width_pt: 540.0, max_height_pt: 630.0, margin_pt: 4.0, gutter_pt: 6.0,
+           row_gap_pt: 10.0, letter_pt: 10.0}
+    raster: {kind: fitz, dpi: 600}
     output: figures/published/Fig6
 
 panels:
@@ -52,9 +59,9 @@ panels:
     generator: null
     note: Author-drawn schematic, not a pipeline output. No generator.
 
-  # ── Figure 2 ────────────────────────────────────────────────────────────────
-  - id: fig02A
-    figure: 2
+  # ── S1 Fig ────────────────────────────────────────────────────────────────
+  - id: figS1A
+    figure: S1
     panel: A
     title: Read-length selection and P-site offsets agree between routes
     generator: code/panels/plot_readlen_psite_selection.py
@@ -62,11 +69,10 @@ panels:
       qc_genome: data/ribo_seq_qc/genome/tables/readlen_window_qc.csv
       qc_txome:  data/ribo_seq_qc/transcriptome/tables/readlen_window_qc.csv
       samples_csv: supporting_information/S1_Table/samples.csv
-    columns_used: [sample, read_length, in_phase1, psite_offset, cell_line, ribo_GSM]
-    output: results/panels/fig02A_readlen_psite_selection
+    output: results/panels/figS1A_readlen_psite_selection
 
-  - id: fig02B
-    figure: 2
+  - id: figS1B
+    figure: S1
     panel: B
     title: Whole-CDS frame-0 periodicity difference, genome minus transcriptome
     generator: code/panels/plot_cds_periodicity_difference.py
@@ -74,57 +80,50 @@ panels:
       frame_genome: data/ribo_seq_qc/genome/tables/cds_psite_frame.csv
       frame_txome:  data/ribo_seq_qc/transcriptome/tables/cds_psite_frame.csv
       samples_csv:    supporting_information/S1_Table/samples.csv
-    columns_used: [sample, read_length, in_phase1, pct_frame0, cell_line, ribo_GSM]
-    output: results/panels/fig02B_cds_periodicity_difference
+    output: results/panels/figS1B_cds_periodicity_difference
 
-  # ── Figure 3 ────────────────────────────────────────────────────────────────
-  - id: fig03A
-    figure: 3
+  # ── Figure 2 ────────────────────────────────────────────────────────────────
+  - id: fig02A
+    figure: 2
     panel: A
     title: COMT per-base coverage, genome versus transcriptome
     generator: code/panels/plot_transcript_coverage.py
     args:
       gene_id: ENSG00000093010          # COMT; resolves to ENST00000361682.11
-      signal: both
       region: cds                       # published framing; default view is whole-transcript
       annotate_correlation: true
+      route_legend: true
     inputs:
       coverage_h5: results/coverage/HeLa.shared_coverage.h5
-    output: results/panels/fig03A_HeLa_COMT_coverage
+    output: results/panels/fig02A_HeLa_COMT_coverage
 
-  - id: fig03B
-    figure: 3
+  - id: fig02B
+    figure: 2
     panel: B
     title: GAPDH per-base coverage, genome versus transcriptome
     generator: code/panels/plot_transcript_coverage.py
     args:
       gene_id: ENSG00000111640          # GAPDH; resolves to ENST00000396861.5
-      signal: both
       region: cds
       annotate_correlation: true
+      route_legend: true
     inputs:
       coverage_h5: results/coverage/HeLa.shared_coverage.h5
-    output: results/panels/fig03B_HeLa_GAPDH_coverage
+    output: results/panels/fig02B_HeLa_GAPDH_coverage
 
-  - id: fig03C
-    figure: 3
+  - id: fig02C
+    figure: 2
     panel: C
     title: Per-transcript concordance distribution per cell line
     generator: code/panels/plot_per_transcript_concordance.py
-    args:
-      ylim: [0.0, 1.0]
-      highlight_sample: HeLa
-      highlight_gapdh: ENST00000396861.5
-      highlight_comt: ENST00000361682.11
     inputs:
       psite:      data/coverage/concordance/region_concordance_per_transcript.tsv.gz
       footprint:  data/coverage/concordance/region_coverage_per_transcript.tsv.gz
       samples_csv: supporting_information/S1_Table/samples.csv
-    columns_used: [sample, transcript_id, spearman, pearson]
-    output: results/panels/fig03C_per_transcript_concordance
+    output: results/panels/fig02C_per_transcript_concordance
 
-  - id: fig03D
-    figure: 3
+  - id: fig02D
+    figure: 2
     panel: D
     title: Pooled per-cell-line concordance
     generator: code/panels/plot_pooled_concordance.py
@@ -133,14 +132,13 @@ panels:
     inputs:
       psite:     data/coverage/concordance/region_concordance_per_sample.tsv
       footprint: data/coverage/concordance/region_coverage_per_sample.tsv
-    columns_used: [sample, spearman_all, pearson_all]
-    output: results/panels/fig03D_pooled_concordance
+    output: results/panels/fig02D_pooled_concordance
 
-  # ── Figure 4 ────────────────────────────────────────────────────────────────
+  # ── Figure 3 ────────────────────────────────────────────────────────────────
   # One generator draws the combined page and the single panels from the same geometry.
   # The combined page is the published figure; the singles are for panel-level verify.
-  - id: fig04
-    figure: 4
+  - id: fig03
+    figure: 3
     panel: null
     title: Alignment route and translation efficiency, three panels
     generator: code/te_route/plot_te_route_panels.py
@@ -150,12 +148,10 @@ panels:
       route_correlation: data/te_route/tables/route_correlation.tsv
       housekeeping_genes:       data/te_route/housekeeping/Housekeeping_GenesHuman.csv
       housekeeping_transcripts: data/te_route/housekeeping/Housekeeping_TranscriptsHuman.csv
-    columns_used: [transcript_id, gene_name, drna_mean, dribo_mean, dte_mean, dte_ci_low,
-                   dte_ci_high, dte_padj, sample, spearman_rho, pearson_r, Ensembl]
-    output: results/panels/fig04_te_route_combined
+    output: results/panels/fig03_te_route_combined
 
-  - id: fig04A
-    figure: 4
+  - id: fig03A
+    figure: 3
     panel: A
     title: Route agreement on log2 TE per cell line
     generator: code/te_route/plot_te_route_panels.py
@@ -163,11 +159,10 @@ panels:
     inputs:
       per_gene_delta:    data/te_route/tables/per_gene_delta.tsv
       route_correlation: data/te_route/tables/route_correlation.tsv
-    columns_used: [sample, spearman_rho, pearson_r]
-    output: results/panels/fig04A_route_agreement
+    output: results/panels/fig03A_route_agreement
 
-  - id: fig04B
-    figure: 4
+  - id: fig03B
+    figure: 3
     panel: B
     title: Ranked per-transcript delta TE with 95% CI
     generator: code/te_route/plot_te_route_panels.py
@@ -175,11 +170,10 @@ panels:
     inputs:
       per_gene_delta:    data/te_route/tables/per_gene_delta.tsv
       route_correlation: data/te_route/tables/route_correlation.tsv
-    columns_used: [dte_mean, dte_ci_low, dte_ci_high]
-    output: results/panels/fig04B_ranked_delta_te
+    output: results/panels/fig03B_ranked_delta_te
 
-  - id: fig04C
-    figure: 4
+  - id: fig03C
+    figure: 3
     panel: C
     title: Mean delta RNA against mean delta Ribo
     generator: code/te_route/plot_te_route_panels.py
@@ -189,24 +183,21 @@ panels:
       route_correlation: data/te_route/tables/route_correlation.tsv
       housekeeping_genes:       data/te_route/housekeeping/Housekeeping_GenesHuman.csv
       housekeeping_transcripts: data/te_route/housekeeping/Housekeeping_TranscriptsHuman.csv
-    columns_used: [transcript_id, gene_name, drna_mean, dribo_mean, dte_mean, dte_padj, Ensembl]
-    output: results/panels/fig04C_assay_plane
+    output: results/panels/fig03C_assay_plane
 
-  # ── Figure 5 ────────────────────────────────────────────────────────────────
-  - id: fig05A
-    figure: 5
+  # ── Figure 4 ────────────────────────────────────────────────────────────────
+  - id: fig04A
+    figure: 4
     panel: A
     title: Distinct mapped read IDs per route
     generator: code/panels/plot_route_read_counts.py
     inputs:
       taxonomy:  data/read_taxonomy/taxonomy/taxonomy_all.tsv
       samples_csv: supporting_information/S1_Table/samples.csv
-    columns_used: [sample, n_universe, n_genome_unique, n_genome_multi, n_genome_absent,
-                   n_txome_unique, n_txome_multi, n_txome_absent]
-    output: results/panels/fig05A_route_read_counts
+    output: results/panels/fig04A_route_read_counts
 
-  - id: fig05B
-    figure: 5
+  - id: fig04B
+    figure: 4
     panel: B
     title: Read-ID union composition
     generator: code/panels/plot_read_id_union.py
@@ -214,78 +205,76 @@ panels:
       taxonomy:    data/read_taxonomy/taxonomy/taxonomy_all.tsv
       samples_csv: supporting_information/S1_Table/samples.csv
     args: {hide_labels: true}
-    columns_used: [sample, n_universe, n_gU_tU, n_gU_tM, n_gM_tU, n_gM_tM,
-                   n_gU_tA, n_gM_tA, n_gA_tU, n_gA_tM]
-    output: results/panels/fig05B_read_id_union
+    output: results/panels/fig04B_read_id_union
 
-  - id: fig05C
-    figure: 5
+  - id: fig04C
+    figure: 4
     panel: C
     title: Protein-coding to pseudogene tie share of genome multimappers
-    generator: code/panels/plot_multimap_biotype.py
+    generator: code/panels/plot_cohort_share.py
+    args: {panel: C}
     inputs:
       tie_master: data/read_taxonomy/multimap_biotype/multimap_tie_biotype_all.tsv
       taxonomy:   data/read_taxonomy/taxonomy/taxonomy_all.tsv
-    columns_used: [sample, pct_cross_pp_pc, pct_cross_pc_pp]
-    output: results/panels/fig05C_multimap_tie_biotype
+    output: results/panels/fig04C_multimap_tie_biotype
 
-  - id: fig05D
-    figure: 5
+  - id: fig04D
+    figure: 4
     panel: D
-    title: Alternative-isoform exon share of genome-only unique reads
-    generator: code/panels/plot_nonselected_isoform_reach.py
+    title: Omitted alternative-exon overlap of genome-only unique reads
+    generator: code/panels/plot_cohort_share.py
+    args: {panel: D}
     inputs:
       reach_master: data/read_taxonomy/reach/genome_anchored_reach_all.tsv
       taxonomy:     data/read_taxonomy/taxonomy/taxonomy_all.tsv
-    columns_used: [sample, n_nonselected_isoform_exon, n_gUtA]
-    output: results/panels/fig05D_nonselected_isoform_reach
+    output: results/panels/fig04D_nonselected_isoform_reach
 
-  - id: fig05A_plos
-    figure: 5
+  - id: fig04A_plos
+    figure: 4
     panel: A
     title: Distinct mapped read IDs per route, page size
-    generator: code/panels/plot_fig05_plos_panels.py
+    generator: code/panels/plot_cohort_plos_panels.py
     args: {panel: A, width_pt: 140.0, height_in: 4.75, font_pt: 8.0}
     inputs:
       taxonomy:    data/read_taxonomy/taxonomy/taxonomy_all.tsv
       samples_csv: supporting_information/S1_Table/samples.csv
-    output: results/panels/fig05A_plos_route_read_counts
+    output: results/panels/fig04A_plos_route_read_counts
 
-  - id: fig05B_plos
-    figure: 5
+  - id: fig04B_plos
+    figure: 4
     panel: B
     title: Read-ID union composition, page size
-    generator: code/panels/plot_fig05_plos_panels.py
+    generator: code/panels/plot_cohort_plos_panels.py
     args: {panel: B, width_pt: 142.0, height_in: 5.20, font_pt: 8.0}   # taller: union key
     inputs:
       taxonomy:    data/read_taxonomy/taxonomy/taxonomy_all.tsv
       samples_csv: supporting_information/S1_Table/samples.csv
-    output: results/panels/fig05B_plos_read_id_union
+    output: results/panels/fig04B_plos_read_id_union
 
-  - id: fig05C_plos
-    figure: 5
+  - id: fig04C_plos
+    figure: 4
     panel: C
     title: Protein-coding to pseudogene tie share, page size
-    generator: code/panels/plot_fig05_plos_panels.py
+    generator: code/panels/plot_cohort_plos_panels.py
     args: {panel: C, width_pt: 103.0, height_in: 4.75, font_pt: 8.0}
     inputs:
       tie_master: data/read_taxonomy/multimap_biotype/multimap_tie_biotype_all.tsv
       taxonomy:   data/read_taxonomy/taxonomy/taxonomy_all.tsv
-    output: results/panels/fig05C_plos_multimap_tie_biotype
+    output: results/panels/fig04C_plos_multimap_tie_biotype
 
-  - id: fig05D_plos
-    figure: 5
+  - id: fig04D_plos
+    figure: 4
     panel: D
-    title: Alternative-isoform exon share, page size
-    generator: code/panels/plot_fig05_plos_panels.py
+    title: Omitted alternative-exon overlap, page size
+    generator: code/panels/plot_cohort_plos_panels.py
     args: {panel: D, width_pt: 103.0, height_in: 4.75, font_pt: 8.0}
     inputs:
       reach_master: data/read_taxonomy/reach/genome_anchored_reach_all.tsv
       taxonomy:     data/read_taxonomy/taxonomy/taxonomy_all.tsv
-    output: results/panels/fig05D_plos_nonselected_isoform_reach
+    output: results/panels/fig04D_plos_nonselected_isoform_reach
 
-  - id: fig06A
-    figure: 6
+  - id: fig05A
+    figure: 5
     panel: A
     title: Route-explicit seven-segment read-ID partition at COMT, GAPDH and LRRFIP1
     generator: code/panels/plot_gene_partition.py
@@ -301,13 +290,13 @@ panels:
     inputs:
       derived_table: data/alignment_fate/gene_partition_route7.tsv
       derived_meta:  data/alignment_fate/gene_partition_route7.json
-    columns_used: [gene_name, transcript_id, n_union, segment_key, n_reads, gene_order]
-    output: results/panels/fig06A_gene_read_partition
+    output: results/panels/fig05A_gene_read_partition
 
-  - id: fig06B
-    figure: 6
+  - id: fig05B
+    figure: 5
     panel: B
-    title: LRRFIP1 locus, exon-compressed, mirrored P-site coverage and isoform models
+    title: LRRFIP1 locus, exon-compressed, mirrored P-site coverage stacked by the panel-A
+      read populations (same key colours), and isoform models
     generator: code/panels/plot_locus_coverage.py
     args:
       title: "LRRFIP1 — GSM2100602"
@@ -317,13 +306,27 @@ panels:
       ylabel: "P-site count"
       xlabel: "LRRFIP1 transcript models (5′→3′; introns compressed)"
       model_names: "Selected reference,Alternative isoform"
-      marks_right: true
+      marks_at_axis: true
       no_xticks: true
       compact: true
     fit: {width_pt: 532.0, height_in: 2.05}
     inputs:
       derived_npz:  data/alignment_fate/locus_LRRFIP1.npz
       derived_meta: data/alignment_fate/locus_LRRFIP1.json
-    output: results/panels/fig06B_LRRFIP1_locus_coverage
+    output: results/panels/fig05B_LRRFIP1_locus_coverage
 
-gates: [numerical, review, reference]
+  # ── Figure 6 ────────────────────────────────────────────────────────────────
+  - id: fig06
+    figure: 6
+    panel: null
+    title: HeLa genes clustered by read-fate composition (Ward, k = 4), with the cluster
+      validation row; panels A-G lettered by the generator
+    generator: code/panels/plot_read_fate_clusters.py
+    inputs:
+      clusters:  data/clustering/HeLa.post_dedup.clusters_k4.tsv
+      centroids: data/clustering/HeLa.post_dedup.cluster_centroids.tsv
+      tree:      data/clustering/HeLa.post_dedup.tree_merge.tsv
+      pseudogene_counts:     data/clustering/HeLa.post_dedup.pseudogene_counts_genes.tsv
+      omitted_sequence:      data/clustering/HeLa.post_dedup.omitted_sequence_genes.tsv
+      reference_duplication: data/clustering/HeLa.post_dedup.reference_duplication_entries.tsv
+    output: results/panels/fig06_read_fate_clusters

@@ -164,7 +164,7 @@ def _write_bam(path: Path, contigs, records, index=True):
     """Write a coordinate-sorted, optionally indexed BAM.
 
     Each record is a dict: ref, pos (0-based), cigar, mapq, reverse, secondary,
-    supplementary, unmapped, name, nh.
+    supplementary, unmapped, name, nh, as_ (an `AS` tag, written only when given).
 
     `nh` is written as an `NH` tag when present and omitted otherwise, because the two
     references differ: STAR tags every genome alignment with its multiplicity, and the
@@ -182,12 +182,14 @@ def _write_bam(path: Path, contigs, records, index=True):
             segment.reference_id = order[r["ref"]]
             segment.reference_start = r["pos"]
             segment.cigarstring = r["cigar"]
-            n = sum(int(x) for x in _cigar_query_lengths(r["cigar"]))
+            n = segment.infer_query_length()
             segment.query_sequence = "A" * n
             segment.query_qualities = pysam.qualitystring_to_array("I" * n)
             segment.mapping_quality = r.get("mapq", 255)
             if r.get("nh") is not None:
                 segment.set_tag("NH", int(r["nh"]))
+            if r.get("as_") is not None:
+                segment.set_tag("AS", int(r["as_"]))
             flag = 0
             if r.get("reverse"):
                 flag |= 16
@@ -202,19 +204,6 @@ def _write_bam(path: Path, contigs, records, index=True):
     if index:
         pysam.index(str(path))
     return path
-
-
-def _cigar_query_lengths(cigar):
-    """Query-consuming lengths in a CIGAR string (M/I/S/=/X, not N/D)."""
-    number, out = "", []
-    for char in cigar:
-        if char.isdigit():
-            number += char
-        else:
-            if char in "MIS=X":
-                out.append(number)
-            number = ""
-    return out
 
 
 def genome_read(tid, rel, *, mapq=255, nh=1, length=READ_LEN, offset=OFFSET, **kw):
@@ -307,7 +296,7 @@ def build_txome_bam(path: Path):
 
 
 # ── annotation builders ───────────────────────────────────────────────────────
-def build_synthetic_gtf(path: Path, exons=None, geometry=None, gene_names=None) -> Path:
+def build_synthetic_gtf(path: Path, exons=None, geometry=None) -> Path:
     """A GENCODE-format GTF for the synthetic cohort.
 
     Emits `gene`, `exon`, `CDS` and `UTR` features. The `exon` features span the WHOLE
@@ -320,14 +309,13 @@ def build_synthetic_gtf(path: Path, exons=None, geometry=None, gene_names=None) 
     """
     exons = exons or EXONS
     geometry = geometry or GEOMETRY
-    gene_names = gene_names or GENE_NAMES
     lines = ["##description: synthetic test annotation, not GENCODE",
              "##provider: riboflow_paper/tests"]
 
     def attrs(tid):
         return ('gene_id "%s"; transcript_id "%s"; gene_type "protein_coding"; '
                 'gene_name "%s"; transcript_type "protein_coding";'
-                % (GENE_IDS[tid], tid, gene_names[tid]))
+                % (GENE_IDS[tid], tid, GENE_NAMES[tid]))
 
     for tid, spans in exons.items():
         chrom, strand, cds_spans, _total, _interior = geometry[tid]
@@ -354,28 +342,28 @@ def build_synthetic_gtf(path: Path, exons=None, geometry=None, gene_names=None) 
     return path
 
 
-def build_synthetic_appris(path: Path, transcripts=None) -> Path:
+def build_synthetic_appris(path: Path) -> Path:
     """The APPRIS transcript-lengths file: `<reference name>TAB<length>` per isoform.
 
     The reference name is exactly the string the synthetic transcriptome BAM uses, so the
     two sides of the cohort cannot drift apart, and it carries the
     `|UTR5:..|CDS:..|UTR3:..|` header the region parser reads.
     """
-    transcripts = transcripts or (TX_PLUS, TX_MINUS, TX_SHORT)
+    transcripts = (TX_PLUS, TX_MINUS, TX_SHORT)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join("%s\t%d" % (TXOME_REFS[t][0], TXOME_LENGTHS[t])
                               for t in transcripts) + "\n")
     return path
 
 
-def build_regions_bed(path: Path, transcripts=None) -> Path:
+def build_regions_bed(path: Path) -> Path:
     """The `actual_regions.bed` cross-check: 0-based half-open, in TRANSCRIPT coordinates,
     with the stop codon assigned to UTR3.
 
     These transcripts have no annotated stop codon, so the BED CDS is the header CDS
     shifted to 0-based -- i.e. it agrees with the header on both ends.
     """
-    transcripts = transcripts or (TX_PLUS, TX_MINUS, TX_SHORT)
+    transcripts = (TX_PLUS, TX_MINUS, TX_SHORT)
     rows = []
     for tid in transcripts:
         name, utr5 = TXOME_REFS[tid][0], CDS_START[tid]
@@ -445,7 +433,7 @@ def build_config(inputs: Inputs, **overrides):
         output=inputs.output, trim=TRIM,
         assay="ribo", reference_name="synthetic_v1",
         chunk=1 << 12, gzip_level=1, shuffle=True,
-        hash_bams=False, record_input_paths=False,
+        hash_bams=False, record_input_paths=False, annotation_cache=None,
     )
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -559,7 +547,7 @@ def cds_interior(coverage, tid, signal, trim=TRIM):
 
 @pytest.fixture(scope="session")
 def bsc():
-    """`build_shared_coverage`, for the accumulator and summation unit tests."""
+    """`build_shared_coverage`, for the accumulator unit tests."""
     import importlib.util
     directory = Path(__file__).resolve().parents[1] / "code" / "coverage"
     if str(directory) not in sys.path:

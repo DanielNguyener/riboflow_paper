@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
 """Gene-anchored read-ID partition: every read at a gene, on either route, in one chain.
 
-Denominator = the UNION of read IDs at the gene's full multi-isoform locus on either route,
-partitioned by one priority chain reusing `tie_biotype_lib` + `reach_lib` categories.
+Denominator = the UNION of read IDs at the gene on either route. A read enters through the
+genome route when a QUALIFYING genome alignment -- its primary, or a secondary whose AS
+equals the primary's (a tied-best placement) -- overlaps the gene's full multi-isoform span;
+it enters through the transcriptome route when its transcriptome primary is the gene's
+selected transcript. A read counts once per union; a read with tied-best placements at two
+genes is in both unions, so unions are never summed as a partition of the library.
+
+Genome state is the primary's, as in Figures 3-4: unique = NH == 1, multi = NH > 1,
+absent = no primary. The two mechanisms are tested at the gene being classified, never at
+whichever placement STAR happened to call primary:
+  pseudogene tie   a top-score placement whose 5' base is in an exon of THIS gene, and a
+                   different top-score placement whose 5' base is a processed pseudogene
+  alternative exon a genome-only unique read with an aligned block on exonic sequence of
+                   this gene that its selected transcript omits
 """
 from __future__ import annotations
 
@@ -20,16 +32,10 @@ REPO = HERE.parents[1]
 PARTITION_CATEGORIES = (
     "txome_only_genome_absent",
     "txome_only_genome_elsewhere",
-    "genome_multi_primary_in_gene_pseudogene_tie",
-    "genome_multi_primary_in_gene_no_pseudogene_tie",
-    "genome_multi_primary_pseudogene",
-    "genome_multi_primary_elsewhere_other",
-    "genome_multi_primary_lost_in_dedup",
-    "genome_unique_shared_concordant",
-    "genome_unique_shared_discordant",
-    "genome_unique_txome_other_transcript",
-    "genome_unique_txome_multimapped",
-    "genome_unique_absent_nonselected_isoform_exon",
+    "genome_multi_top_at_gene_pseudogene_tie",
+    "genome_multi_top_at_gene_no_pseudogene_tie",
+    "genome_unique_txome_present",
+    "genome_unique_absent_omitted_exon",
     "genome_unique_absent_splice_junction",
     "genome_unique_absent_representable",
     "genome_unique_absent_pseudogene",
@@ -38,29 +44,17 @@ PARTITION_CATEGORIES = (
 
 CATEGORY_LABEL = {
     "txome_only_genome_absent":
-        "transcriptome-only: no genome alignment at all",
+        "transcriptome-only: no primary genome alignment",
     "txome_only_genome_elsewhere":
-        "transcriptome-only: genome placed it elsewhere",
-    "genome_multi_primary_in_gene_pseudogene_tie":
-        "genome-multi: primary here, tied with a processed pseudogene",
-    "genome_multi_primary_in_gene_no_pseudogene_tie":
-        "genome-multi: primary here, no pseudogene tie",
-    "genome_multi_primary_pseudogene":
-        "genome-multi: primary on a processed pseudogene",
-    "genome_multi_primary_elsewhere_other":
-        "genome-multi: primary elsewhere, other biotype",
-    "genome_multi_primary_lost_in_dedup":
-        "genome-multi: primary record removed by deduplication",
-    "genome_unique_shared_concordant":
-        "genome-unique: same locus on both routes",
-    "genome_unique_shared_discordant":
-        "genome-unique: different locus on the two routes",
-    "genome_unique_txome_other_transcript":
-        "genome-unique: transcriptome assigned another transcript",
-    "genome_unique_txome_multimapped":
-        "genome-unique: transcriptome multimapped",
-    "genome_unique_absent_nonselected_isoform_exon":
-        "genome-only: exon of a nonselected isoform",
+        "transcriptome-only: no top-score genome placement at this gene",
+    "genome_multi_top_at_gene_pseudogene_tie":
+        "genome-multi: top-score placement here, tied with a processed pseudogene",
+    "genome_multi_top_at_gene_no_pseudogene_tie":
+        "genome-multi: top-score placement here, no pseudogene tie",
+    "genome_unique_txome_present":
+        "genome-unique: present on the transcriptome route",
+    "genome_unique_absent_omitted_exon":
+        "genome-only: on exonic sequence of this gene its selected transcript omits",
     "genome_unique_absent_splice_junction":
         "genome-only: junction absent from the selected isoform",
     "genome_unique_absent_representable":
@@ -71,24 +65,15 @@ CATEGORY_LABEL = {
         "genome-only: intronic, intergenic or other biotype",
 }
 
-#: `reach_lib` category -> this chain's label; the uncollapsed label survives in the
-#: `--dump-reads` table, so the fold is presentational and reversible.
+#: `reach_lib` category -> this chain's label, for a genome-only unique read that does NOT
+#: overlap the gene's omitted exonic sequence. `reach_lib` (Figure 4D) is not a gene-level
+#: test -- it calls a strand mismatch or an unrepresentable block "nonselected isoform
+#: exon" -- so here it only names the rest; its `nonselected_isoform_exon` falls to
+#: `genome_unique_absent_other`. The raw label survives in the `--dump-reads` table.
 REACH_TO_CATEGORY = {
-    "nonselected_isoform_exon": "genome_unique_absent_nonselected_isoform_exon",
     "splice_junction_absent": "genome_unique_absent_splice_junction",
     "representable_not_present_in_dedup_bam": "genome_unique_absent_representable",
     "pseudogene": "genome_unique_absent_pseudogene",
-}
-
-#: Reach labels impossible on a transcriptome-ABSENT population; checked, not trusted.
-REACH_IMPOSSIBLE = ("shared_unique_concordant", "shared_unique_discordant",
-                    "genome_unique_transcriptome_multimapped")
-
-#: `tie_biotype_lib` class -> category, for a read whose primary is NOT at the anchor gene;
-#: both `*_pp_*`-primary classes map to the pseudogene bucket.
-TIE_PRIMARY_ELSEWHERE = {
-    "cross_pp_pc": "genome_multi_primary_pseudogene",
-    "same_pp_pp": "genome_multi_primary_pseudogene",
 }
 
 TIDY_COLUMNS = ["sample", "gene_id", "gene_name", "transcript_id", "category",
@@ -96,28 +81,46 @@ TIDY_COLUMNS = ["sample", "gene_id", "gene_name", "transcript_id", "category",
 WIDE_COLUMNS = ["sample", "gene_id", "gene_name", "transcript_id",
                 "gene_chromosome", "gene_start", "gene_end",
                 "n_union", "n_genome_side", "n_txome_side", "n_shared",
-                "n_genome_only", "n_txome_only", "n_genome_unique", "n_genome_multi"]
+                "n_genome_only", "n_txome_only", "n_genome_unique", "n_genome_multi",
+                "n_joined_by_tied_secondary_only", "n_secondary_only_no_primary",
+                "n_secondary_only_lower_score", "n_missing_as"]
+
+
+#: Score for an alignment carrying no AS tag; far below any real score so it never ties.
+MISSING_AS = -(10 ** 9)
 
 
 class PartitionError(RuntimeError):
     pass
 
 
+def qualifies(is_secondary, score, primary_score):
+    """Can this genome alignment place its read at a gene?
+
+    The primary always; a secondary only when it and the primary both carry an AS and the
+    two are equal (a tied-best placement). A read with no primary record, or an alignment
+    with no AS, is never tied: that is reported, not assumed.
+    """
+    if not is_secondary:
+        return True
+    return (primary_score is not None and primary_score != MISSING_AS
+            and score != MISSING_AS and score == primary_score)
+
+
+def top_placements(recs):
+    """The read's qualifying records, from [(chrom, pos5, AS, is_secondary), ...]."""
+    primary_score = next((r[2] for r in recs if not r[3]), None)
+    return [r for r in recs if qualifies(r[3], r[2], primary_score)]
+
+
 def load_libraries():
-    """Import the read-taxonomy libraries by path, without disturbing sys.path."""
-    saved = list(sys.path)
-    try:
-        for directory in (str(REPO / "code" / "read_taxonomy"),
-                          str(REPO / "code" / "common"),
-                          str(REPO / "code" / "common" / "ribo_seq_qc")):
-            if directory not in sys.path:
-                sys.path.insert(0, directory)
-        import concordance_lib
-        import reach_lib
-        import tie_biotype_lib
-        return concordance_lib, reach_lib, tie_biotype_lib
-    finally:
-        sys.path[:] = saved + [p for p in sys.path if p not in saved]
+    """The read-taxonomy libraries, imported by path without disturbing sys.path."""
+    sys.path.insert(0, str(REPO / "code"))
+    from common.inputs import import_from
+    dirs = (REPO / "code" / "read_taxonomy", REPO / "code" / "common",
+            REPO / "code" / "common" / "ribo_seq_qc")
+    return tuple(import_from(dirs[0], name, dirs[1:])
+                 for name in ("reference_lib", "reach_lib", "tie_biotype_lib"))
 
 
 def gene_locus(exon_gene_df, gene_id):
@@ -136,15 +139,15 @@ def gene_locus(exon_gene_df, gene_id):
     return str(chroms[0]), int(rows["Start"].min()), int(rows["End"].max())
 
 
-def fetch_gene_qnames(genome_bam, chrom, start, end):
-    """Every read ID with a reported genome alignment overlapping [start, end) on `chrom`.
+def fetch_gene_candidates(genome_bam, chrom, start, end):
+    """{read ID: [(is_secondary, AS), ...]} for every alignment overlapping [start, end).
 
-    Indexed fetch, secondaries count, strand-agnostic — a multimapper whose primary sits on
-    a pseudogene elsewhere must still belong to the gene.
+    Indexed fetch, strand-agnostic. Candidates only: whether a secondary qualifies needs the
+    primary's AS, which may sit anywhere in the genome (`resolve_genome_side`).
     """
     import pysam
 
-    qnames = set()
+    candidates = defaultdict(list)
     bam = pysam.AlignmentFile(str(genome_bam), "rb")
     try:
         if not bam.has_index():
@@ -154,10 +157,40 @@ def fetch_gene_qnames(genome_bam, chrom, start, end):
         for read in bam.fetch(str(chrom), int(start), int(end)):
             if read.is_unmapped or read.is_supplementary:
                 continue
-            qnames.add(read.query_name)
+            score = int(read.get_tag("AS")) if read.has_tag("AS") else MISSING_AS
+            candidates[read.query_name].append((bool(read.is_secondary), score))
     finally:
         bam.close()
-    return qnames
+    return dict(candidates)
+
+
+def resolve_genome_side(candidates, primary):
+    """Candidates -> (genome side, {read: "primary" | "tied_secondary"}, audit counts).
+
+    `primary` maps read -> (chrom, strand, blocks, NH, AS) of its primary record.
+    """
+    side, joined_by = set(), {}
+    audit = dict.fromkeys(("n_joined_by_tied_secondary_only", "n_secondary_only_no_primary",
+                           "n_secondary_only_lower_score", "n_missing_as"), 0)
+    for qname, alignments in candidates.items():
+        record = primary.get(qname)
+        primary_score = record[4] if record else None
+        missing = (primary_score == MISSING_AS
+                   or any(score == MISSING_AS for _sec, score in alignments))
+        if missing:
+            audit["n_missing_as"] += 1
+        if any(not sec for sec, _score in alignments):
+            side.add(qname)
+            joined_by[qname] = "primary"
+        elif any(qualifies(sec, score, primary_score) for sec, score in alignments):
+            side.add(qname)
+            joined_by[qname] = "tied_secondary"
+            audit["n_joined_by_tied_secondary_only"] += 1
+        elif record is None:
+            audit["n_secondary_only_no_primary"] += 1
+        elif not missing:
+            audit["n_secondary_only_lower_score"] += 1
+    return side, joined_by, audit
 
 
 def collect_genome_state(genome_bam, target_qnames):
@@ -191,7 +224,12 @@ def collect_genome_state(genome_bam, target_qnames):
                     "multimapping, so a BAM that cannot report NH cannot answer it."
                     % genome_bam)
             blocks = read.get_blocks()
-            score = int(read.get_tag("AS")) if read.has_tag("AS") else None
+            # A missing AS is a sentinel far below any real score, never None and never 0:
+            # `tie_biotype_lib` compares scores for equality to find ties, so None crashes it
+            # and 0 would let an unscored alignment tie with a real one. Same convention as
+            # `tie_biotype_lib._MISSING_AS`. STAR always emits AS, so this is unreachable on
+            # the published cohort and cannot move its numbers.
+            score = int(read.get_tag("AS")) if read.has_tag("AS") else MISSING_AS
             if not read.is_secondary:
                 present.add(qname)
                 if bam_inputs.is_unique_genome_read(read):
@@ -219,106 +257,187 @@ def _in_locus(record, chrom, start, end):
     return min(b[0] for b in blocks) < end and max(b[1] for b in blocks) > start
 
 
-def _projection_frame(qnames, txome_population, primary):
-    """The frame `transcript_fate_lib._project_match` consumes, for genome-unique reads."""
-    rows = []
+def _merge(intervals):
+    """Sorted, merged [start, end) intervals."""
+    out = []
+    for start, end in sorted(intervals):
+        if out and start <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], end)
+        else:
+            out.append([start, end])
+    return [tuple(i) for i in out]
+
+
+def _subtract(intervals, holes):
+    """Merged `intervals` minus merged `holes`."""
+    out = []
+    holes = _merge(holes)
+    for start, end in _merge(intervals):
+        cursor = start
+        for h_start, h_end in holes:
+            if h_end <= cursor or h_start >= end:
+                continue
+            if h_start > cursor:
+                out.append((cursor, h_start))
+            cursor = max(cursor, h_end)
+        if cursor < end:
+            out.append((cursor, end))
+    return out
+
+
+def _overlaps(blocks, intervals):
+    return any(b_start < i_end and i_start < b_end
+               for b_start, b_end in blocks for i_start, i_end in intervals)
+
+
+def gene_exons(annotation, gene_id):
+    """(chrom, gene_type, merged exons) of one gene over EVERY annotated transcript.
+
+    Indexed once per annotation (the per-gene filter would otherwise scan every exon row).
+    """
+    index = annotation.get("_gene_exons")
+    if index is None:
+        frame = annotation["exon_gene_df"]
+        base = frame["gene_id"].astype(str).str.split(".").str[0]
+        index = {}
+        for gene, rows in frame.groupby(base, sort=False):
+            index[gene] = (str(rows["Chromosome"].iat[0]), str(rows["gene_type"].iat[0]),
+                           _merge(zip(rows["Start"].tolist(), rows["End"].tolist())))
+        annotation["_gene_exons"] = index
+    return index.get(str(gene_id).split(".", 1)[0])
+
+
+def omitted_exonic_sequence(annotation, tid):
+    """(chrom, intervals): the gene's exonic sequence its selected transcript omits."""
+    info = annotation["table"][tid]
+    chrom, _type, exons = gene_exons(annotation, info["gene_id"])
+    selected = list(zip(info["g_start"].tolist(), info["g_end"].tolist()))
+    return chrom, _subtract(exons, selected)
+
+
+def alt_exon_overlap(annotation, tid, primary, qnames):
+    """{read: bool}: an aligned block of the read's primary lies on omitted exonic sequence.
+
+    Strand-agnostic, and indifferent to junctions and to whether the rest of the alignment
+    fits the selected transcript: the only question is the omitted sequence.
+    """
+    chrom, omitted = omitted_exonic_sequence(annotation, tid)
+    out = {}
     for qname in qnames:
         record = primary.get(qname)
-        if record is None:
-            continue
-        chrom, strand, blocks, _nh, _as = record
-        _tid, tx_pos, tx_len = txome_population[qname]
-        pos5 = blocks[-1][1] - 1 if strand == "-" else blocks[0][0]
-        rows.append((qname, tx_pos, tx_len, chrom, strand, pos5, len(blocks),
-                     min(b[0] for b in blocks), max(b[1] for b in blocks)))
-    return pd.DataFrame(rows, columns=[
-        "qname", "tx_pos", "tx_len", "g_chrom", "g_strand", "g_pos5", "g_nblocks",
-        "g_min", "g_max"])
+        out[qname] = bool(record is not None and str(record[0]) == chrom
+                          and _overlaps(record[2], omitted))
+    return out
 
 
-def classify_union(libs, annotation, tid, locus, genome_side, txome_side, txome_unique,
+def gene_pseudogene_tie(tie_biotype_lib, annotation, gene_id, records_by_qname):
+    """{read: (tie, n_top, detail)}: a protein-coding / processed-pseudogene tie AT THIS GENE.
+
+    Among the read's top-score placements (`top_placements`), one must have its 5' base in
+    an exon of `gene_id` and a DIFFERENT one its 5' base on a processed pseudogene (the Fig 4
+    5'-base biotype join, `tie_biotype_lib.classify_loci_frame`). Which of them STAR made
+    primary does not enter; a tie with another protein-coding gene is not a tie here.
+    """
+    import bisect
+
+    chrom, gene_type, exons = gene_exons(annotation, gene_id)
+    starts = [e[0] for e in exons]
+
+    def in_gene(record):
+        if str(record[0]) != chrom:
+            return False
+        i = bisect.bisect_right(starts, record[1]) - 1
+        return i >= 0 and exons[i][0] <= record[1] < exons[i][1]
+
+    tops = {q: top_placements(recs) for q, recs in records_by_qname.items()}
+    rows = [(i, q, r[0], int(r[1]), int(r[2]), bool(r[3]))
+            for i, (q, r) in enumerate((q, r) for q, recs in tops.items() for r in recs)]
+    frame = pd.DataFrame(rows, columns=list(tie_biotype_lib.LOCUS_FRAME_COLUMNS))
+    biotypes = (tie_biotype_lib.classify_loci_frame(
+        frame, annotation["exon_pr"], annotation["gene_body_pr"])["biotype"].tolist()
+        if rows else [])
+
+    out, cursor = {}, 0
+    for qname, top in tops.items():
+        types = biotypes[cursor:cursor + len(top)]
+        cursor += len(top)
+        at_gene = {i for i, r in enumerate(top) if in_gene(r)}
+        on_pp = {i for i, t in enumerate(types) if t == tie_biotype_lib.PP}
+        tie = gene_type == tie_biotype_lib.PC and any(
+            i != j for i in at_gene for j in on_pp)
+        detail = ";".join("%s:%d%s%s%s" % (r[0], r[1], "" if r[3] else "*",
+                                           "@gene" if i in at_gene else "",
+                                           "@pp" if i in on_pp else "")
+                          for i, r in enumerate(top))
+        out[qname] = (tie, len(top), detail)
+    return out
+
+
+def classify_union(libs, annotation, tid, locus, genome_side, txome_side,
                    txome_present, genome_present, genome_unique, primary, records):
-    """The chain. Returns (labels: Series qname -> category, detail: raw tie/reach labels)."""
-    concordance_lib, reach_lib, tie_biotype_lib = libs
-    import transcript_fate_lib
+    """The chain. Returns (labels: Series qname -> category, detail: per-read mechanism data).
 
-    chrom, start, end = locus
+    `genome_side` must already hold only reads with a qualifying placement at the gene
+    (`resolve_genome_side`, `ReadState.gene_side`). Transcriptome presence is membership in
+    `txome_present` (a primary alignment in the post-dedup BAM, which RiboFlow_v2 filtered at
+    MAPQ >= 10); no MAPQ test is made here.
+    """
+    _reference_lib, reach_lib, tie_biotype_lib = libs
+
     genome_side = set(genome_side)
     txome_side = set(txome_side)
     union = genome_side | txome_side
     labels = pd.Series(index=sorted(union), dtype=object)
-    tie_class, reach_label = {}, {}
+    tie_detail, reach_label, alt_exon = {}, {}, {}
 
-    # 1-2. Transcriptome route here, no genome alignment HERE: split absent vs elsewhere.
+    # 1-2. Transcriptome route here, no top-score genome placement HERE: absent vs elsewhere.
     for qname in txome_side - genome_side:
         labels[qname] = ("txome_only_genome_elsewhere" if qname in genome_present
                          else "txome_only_genome_absent")
 
     at_gene = sorted(genome_side)
-    uniq = [q for q in at_gene if q in genome_unique]
-    multi = [q for q in at_gene if q in genome_present and q not in genome_unique]
-    # A post-dedup BAM can keep a multimapper's secondaries after collapsing its primary:
-    # no primary to classify, so named, not dropped.
+    # A qualifying placement needs a primary (a secondary ties only against the primary's AS).
     orphan = [q for q in at_gene if q not in genome_present]
-    for qname in orphan:
-        labels[qname] = "genome_multi_primary_lost_in_dedup"
+    if orphan:
+        raise PartitionError(
+            "%d genome-side read(s) have no primary genome alignment, e.g. %s; a secondary "
+            "is never tied without one" % (len(orphan), orphan[:5]))
+    uniq = [q for q in at_gene if q in genome_unique]
+    multi = [q for q in at_gene if q not in genome_unique]
 
-    # 3-6. Genome multimappers: anchor-gene orientation first, tie-biotype class second —
-    # the raw class names describe the PRIMARY locus, which is often not the anchor gene.
+    # 3-4. Genome multimappers with a top-score placement here: the tie is tested at THIS
+    # gene, over every top-score placement, whichever of them is primary.
     if multi:
-        classes = tie_biotype_lib.categorize_reads(
-            {q: records[q] for q in multi if q in records},
-            annotation["exon_pr"], annotation["gene_body_pr"])
+        ties = gene_pseudogene_tie(tie_biotype_lib, annotation,
+                                   annotation["table"][tid]["gene_id"],
+                                   {q: records.get(q, []) for q in multi})
         for qname in multi:
-            # Missing class is NaN, not None; NaN is truthy, so `klass or ""` would write "nan".
-            klass = classes.get(qname) if len(classes) else None
-            if klass is None or pd.isna(klass):
-                klass = None
-            tie_class[qname] = klass or ""
-            if _in_locus(primary.get(qname), chrom, start, end):
-                labels[qname] = (
-                    "genome_multi_primary_in_gene_pseudogene_tie" if klass == "cross_pc_pp"
-                    else "genome_multi_primary_in_gene_no_pseudogene_tie")
-            else:
-                labels[qname] = TIE_PRIMARY_ELSEWHERE.get(
-                    klass, "genome_multi_primary_elsewhere_other")
+            tie, n_top, detail = ties[qname]
+            tie_detail[qname] = (tie, n_top, detail)
+            labels[qname] = ("genome_multi_top_at_gene_pseudogene_tie" if tie
+                             else "genome_multi_top_at_gene_no_pseudogene_tie")
 
-    # 7-8. Genome-unique, transcriptome-assigned to THIS transcript: project against it.
-    shared_here = [q for q in uniq if q in txome_unique and q in txome_side]
-    if shared_here:
-        frame = _projection_frame(shared_here, txome_present, primary)
-        if not frame.empty:
-            match = transcript_fate_lib._project_match(
-                concordance_lib, frame, annotation["table"][tid])
-            for qname, ok in zip(frame["qname"], match):
-                labels[qname] = ("genome_unique_shared_concordant" if ok
-                                 else "genome_unique_shared_discordant")
-
-    # 9-10. Genome-unique, transcriptome-present but not confidently on this transcript.
+    # 5. Genome-unique and present on the transcriptome route (on this transcript or any).
     for qname in uniq:
-        if qname in txome_unique and qname not in txome_side:
-            labels[qname] = "genome_unique_txome_other_transcript"
-        elif qname in txome_present and qname not in txome_unique:
-            labels[qname] = "genome_unique_txome_multimapped"
+        if qname in txome_present:
+            labels[qname] = "genome_unique_txome_present"
 
-    # 11-16. Genome-unique, absent from every transcriptome primary: the reach classifier.
+    # 6-10. Genome-unique, absent from every transcriptome primary. The alternative exon is
+    # the gene-level overlap test; `reach_lib` only names the rest.
     absent = [q for q in uniq if q not in txome_present]
     if absent:
+        alt_exon = alt_exon_overlap(annotation, tid, primary, absent)
         blocks = {q: (primary[q][0], primary[q][1], primary[q][2])
                   for q in absent if q in primary}
         reach = reach_lib.classify_gU_tA(
             absent, blocks, annotation["exon_pr"], annotation["exon_gene_df"],
             annotation["gene_body_pr"], annotation["table"], annotation["gene2tid"],
             annotation["omitted_genes"])
-        impossible = [c for c in REACH_IMPOSSIBLE if (reach == c).any()]
-        if impossible:
-            raise PartitionError(
-                "the reach classifier returned %s on a transcriptome-absent population; "
-                "the population was built wrong" % ", ".join(impossible))
         for qname in absent:
             reach_label[qname] = reach.get(qname, "")
-            labels[qname] = REACH_TO_CATEGORY.get(
-                reach_label[qname], "genome_unique_absent_other")
+            labels[qname] = ("genome_unique_absent_omitted_exon" if alt_exon[qname]
+                             else REACH_TO_CATEGORY.get(reach_label[qname],
+                                                        "genome_unique_absent_other"))
 
     unlabelled = labels[labels.isna()]
     if len(unlabelled):
@@ -326,7 +445,7 @@ def classify_union(libs, annotation, tid, locus, genome_side, txome_side, txome_
             "%d read(s) fell through the chain, e.g. %s"
             % (len(unlabelled), list(unlabelled.index[:5])))
 
-    detail = {"tie_class": tie_class, "reach_label": reach_label}
+    detail = {"tie": tie_detail, "reach_label": reach_label, "alt_exon": alt_exon}
     return labels, detail
 
 
@@ -334,14 +453,14 @@ def load_annotation(libs):
     """Everything the two category systems need, built once for all genes."""
     import pyranges as pr
 
-    concordance_lib, reach_lib, _tie = libs
-    payload = concordance_lib.build_transcript_table()
+    reference_lib, reach_lib, _tie = libs
+    payload = reference_lib.build_transcript_table()
     table = payload["table"]
-    exon_gene_df = concordance_lib.build_exon_gene_table()
+    exon_gene_df = reference_lib.build_exon_gene_table()
     return {
         "table": table,
         "base2ver": payload["base2ver"],
-        "exon_pr": concordance_lib.load_exon_gene_pr(),
+        "exon_pr": reference_lib.load_exon_gene_pr(),
         "exon_gene_df": exon_gene_df,
         "gene_body_pr": pr.PyRanges(
             reach_lib.fc.config.load_all_gene_bodies().reset_index(drop=True)),
@@ -358,7 +477,7 @@ def compute_partition(sample, genome_bam, txome_bam, gene_ids=(), transcript_ids
     import transcript_fate_lib
 
     libs = load_libraries()
-    concordance_lib = libs[0]
+    reference_lib = libs[0]
     annotation = load_annotation(libs)
     table = annotation["table"]
 
@@ -368,34 +487,42 @@ def compute_partition(sample, genome_bam, txome_bam, gene_ids=(), transcript_ids
         raise PartitionError("no transcripts requested")
 
     log("reading the transcriptome BAM")
-    txome_present, txome_unique, _all = concordance_lib.read_txome_primary(
-        txome_bam, annotation["base2ver"])
+    txome_present, _all = reference_lib.read_txome_primary(txome_bam, annotation["base2ver"])
     txome_side = {tid: set() for tid in tids}
-    for qname, value in txome_present.items():
-        if value[0] in txome_side:
-            txome_side[value[0]].add(qname)
+    for qname, hit in txome_present.items():
+        if hit in txome_side:
+            txome_side[hit].add(qname)
 
     names, genes = _display(table, tids, coverage)
-    log("fetching the genome side of each gene")
-    loci, genome_side = {}, {}
+    log("fetching the genome-side candidates of each gene")
+    loci, candidates = {}, {}
     for tid in tids:
         loci[tid] = gene_locus(annotation["exon_gene_df"], table[tid]["gene_id"])
-        genome_side[tid] = fetch_gene_qnames(genome_bam, *loci[tid])
-        log("  %-8s %s:%d-%d  %d genome-side, %d transcriptome-side read ids"
-            % (names[tid] or tid, loci[tid][0], loci[tid][1], loci[tid][2],
-               len(genome_side[tid]), len(txome_side[tid])))
+        candidates[tid] = fetch_gene_candidates(genome_bam, *loci[tid])
 
     targets = set()
     for tid in tids:
-        targets |= genome_side[tid] | txome_side[tid]
+        targets |= set(candidates[tid]) | txome_side[tid]
     log("one genome pass over %d read ids" % len(targets))
     g_present, g_unique, primary, records = collect_genome_state(genome_bam, targets)
+
+    genome_side, joined_by, audit = {}, {}, {}
+    for tid in tids:
+        genome_side[tid], joined_by[tid], audit[tid] = resolve_genome_side(
+            candidates[tid], primary)
+        log("  %-8s %s:%d-%d  %d genome-side (%d by a tied secondary only), %d "
+            "transcriptome-side read ids; not placed: %d secondary-only without a primary, "
+            "%d secondary-only below the primary's AS; %d with a missing AS"
+            % (names[tid] or tid, loci[tid][0], loci[tid][1], loci[tid][2],
+               len(genome_side[tid]), audit[tid]["n_joined_by_tied_secondary_only"],
+               len(txome_side[tid]), audit[tid]["n_secondary_only_no_primary"],
+               audit[tid]["n_secondary_only_lower_score"], audit[tid]["n_missing_as"]))
 
     wide_rows, tidy_rows, dump_rows = [], [], []
     for tid in tids:
         labels, detail = classify_union(
             libs, annotation, tid, loci[tid], genome_side[tid], txome_side[tid],
-            txome_unique, txome_present, g_present, g_unique, primary, records)
+            txome_present, g_present, g_unique, primary, records)
         counts = labels.value_counts()
         n_union = int(len(labels))
         if int(counts.sum()) != n_union:
@@ -423,16 +550,21 @@ def compute_partition(sample, genome_bam, txome_bam, gene_ids=(), transcript_ids
             "n_genome_only": len(genome_side[tid] - txome_side[tid]),
             "n_txome_only": len(txome_side[tid] - genome_side[tid]),
             "n_genome_unique": len(genome_side[tid] & g_unique),
-            "n_genome_multi": len(genome_side[tid] & (g_present - g_unique))})
+            "n_genome_multi": len(genome_side[tid] & (g_present - g_unique)),
+            **audit[tid]})
 
         for qname, category in labels.items():
             record = primary.get(qname)
             blocks = record[2] if record else None
-            txome_hit = txome_present.get(qname)
+            tie, n_top, placements = detail["tie"].get(qname, (False, -1, ""))
             dump_rows.append({
                 "sample": sample, "gene_name": names[tid], "transcript_id": tid,
                 "read_id": qname, "category": category,
-                "tie_biotype_class": detail["tie_class"].get(qname, ""),
+                "genome_placement_at_gene": joined_by[tid].get(qname, ""),
+                "pseudogene_tie_at_gene": bool(tie),
+                "n_top_placements": n_top,
+                "top_placements": placements,
+                "alt_exon_overlap": bool(detail["alt_exon"].get(qname, False)),
                 "reach_category": detail["reach_label"].get(qname, ""),
                 "genome_primary_nh": record[3] if record else -1,
                 "genome_primary_chromosome": record[0] if record else "",
@@ -442,8 +574,7 @@ def compute_partition(sample, genome_bam, txome_bam, gene_ids=(), transcript_ids
                 "genome_primary_in_gene": _in_locus(record, *loci[tid]),
                 "n_genome_loci": len(records.get(qname, ())),
                 "on_genome_side": qname in genome_side[tid],
-                "txome_primary_transcript": txome_hit[0] if txome_hit else "",
-                "txome_unique": qname in txome_unique})
+                "txome_primary_transcript": txome_present.get(qname, "")})
 
     tidy = pd.DataFrame(tidy_rows, columns=TIDY_COLUMNS)
     wide = pd.DataFrame(wide_rows, columns=WIDE_COLUMNS)

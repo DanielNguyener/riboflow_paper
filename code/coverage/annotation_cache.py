@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import pickle
+import sys
 import time
 from pathlib import Path
+
+_COMMON = str(Path(__file__).resolve().parent.parent / "common")
+if _COMMON not in sys.path:
+    sys.path.insert(0, _COMMON)
+from inputs import sha256_of  # noqa: E402
 
 CACHE_VERSION = 1
 
@@ -13,13 +19,6 @@ SOURCE_MODULES = ("transcript_coords.py", "transcript_regions.py", "annotation_c
 
 def log(message):
     print("[annotation] %s" % message, flush=True)
-
-def _sha256(path):
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 def fingerprint(gtf, appris, regions, left_span, right_span):
     """A content digest of everything that determines the bundle."""
@@ -31,13 +30,13 @@ def fingerprint(gtf, appris, regions, left_span, right_span):
         if path is None:
             parts.append("%s=absent" % label)
             continue
-        digest = _sha256(path)
+        digest = sha256_of(path)
         inputs[label] = {"name": Path(path).name, "sha256": digest,
                          "bytes": Path(path).stat().st_size}
         parts.append("%s=%s" % (label, digest))
     for name in SOURCE_MODULES:
         module = here / name
-        parts.append("%s=%s" % (name, _sha256(module) if module.exists() else "absent"))
+        parts.append("%s=%s" % (name, sha256_of(module) if module.exists() else "absent"))
     return hashlib.sha256("\n".join(parts).encode()).hexdigest(), inputs
 
 def build(gtf, appris, regions, left_span, right_span):

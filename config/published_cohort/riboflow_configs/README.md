@@ -1,7 +1,7 @@
 # RiboFlow_v2 configurations for the 24 published samples
 
 One YAML per cell line, plus [`../run_riboflow_cohort.sh`](../run_riboflow_cohort.sh):
-the configuration behind the Figures 2-6 alignments. RiboFlow_v2 is not in this
+the configuration behind the Figures 2-5 and S1 Fig alignments. RiboFlow_v2 is not in this
 repository. The performance benchmark was a different run, recorded in
 [`benchmark/runs/`](../../../benchmark/runs/).
 
@@ -25,10 +25,13 @@ RiboFlow's write-time filters are `mapping_quality_cutoff: 0` with
 alignments, so the genome BAMs retain multimappers; the transcriptome routes default to
 `-F 2308`, which drops them.
 
-The filters this repository applies when reading the BAMs are different, and depend on the
-BAM class rather than on ribo versus RNA-seq: a genome read must be primary with `NH == 1`,
-a transcriptome read primary with MAPQ >= 42 (`code/common/bam_inputs.py`). `read_taxonomy` and `alignment_fate` apply the same
-`NH == 1` test to classify reads
+The filters this repository applies when reading the BAMs depend on the analysis. The QC,
+coverage and TE-count analyses (S1 Fig, Figures 2-3) take a genome read only when primary
+with `NH == 1` and a transcriptome read only when primary with MAPQ >= 42
+(`code/common/bam_inputs.py`). The read-ID analyses of Figures 4-6 and the 5B locus
+(`read_taxonomy`, `alignment_fate`, `clustering`) apply the same `NH == 1` test to call a
+genome read unique but take a transcriptome read as present whenever it has a primary
+alignment in the post-dedup BAM, i.e. at RiboFlow_v2's own MAPQ >= 10.
 
 ## Per-sample FASTQ counts
 

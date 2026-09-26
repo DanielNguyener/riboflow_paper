@@ -10,6 +10,9 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[1]
+sys.path.insert(0, str(REPO / "code"))
+from common import inputs  # noqa: E402
 
 COUNT_COLUMNS = ("genome_ribo_reads", "genome_rna_reads",
                  "txome_ribo_reads", "txome_rna_reads")
@@ -25,8 +28,7 @@ REGION = "cds"
 class CountError(RuntimeError):
     pass
 
-def log(message):
-    print("[counts] %s" % message, flush=True)
+log = inputs.make_log("counts")
 
 def count_sample(sample, ribo_genome_bam, ribo_txome_bam, rna_genome_bam, rna_txome_bam,
                  gtf, appris, qc_genome, qc_txome, regions=None, annotation_cache=None):

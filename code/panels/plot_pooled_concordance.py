@@ -34,8 +34,7 @@ def prepare(psite_path, footprint_path):
         summary[name] = {column: float(np.nanmedian(frame[column]))
                          for column, _label in METRICS}
     return {"frames": frames, "medians": summary,
-            "samples": sorted(frames["P-site"]["sample"].tolist()),
-            "sources": {"P-site": str(psite_path), "footprint": str(footprint_path)}}
+            "samples": sorted(frames["P-site"]["sample"].tolist())}
 
 def draw(prepared, ylim=None, figsize=(5.2, 4.4), seed=0, short_labels=False,
          points=True):

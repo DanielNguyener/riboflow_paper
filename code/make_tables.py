@@ -2,12 +2,13 @@
 """Rebuild every analysis table in this repository from indexed BAMs.
 
 Stages write under --output (default results/); `--into-data` copies them over data/.
-The two `te_*` R stages need `Rscript` (base R, no packages).
+The two `te_*` R stages and the `clustering` stage need `Rscript` (base R, no packages).
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import functools
 import os
 import subprocess
 import sys
@@ -17,17 +18,20 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 CODE = REPO / "code"
 
+sys.path.insert(0, str(CODE / "common"))
+import inputs  # noqa: E402
+
 SAMPLES_CSV = REPO / "supporting_information" / "S1_Table" / "samples.csv"
 DEFAULT_MANIFEST = REPO / "config" / "cohort_manifest.tsv"
 
 EXAMPLE_SAMPLE = "HeLa"
 EXAMPLE_GSM = "GSM2100602"
-#: The genes Figure 6A partitions (gene IDs resolve through the annotation cache).
+#: The genes Figure 5A partitions (gene IDs resolve through the annotation cache).
 PARTITION_GENES = ("ENSG00000093010", "ENSG00000111640", "ENSG00000124831")   # COMT, GAPDH, LRRFIP1
 LOCUS_GENE = "LRRFIP1"
-
-def shipped_for(relative):
-    return REPO / "data" / relative
+#: Figure 6: the Ward tree of HeLa's gene read-fate compositions is cut at this k.
+CLUSTER_K = 4
+PSEUDOGENE_GTF = "clustering/gencode.v34.2wayconspseudos.gtf.gz"
 
 BAM_TEMPLATES = {
     "ribo_genome_bam": "{s}/genome/alignment_ribo/merged/{s}.post_dedup.bam",
@@ -37,8 +41,7 @@ BAM_TEMPLATES = {
                       "{s}.rnaseq.transcriptome.post_dedup.bam"),
 }
 
-def log(msg):
-    print("[make_tables] %s" % msg, flush=True)
+log = inputs.make_log("make_tables")
 
 def prepare_environment(args, create_dirs=True):
     """Point the drivers at the output root. `create_dirs=False` for read-only modes."""
@@ -121,7 +124,7 @@ def stage_qc(samples, args):
                "--bam-dir", args.bams, "--steps", "qc,cds_frame",
                "--bam-glob", "*/genome/alignment_ribo/merged/*.post_dedup.bam"]
               + selection + plots)
-    code |= sh([sys.executable, qc / "run_transcriptome_qc.py",
+    code |= sh([sys.executable, qc / "run_pipeline.py", "--route", "transcriptome",
                 "--bam-dir", args.bams] + selection + plots)
     return code
 
@@ -161,8 +164,7 @@ def stage_concordance(samples, args):
     """The four concordance tables, computed from the HDF5 cohort. No BAM is opened."""
     command = [sys.executable, CODE / "coverage" / "compute_coverage_concordance.py",
                "--coverage", args.out / "coverage",
-               "--output", args.out / "coverage" / "concordance",
-               "--gzip-per-transcript"]
+               "--output", args.out / "coverage" / "concordance"]
     if samples:
         command += ["--samples", ",".join(samples)]
     return sh(command)
@@ -171,7 +173,8 @@ def _rscript():
     import shutil
     path = shutil.which("Rscript")
     if not path:
-        log("  Rscript is not on PATH; the te_normalize and te_stats stages need base R")
+        log("  Rscript is not on PATH; the te_normalize, te_stats and clustering stages "
+            "need base R")
     return path
 
 def _qc_tables(args):
@@ -214,7 +217,7 @@ def stage_te_stats(samples, args):
                "--output", args.out / "te_route" / "tables"])
 
 def stage_gene_partition(samples, args):
-    """Figure 6A: the per-read gene partition dump, folded to the seven-segment table."""
+    """Figure 5A: the per-read gene partition dump, folded to the seven-segment table."""
     coverage = args.out / "coverage" / ("%s.shared_coverage.h5" % EXAMPLE_SAMPLE)
     command = [sys.executable, CODE / "alignment_fate" / "build_gene_read_partition.py",
                "--sample", EXAMPLE_SAMPLE,
@@ -234,7 +237,7 @@ def stage_gene_partition(samples, args):
                "--output", args.out / "alignment_fate" / "gene_partition_route7", "--force"])
 
 def stage_locus(samples, args):
-    """Figure 6B: the LRRFIP1 locus coverage artifact."""
+    """Figure 5B: the LRRFIP1 locus coverage artifact."""
     if not (args.gtf and args.appris):
         log("  the locus stage needs --gtf and --appris")
         return 1
@@ -246,6 +249,51 @@ def stage_locus(samples, args):
                "--output", args.out / "alignment_fate" / ("locus_%s" % LOCUS_GENE),
                "--force"])
 
+def stage_clustering(samples, args):
+    """Figure 6: every HeLa gene's five-fate read composition, the Ward tree and its k = 4
+    cut, and the three per-gene validation tables. The read-state store (~20 min) is a
+    durable product: it is reused when present, like the coverage HDF5."""
+    if not (args.gtf and args.appris):
+        log("  the clustering stage needs --gtf and --appris")
+        return 1
+    rscript = _rscript()
+    if not rscript:
+        return 1
+    clustering = CODE / "clustering"
+    out = args.out / "clustering"
+    stem = "%s.post_dedup" % EXAMPLE_SAMPLE
+    common = ["--bams", args.bams, "--gtf", args.gtf, "--appris", args.appris]
+    state = out / ("%s.read_state.h5" % stem)
+    if state.exists():
+        log("  reusing %s" % state)
+    else:
+        code = sh([sys.executable, clustering / "read_state.py", "--sample", EXAMPLE_SAMPLE,
+                   "--output", out] + common)
+        if code:
+            return code
+    counts = out / ("%s.gene_counts.tsv" % stem)
+    filtered = out / ("%s.gene_counts_filtered.tsv" % stem)
+    clusters = out / ("%s.clusters_k%d.tsv" % (stem, CLUSTER_K))
+    steps = [
+        [sys.executable, clustering / "build_gene_counts.py", "--sample", EXAMPLE_SAMPLE,
+         "--output", out] + common,
+        [sys.executable, clustering / "filter_genes.py", "--input", counts, "--output", filtered],
+        [rscript, clustering / "ward_cluster.R", "--input", filtered, "--output", out,
+         "--stem", stem, "--k", str(CLUSTER_K)],
+        [sys.executable, clustering / "validate_cluster_pseudogene_counts.py",
+         "--clusters", clusters, "--output", out, "--gtf", args.gtf,
+         "--pseudogenes", REPO / "data" / PSEUDOGENE_GTF],
+        [sys.executable, clustering / "validate_cluster_omitted_sequence.py",
+         "--clusters", clusters, "--output", out, "--gtf", args.gtf],
+        [sys.executable, clustering / "validate_cluster_reference_duplication.py",
+         "--clusters", clusters, "--output", out, "--gtf", args.gtf, "--appris", args.appris],
+    ]
+    for command in steps:
+        code = sh(command)
+        if code:
+            return code
+    return 0
+
 def _taxonomy_driver(analysis, samples, args):
     """One cohort driver, told which analysis to run.
 
@@ -254,18 +302,6 @@ def _taxonomy_driver(analysis, samples, args):
     selection = ["--samples", ",".join(samples)] if samples else []
     return sh([sys.executable, CODE / "read_taxonomy" / "run_read_taxonomy.py", analysis,
                "--workers", str(min(args.workers, 2))] + selection)
-
-def stage_taxonomy(samples, args):
-    return _taxonomy_driver("taxonomy", samples, args)
-
-def stage_alignment_concordance(samples, args):
-    return _taxonomy_driver("alignment_concordance", samples, args)
-
-def stage_reach(samples, args):
-    return _taxonomy_driver("reach", samples, args)
-
-def stage_multimap_biotype(samples, args):
-    return _taxonomy_driver("tie_biotype", samples, args)
 
 STAGES = [
     ("annotation",   stage_annotation,   (),                       True,  ()),
@@ -300,13 +336,21 @@ STAGES = [
     ("locus",        stage_locus,        ("annotation", "qc"),     True,
      ("alignment_fate/locus_LRRFIP1.npz",
       "alignment_fate/locus_LRRFIP1.json")),
-    ("taxonomy",     stage_taxonomy,     ("annotation",),          True,
+    ("taxonomy",     functools.partial(_taxonomy_driver, "taxonomy"), ("annotation",), True,
      ("read_taxonomy/taxonomy/taxonomy_all.tsv",)),
-    ("alignment_concordance", stage_alignment_concordance, ("annotation",), True, ()),
-    ("reach",        stage_reach,        ("taxonomy", "alignment_concordance"), True,
+    ("reach",        functools.partial(_taxonomy_driver, "reach"),
+     ("taxonomy",), True,
      ("read_taxonomy/reach/genome_anchored_reach_all.tsv",)),
-    ("multimap_biotype", stage_multimap_biotype, ("annotation",),  True,
+    ("multimap_biotype", functools.partial(_taxonomy_driver, "tie_biotype"), ("annotation",), True,
      ("read_taxonomy/multimap_biotype/multimap_tie_biotype_all.tsv",)),
+    ("clustering",   stage_clustering,   ("annotation",),          True,
+     ("clustering/HeLa.post_dedup.gene_counts.tsv",
+      "clustering/HeLa.post_dedup.clusters_k4.tsv",
+      "clustering/HeLa.post_dedup.cluster_centroids.tsv",
+      "clustering/HeLa.post_dedup.tree_merge.tsv",
+      "clustering/HeLa.post_dedup.pseudogene_counts_genes.tsv",
+      "clustering/HeLa.post_dedup.omitted_sequence_genes.tsv",
+      "clustering/HeLa.post_dedup.reference_duplication_entries.tsv")),
 ]
 
 STAGE_STAGING = {
@@ -314,7 +358,6 @@ STAGE_STAGING = {
            "ribo_seq_qc/transcriptome/tables/_staging"),
     "te_counts": ("ribo_rna/_route_scratch",),
     "taxonomy": ("read_taxonomy/taxonomy/_staging",),
-    "alignment_concordance": ("read_taxonomy/alignment_concordance/_staging",),
     "reach": ("read_taxonomy/reach/_staging",),
     "multimap_biotype": ("read_taxonomy/multimap_biotype/_staging_tie",),
 }
@@ -323,6 +366,8 @@ STAGE_STAGING = {
 EXTERNAL_INPUTS = {
     "te_route/housekeeping/Housekeeping_GenesHuman.csv": "HRT Atlas v1.0",
     "te_route/housekeeping/Housekeeping_TranscriptsHuman.csv": "HRT Atlas v1.0",
+    PSEUDOGENE_GTF: "GENCODE release 34, Yale-UCSC 2-way consensus pseudogenes "
+                    "(gencode.v34.2wayconspseudos.gtf.gz)",
 }
 
 STAGE_ORDER = [name for name, _run, _needs, _anno, _out in STAGES]
@@ -362,7 +407,7 @@ def do_into_data(out: Path):
         source = out / rel
         if not source.exists():
             continue
-        destination = shipped_for(rel)
+        destination = REPO / "data" / rel
         if destination.exists() and destination.read_bytes() == source.read_bytes():
             same += 1
             continue
@@ -390,7 +435,8 @@ def build_parser():
                         help="comma-separated subset (default: every discovered sample)")
     parser.add_argument("--stages", default=None,
                         help="comma-separated subset of: " + ", ".join(STAGE_ORDER))
-    parser.add_argument("--all", action="store_true", help="run every stage")
+    parser.add_argument("--all", action="store_true",
+                        help="run every stage")
     parser.add_argument("--workers", type=int, default=2,
                         help="parallel samples; memory-heavy stages cap at 2 regardless")
     parser.add_argument("--skip-existing", action="store_true",
@@ -453,7 +499,7 @@ def main(argv=None):
         samples = found
 
     if args.all or not args.stages:
-        selected = STAGE_ORDER
+        selected = list(STAGE_ORDER)
     else:
         requested = {x.strip() for x in args.stages.split(",") if x.strip()}
         selected = []

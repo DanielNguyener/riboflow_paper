@@ -11,14 +11,15 @@ import numpy as np
 import pandas as pd
 
 _HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
-import biotype_align_lib as bal
-cl = bal.cl
-fc = bal.fc
-tl = bal.tl
-bl = bal.bl
+_COMMON = _HERE.parent / "common"
+for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc")):
+    if _entry not in sys.path:
+        sys.path.insert(0, _entry)
+import biotype_lib as bl
+import taxonomy_lib as tl
+cl, fc = bl.cl, bl.fc
 
-OUTDIR = bal.OUTDIR
+OUTDIR = fc.output_root() / "read_taxonomy" / "multimap_biotype"
 PC = "protein_coding"
 PP = "processed_pseudogene"
 _MISSING_AS = -(10 ** 9)
@@ -54,20 +55,37 @@ def read_genome_multi_records_flagged(bam_path, target_qnames):
     bam.close()
     return {q: recs for q, recs in out.items() if q in primary_multi}
 
-def _classify_loci(records_by_qname, exon_pr, gene_pr):
-    """Flat DataFrame of every locus with its 5'-base biotype.
-    Columns: qname, AS, is_secondary, biotype. One row per locus."""
-    import pyranges as pr
+#: Columns `classify_loci_frame` consumes. `qname` is an opaque key: the per-gene callers pass
+#: read-id strings, but a bulk caller may pass integer read indices instead so that millions of
+#: read-id strings never need to be materialised.
+LOCUS_FRAME_COLUMNS = ("locus_idx", "qname", "Chromosome", "Start", "AS", "is_secondary")
+
+def _loci_frame(records_by_qname):
+    """{qname: [(chrom, pos5, AS, is_secondary)]} -> the flat locus frame."""
     rows = []
     idx = 0
     for q, recs in records_by_qname.items():
         for (chrom, pos5, AS, is_sec) in recs:
             rows.append((idx, q, chrom, int(pos5), int(AS), bool(is_sec)))
             idx += 1
-    if not rows:
-        return pd.DataFrame(columns=["qname", "AS", "is_secondary", "biotype"])
+    return pd.DataFrame(rows, columns=list(LOCUS_FRAME_COLUMNS))
 
-    base = pd.DataFrame(rows, columns=["locus_idx", "qname", "Chromosome", "Start", "AS", "is_secondary"])
+def _classify_loci(records_by_qname, exon_pr, gene_pr):
+    """Flat DataFrame of every locus with its 5'-base biotype.
+    Columns: qname, AS, is_secondary, biotype. One row per locus."""
+    return classify_loci_frame(_loci_frame(records_by_qname), exon_pr, gene_pr)
+
+def classify_loci_frame(base, exon_pr, gene_pr):
+    """The locus biotype join, taking the flat frame directly.
+
+    Split out of `_classify_loci` so a caller holding its loci as arrays can skip building a
+    per-read dict of tuples. The join itself is identical on both paths -- `_classify_loci` is
+    this function plus `_loci_frame`, so the dict-taking path cannot drift from it.
+    """
+    import pyranges as pr
+    if base.empty:
+        return pd.DataFrame(columns=["qname", "AS", "is_secondary", "biotype"])
+    base = base.reset_index(drop=True)
     loc = base[["locus_idx", "Chromosome", "Start"]].copy()
     loc["End"] = loc["Start"] + 1
     loc_pr = pr.PyRanges(loc)
@@ -97,7 +115,14 @@ def categorize_reads(records_by_qname, exon_pr, gene_pr):
 
     The four categories are mutually exclusive by construction, so one label per read.
     """
-    loci = _classify_loci(records_by_qname, exon_pr, gene_pr)
+    return _labels_from_loci(_classify_loci(records_by_qname, exon_pr, gene_pr))
+
+def categorize_reads_frame(base, exon_pr, gene_pr):
+    """`categorize_reads` for a caller that already holds the flat locus frame."""
+    return _labels_from_loci(classify_loci_frame(base, exon_pr, gene_pr))
+
+def _labels_from_loci(loci):
+    """The tie test itself: a primary score-tied with a secondary of the other biotype."""
     if loci.empty:
         return pd.Series(dtype=object)
 

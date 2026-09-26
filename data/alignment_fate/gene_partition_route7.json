@@ -2,7 +2,7 @@
   "builder": "code/alignment_fate/build_gene_partition_data.py",
   "category_to_segment_group": {
     "absent_omitted_exon": [
-      "genome_unique_absent_nonselected_isoform_exon"
+      "genome_unique_absent_omitted_exon"
     ],
     "absent_other": [
       "genome_unique_absent_splice_junction",
@@ -11,21 +11,14 @@
       "genome_unique_absent_other"
     ],
     "multi": [
-      "genome_multi_primary_in_gene_pseudogene_tie",
-      "genome_multi_primary_pseudogene",
-      "genome_multi_primary_in_gene_no_pseudogene_tie",
-      "genome_multi_primary_elsewhere_other",
-      "genome_multi_primary_lost_in_dedup"
+      "genome_multi_top_at_gene_pseudogene_tie",
+      "genome_multi_top_at_gene_no_pseudogene_tie"
     ],
     "multi_pseudogene_tie": [
-      "genome_multi_primary_in_gene_pseudogene_tie",
-      "genome_multi_primary_pseudogene"
+      "genome_multi_top_at_gene_pseudogene_tie"
     ],
     "shared_unique": [
-      "genome_unique_shared_concordant",
-      "genome_unique_shared_discordant",
-      "genome_unique_txome_other_transcript",
-      "genome_unique_txome_multimapped"
+      "genome_unique_txome_present"
     ],
     "txonly": [
       "txome_only_genome_absent",
@@ -39,9 +32,9 @@
   ],
   "gsm": "GSM2100602",
   "n_union": {
-    "COMT": 1295,
-    "GAPDH": 4360,
-    "LRRFIP1": 1525
+    "COMT": 1283,
+    "GAPDH": 4322,
+    "LRRFIP1": 1516
   },
   "sample": "HeLa",
   "segments": [
@@ -96,16 +89,19 @@
     }
   ],
   "semantics": {
+    "genome_membership": "a top-score genome placement (the primary, or a secondary with the primary's AS) overlapping the gene's full span; a read counts once per gene, and may be in several genes",
     "genome_only": "read id absent from the transcriptome dedup BAM entirely",
+    "omitted_exon": "genome-only unique read with an aligned block on this gene's exonic sequence absent from its selected transcript",
+    "pseudogene_tie": "a top-score placement with its 5' base in an exon of THIS gene and another on a processed pseudogene",
     "shared": "read id present in BOTH dedup BAMs (global, not gene-local)",
-    "txonly": "no genome alignment AT THIS GENE; the read may align elsewhere",
+    "txonly": "no top-score genome placement AT THIS GENE; the read may align elsewhere",
     "unit": "read ids; denominator = union of read ids at the gene on either route"
   },
   "source": {
     "file": "HeLa.gene_read_partition_reads.tsv",
     "generator": "code/alignment_fate/build_gene_read_partition.py --dump-reads",
-    "n_rows": 29458,
-    "sha256": "caabaf6f28c42d9ea4fc45a17b8b5e456937c3870da91986abb0e3446c955050"
+    "n_rows": 7121,
+    "sha256": "1dc7618f0ecc333423ce5900cc62c29320db591f6fd90fd8dc37d9375cec25b9"
   },
   "transcripts": {
     "COMT": "ENST00000361682.11",

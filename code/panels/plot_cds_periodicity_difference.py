@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Figure 2 B -- whole-CDS frame-0 periodicity, genome minus transcriptome."""
+"""S1 Fig B -- whole-CDS frame-0 periodicity, genome minus transcriptome."""
 from __future__ import annotations
 
 import argparse
@@ -10,14 +10,14 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 #: Colour-scale limit, in percentage points; +/-2 fits the measured span without clipping.
-#: Display only -- `prepare()` never sees it. `--vlim` overrides.
+#: Display only -- `prepare()` never sees it.
 VLIM = 2.0
 #: Fraction of VLIM past which in-cell text flips to white; relative so it tracks VLIM.
 WHITE_TEXT_FRACTION = 0.75
 
 def prepare(frame_genome, frame_txome, samples_csv):
     sys.path.insert(0, str(HERE))
-    import _fig02_common as common
+    import _qc_grid_common as common
 
     samples, lengths, genome, txome = common.load_pair(
         frame_genome, frame_txome, "pct_frame0")
@@ -28,16 +28,13 @@ def prepare(frame_genome, frame_txome, samples_csv):
             "n_shared_cells": int(finite.size),
             "median": float(np.median(finite)),
             "mean_abs": float(np.abs(finite).mean()),
-            "max_abs": float(np.abs(finite).max()),
-            "sources": {"frame_genome": str(frame_genome), "frame_txome": str(frame_txome),
-                        "samples_csv": str(samples_csv)}}
+            "max_abs": float(np.abs(finite).max())}
 
-def draw(prepared, axes_size=None, margins=None, vlim=VLIM, type_scale="large",
-         show_ylabels=True):
+def draw(prepared, axes_size=None, margins=None, type_scale="large", show_ylabels=True):
     import matplotlib.pyplot as plt
     from matplotlib.colors import LinearSegmentedColormap
     sys.path.insert(0, str(HERE))
-    import _fig02_common as common
+    import _qc_grid_common as common
     import panel_style as ps
 
     ps.apply_rcparams()
@@ -47,16 +44,16 @@ def draw(prepared, axes_size=None, margins=None, vlim=VLIM, type_scale="large",
     colormap = LinearSegmentedColormap.from_list(
         "genome_txome", ["#d62728", "white", "#2ca25f"])
     colormap.set_bad("#eeeeee")
-    norm = plt.Normalize(vmin=-vlim, vmax=vlim)
+    norm = plt.Normalize(vmin=-VLIM, vmax=VLIM)
 
-    # Shared with fig02A (`_fig02_common.MARGINS`); right margin = colourbar gutter.
+    # Shared with figS1A (`_qc_grid_common.MARGINS`); right margin = colourbar gutter.
     width, height = axes_size or common.AXES_SIZE
     left, bottom, right, top = margins or common.MARGINS
     fig_w, fig_h = left + width + right, bottom + height + top
     figure, axis = plt.subplots(figsize=(fig_w, fig_h))
     axis.set_position([left / fig_w, bottom / fig_h, width / fig_w, height / fig_h])
     common.draw_grid(axis, difference, colormap, norm)
-    white_above = WHITE_TEXT_FRACTION * vlim
+    white_above = WHITE_TEXT_FRACTION * VLIM
     for i in range(difference.shape[0]):
         for j in range(difference.shape[1]):
             value = difference[i, j]
@@ -84,14 +81,13 @@ def main(argv=None):
     parser.add_argument("--frame-genome", required=True, type=Path)
     parser.add_argument("--frame-txome", required=True, type=Path)
     parser.add_argument("--samples-csv", required=True, type=Path)
-    parser.add_argument("--vlim", type=float, default=VLIM)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--axes-size", nargs=2, type=float, metavar=("W", "H"),
-                        help="grid size in inches (default: _fig02_common.AXES_SIZE)")
+                        help="grid size in inches (default: _qc_grid_common.AXES_SIZE)")
     parser.add_argument("--margins", nargs=4, type=float, metavar=("L", "B", "R", "T"),
-                        help="margins in inches (default: _fig02_common.MARGINS)")
+                        help="margins in inches (default: _qc_grid_common.MARGINS)")
     parser.add_argument("--type-scale", choices=("large", "base"), default="large",
                         help="large: standalone panel type; base: journal-page type (8-12 pt)")
     parser.add_argument("--hide-ylabels", action="store_true",
@@ -107,7 +103,7 @@ def main(argv=None):
              prepared["max_abs"]))
 
     figure, _axis = draw(prepared, tuple(args.axes_size) if args.axes_size else None,
-                         tuple(args.margins) if args.margins else None, args.vlim,
+                         tuple(args.margins) if args.margins else None,
                          args.type_scale, not args.hide_ylabels)
     written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
                       tight=False)

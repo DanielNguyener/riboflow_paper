@@ -27,7 +27,7 @@ _build/
 /results/coverage/*
 !/results/coverage/coverage_checksums.tsv
 
-# figures: the panel references and the five published figures are versioned
+# figures: the panel references and the six published figures are versioned
 /figures/*
 !/figures/panel_references/
 /figures/panel_references/*
@@ -36,11 +36,13 @@ _build/
 /figures/published/*
 !/figures/published/Fig[2-6].tif
 !/figures/published/Fig[2-6]_plos.pdf
+!/figures/published/S[0-9]_Fig.tif
+!/figures/published/S[0-9]_Fig_plos.pdf
 
 # machine-local input locations (copy config/inputs.example.yaml)
 /config/local.yaml
 /get_coverage/
-/docs/Fig3_panel_annotations.md
+/docs/Fig2_panel_annotations.md
 *.bam
 *.bai
 *.csi
@@ -59,3 +61,10 @@ _build/
 .env.*
 *.local
 secrets.*
+
+/genome_coverage
+/code/cds_zero_coverage/
+/code/sample_stats
+/tests/test_genome_coverage.py
+# the min-union sensitivity check is an extra, not part of Figure 6
+/code/clustering/sensitivity_min_union.py

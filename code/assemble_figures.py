@@ -26,10 +26,10 @@ ALLOWED_FONTS = ("Arial", "Times", "Symbol")
 
 sys.path.insert(0, str(CODE))
 sys.path.insert(0, str(CODE / "panels"))
+sys.path.insert(0, str(CODE / "common"))
+import inputs  # noqa: E402
 
-
-def log(message):
-    print("[assemble] %s" % message, flush=True)
+log = inputs.make_log("assemble")
 
 
 def run(cmd):
@@ -46,21 +46,17 @@ def load_manifest(path):
     return document, {p["id"]: p for p in panels}
 
 
-def generator_command(entry, defaults, output, extras=(), formats=("pdf",), figsize=None):
+def generator_command(entry, output, extras=(), formats=("pdf",), figsize=None):
     """The manifest's command for `entry`, to `output`, plus composer-specific flags."""
     import make_panels
-    return make_panels.build_command(entry, defaults, formats, True, output, figsize) \
+    return make_panels.build_command(entry, formats, True, output, figsize) \
         + [str(x) for x in extras]
 
 
 def bold_font():
-    """(fontname, fontfile) for the panel letters: the bold cut of the panels' own family."""
-    import panel_style as ps
-    from matplotlib import font_manager
-    name, _ = ps.resolve_font()
-    path = font_manager.findfont(font_manager.FontProperties(family=name, weight="bold"),
-                                 fallback_to_default=False)
-    return name.replace(" ", "") + "-Bold", path
+    """(fontname, fontfile) for the panel letters: Arial Bold, as `figure_io` places it."""
+    import figure_io
+    return "Arial-Bold", figure_io.arial_bold()
 
 
 def measure(pdf_path):
@@ -80,29 +76,29 @@ def resolve_gsm(cell_line):
     return str(row["ribo_GSM"].iloc[0])
 
 
-# ── Figure 2: two 24 x 9 grids side by side ─────────────────────────────────────────────
+# ── S1 Fig: two 24 x 9 grids side by side ─────────────────────────────────────────────
 #: Inches. Both grids share AXES so cells match; B drops the GSM labels and sits flush
 #: right of A, so B's left margin is the gutter. B's right margin: colourbar; A's bottom: legend.
-FIG2_AXES = (2.72, 6.85)
-FIG2_MARGINS_A = (0.88, 1.50, 0.05, 0.25)     # left, bottom, right, top
-FIG2_MARGINS_B = (0.20, 1.50, 0.87, 0.25)
+GRID_AXES = (2.72, 6.85)
+GRID_MARGINS_A = (0.88, 1.50, 0.05, 0.25)     # left, bottom, right, top
+GRID_MARGINS_B = (0.20, 1.50, 0.87, 0.25)
 
 
-def compose_fig02_stack(spec, by_id, defaults, pdf_out):
+def compose_grid_pair(spec, by_id, pdf_out):
     import fitz
     STAGING.mkdir(parents=True, exist_ok=True)
     border = float(spec["raster"]["border_pt"])
     label_pt = float(spec["label_pt"])
     a_id, b_id = spec["panels"]
     a, b = STAGING / (a_id + "_plos"), STAGING / (b_id + "_plos")
-    run(generator_command(by_id[a_id], defaults, a,
+    run(generator_command(by_id[a_id], a,
                           ["--type-scale", "base", "--legend-ncol", "1",
-                           "--axes-size", *FIG2_AXES, "--margins", *FIG2_MARGINS_A]))
-    run(generator_command(by_id[b_id], defaults, b,
+                           "--axes-size", *GRID_AXES, "--margins", *GRID_MARGINS_A]))
+    run(generator_command(by_id[b_id], b,
                           ["--type-scale", "base", "--hide-ylabels",
-                           "--axes-size", *FIG2_AXES, "--margins", *FIG2_MARGINS_B]))
-    panels = [("A", a.with_suffix(".pdf"), FIG2_MARGINS_A[0]),
-              ("B", b.with_suffix(".pdf"), FIG2_MARGINS_B[0])]
+                           "--axes-size", *GRID_AXES, "--margins", *GRID_MARGINS_B]))
+    panels = [("A", a.with_suffix(".pdf"), GRID_MARGINS_A[0]),
+              ("B", b.with_suffix(".pdf"), GRID_MARGINS_B[0])]
     fontname, fontfile = bold_font()
     docs = [fitz.open(p) for _, p, _ in panels]
     widths = [d[0].rect.width for d in docs]
@@ -110,7 +106,7 @@ def compose_fig02_stack(spec, by_id, defaults, pdf_out):
     page_w = sum(widths) + 2 * border
     page_h = max(heights) + 2 * border
     if page_w > PAGE_W_IN * 72 + 0.01 or page_h > PAGE_H_IN * 72 + 0.01:
-        raise SystemExit("Figure 2 composes to %.2f x %.2f in, over the PLOS maximum"
+        raise SystemExit("the grid pair composes to %.2f x %.2f in, over the PLOS maximum"
                          % (page_w / 72, page_h / 72))
     out = fitz.open()
     page = out.new_page(width=page_w, height=page_h)
@@ -127,62 +123,63 @@ def compose_fig02_stack(spec, by_id, defaults, pdf_out):
         d.close()
 
 
-# ── Figure 3: A / B / C|D rows, each panel fitted to its slot ────────────────────────────
-FIG3_LABEL_GUTTER = 14.0             # a strip down the left edge that holds the letters
-FIG3_GAP_V = 5.0
-FIG3_GAP_H = 6.0
+# ── Figure 2: A / B / C|D rows, each panel fitted to its slot ────────────────────────────
+FIT_LABEL_GUTTER = 14.0             # a strip down the left edge that holds the letters
+FIT_GAP_V = 5.0
+FIT_GAP_H = 6.0
 FIT_TOL = 0.4
 FIT_MAX_ITER = 6
-FIG3_ROWS = [["A"], ["B"], ["C", "D"]]
+FIT_ROWS = [["A"], ["B"], ["C", "D"]]
 #: C renders STACKED so its 24 GSM labels appear once and fit beside D.
 #: Row heights in inches for C and D; A and B share what is left.
-FIG3_HEIGHT_CD_IN = 3.30
-FIG3_WIDTH_D_IN = 2.45
+FIT_HEIGHT_CD_IN = 3.30
+FIT_WIDTH_D_IN = 2.45
 HIGHLIGHT_CELL_LINE = "HeLa"
 GAPDH_NAME, GAPDH_TRANSCRIPT = "GAPDH", "ENST00000396861.5"
 COMT_NAME, COMT_TRANSCRIPT = "COMT", "ENST00000361682.11"
 
 
-def fig03_generators(spec, by_id, defaults, gsm):
+def fitted_generators(spec, by_id, gsm):
     """letter -> (entry, extra flags, starting figsize, output stem)."""
     ids = dict(zip("ABCD", spec["panels"]))
     return {
         "A": (by_id[ids["A"]],
               ["--title", "%s (%s) - %s" % (COMT_NAME, COMT_TRANSCRIPT, gsm),
-               "--labels", "minimal", "--title-correlations",
-               "--record-json", STAGING / "fig03A_record.json"],
-              (10.0, 4.8), STAGING / "fig03A_fitted"),
+               "--labels", "minimal", "--title-correlations", "--route-legend",
+               "--record-json", STAGING / (ids["A"] + "_record.json")],
+              (10.0, 4.8), STAGING / (ids["A"] + "_fitted")),
         "B": (by_id[ids["B"]],
               ["--title", "%s (%s) - %s" % (GAPDH_NAME, GAPDH_TRANSCRIPT, gsm),
-               "--labels", "minimal", "--title-correlations",
-               "--record-json", STAGING / "fig03B_record.json"],
-              (10.0, 4.8), STAGING / "fig03B_fitted"),
-        "C": (by_id[ids["C"]], ["--layout", "stacked"], (5.0, 3.3), STAGING / "fig03C_fitted"),
+               "--labels", "minimal", "--title-correlations", "--route-legend",
+               "--record-json", STAGING / (ids["B"] + "_record.json")],
+              (10.0, 4.8), STAGING / (ids["B"] + "_fitted")),
+        "C": (by_id[ids["C"]], ["--layout", "stacked"], (5.0, 3.3),
+              STAGING / (ids["C"] + "_fitted")),
         # No --highlight-sample: panel D marks no cell line.
         "D": (by_id[ids["D"]], ["--short-labels", "--no-points"], (2.45, 3.3),
-              STAGING / "fig03D_fitted"),
+              STAGING / (ids["D"] + "_fitted")),
     }
 
 
-def fig03_targets(page_w, page_h, margin):
+def fitted_targets(page_w, page_h, margin):
     """Panel boxes (in pt) that tile exactly into the target page."""
-    content_width = page_w - 2 * margin - FIG3_LABEL_GUTTER
+    content_width = page_w - 2 * margin - FIT_LABEL_GUTTER
     content_height = page_h - 2 * margin
-    available_height = content_height - (len(FIG3_ROWS) - 1) * FIG3_GAP_V
-    h_cd = FIG3_HEIGHT_CD_IN * 72.0
+    available_height = content_height - (len(FIT_ROWS) - 1) * FIT_GAP_V
+    h_cd = FIT_HEIGHT_CD_IN * 72.0
     h_ab = (available_height - h_cd) / 2.0
-    w_d = FIG3_WIDTH_D_IN * 72.0
+    w_d = FIT_WIDTH_D_IN * 72.0
     return {"A": (content_width, h_ab), "B": (content_width, h_ab),
-            "C": (content_width - FIG3_GAP_H - w_d, h_cd), "D": (w_d, h_cd)}
+            "C": (content_width - FIT_GAP_H - w_d, h_cd), "D": (w_d, h_cd)}
 
 
-def fig03_fit(generators, defaults, name, target_w, target_h):
+def fit_to_slot(generators, name, target_w, target_h):
     entry, extras, initial_figsize, out_stem = generators[name]
     nominal_w_pt, nominal_h_pt = initial_figsize[0] * 72.0, initial_figsize[1] * 72.0
     pdf_path = actual_w = actual_h = None
     for iteration in range(1, FIT_MAX_ITER + 1):
         figsize = (nominal_w_pt / 72.0, nominal_h_pt / 72.0)
-        run(generator_command(entry, defaults, out_stem, extras, figsize=figsize))
+        run(generator_command(entry, out_stem, extras, figsize=figsize))
         pdf_path = out_stem.with_suffix(".pdf")
         actual_w, actual_h = measure(pdf_path)
         err_w, err_h = target_w - actual_w, target_h - actual_h
@@ -197,17 +194,19 @@ def fig03_fit(generators, defaults, name, target_w, target_h):
     return pdf_path, actual_w, actual_h
 
 
-def write_fig03_annotations(path):
+def write_fitted_annotations(path, label, ids):
     """The numbers panels A and B no longer print on themselves, from the render records."""
-    lines = ["# Figure 3, panels A and B: annotations removed from the image", "",
+    lines = ["# %s, panels A and B: annotations removed from the image" % label, "",
              "Written by `code/assemble_figures.py` from the panel generator's render record. "
-             "Each panel is drawn with `--labels minimal`: the route names, the correlation "
-             "box and the trim-boundary captions are left off the axes.", "",
+             "Each panel is drawn with `--labels minimal`: the in-axes route names, the "
+             "correlation box and the trim-boundary captions are left off the axes; a "
+             "genome/transcriptome colour key (`--route-legend`) sits on the x-label line, "
+             "flush right.", "",
              "- Upper track: P-site coverage, mirrored -- **genome** route drawn upward "
              "(green), **transcriptome** route drawn downward (red).",
              "- Lower track: footprint coverage, both routes overlaid (same colours).",
              "- Dashed vertical lines mark the CDS trim boundaries.", ""]
-    for letter, stem in (("A", "fig03A"), ("B", "fig03B")):
+    for letter, stem in (("A", ids["A"]), ("B", ids["B"])):
         record = json.loads((STAGING / ("%s_record.json" % stem)).read_text())
         resolved, corr = record["resolved"], record["correlations"]
         x0, x1 = record["axis_window"]
@@ -226,32 +225,32 @@ def write_fig03_annotations(path):
     return path
 
 
-def compose_fig03_fit(spec, by_id, defaults, pdf_out):
+def compose_fitted_rows(spec, by_id, pdf_out, label):
     import fitz
     STAGING.mkdir(parents=True, exist_ok=True)
     margin = float(spec["raster"]["border_pt"])
     label_pt = float(spec["label_pt"])
     page_w, page_h = (float(v) * 72.0 for v in spec["page_in"])
-    targets = fig03_targets(page_w, page_h, margin)
+    targets = fitted_targets(page_w, page_h, margin)
     gsm = resolve_gsm(HIGHLIGHT_CELL_LINE)
-    generators = fig03_generators(spec, by_id, defaults, gsm)
+    generators = fitted_generators(spec, by_id, gsm)
     fitted = {}
     for name in "ABCD":
         print("fitting panel %s to %.2f x %.2f pt" % (name, *targets[name]))
-        pdf_path, w, h = fig03_fit(generators, defaults, name, *targets[name])
+        pdf_path, w, h = fit_to_slot(generators, name, *targets[name])
         fitted[name] = (fitz.open(pdf_path), w, h)
 
-    content_width = page_w - 2 * margin - FIG3_LABEL_GUTTER
+    content_width = page_w - 2 * margin - FIT_LABEL_GUTTER
     out = fitz.open()
     page = out.new_page(width=page_w, height=page_h)
     fontname, fontfile = bold_font()
     y = margin
-    for row_index, row in enumerate(FIG3_ROWS):
+    for row_index, row in enumerate(FIT_ROWS):
         widths = [fitted[name][1] for name in row]
         heights = [fitted[name][2] for name in row]
-        row_width = sum(widths) + FIG3_GAP_H * (len(row) - 1)
+        row_width = sum(widths) + FIT_GAP_H * (len(row) - 1)
         row_height = max(heights)
-        x = margin + FIG3_LABEL_GUTTER + (content_width - row_width) / 2.0
+        x = margin + FIT_LABEL_GUTTER + (content_width - row_width) / 2.0
         for name in row:
             doc, w, h = fitted[name]
             y_off = y + (row_height - h) / 2.0
@@ -262,10 +261,10 @@ def compose_fig03_fit(spec, by_id, defaults, pdf_out):
             letter_x = margin + 2.0 if name == row[0] else rect.x0 + 2.0
             page.insert_text((letter_x, y + label_pt), name, fontsize=label_pt,
                              fontname=fontname, fontfile=fontfile, color=(0, 0, 0))
-            x += w + FIG3_GAP_H
+            x += w + FIT_GAP_H
         y += row_height
-        if row_index < len(FIG3_ROWS) - 1:
-            y += FIG3_GAP_V
+        if row_index < len(FIT_ROWS) - 1:
+            y += FIT_GAP_V
     slack = page_h - margin - y
     if abs(slack) > 2.0:
         print("warning: %.2f pt of unused vertical space before the bottom margin" % slack)
@@ -274,20 +273,21 @@ def compose_fig03_fit(spec, by_id, defaults, pdf_out):
     for doc, _, _ in fitted.values():
         doc.close()
     if spec.get("annotations"):
-        log("wrote %s" % write_fig03_annotations(REPO / spec["annotations"]))
+        log("wrote %s" % write_fitted_annotations(REPO / spec["annotations"], label,
+                                                  dict(zip("ABCD", spec["panels"]))))
 
 
-# ── Figure 4: one generator page, the generator writes the TIFF ──────────────────────────
-def compose_single_panel(spec, by_id, defaults, pdf_out, tif_out):
+# ── Figure 3: one generator page, the generator writes the TIFF ──────────────────────────
+def compose_single_panel(spec, by_id, pdf_out, tif_out):
     STAGING.mkdir(parents=True, exist_ok=True)
     (panel_id,) = spec["panels"]
     stem = STAGING / panel_id
-    run(generator_command(by_id[panel_id], defaults, stem, formats=("pdf", "tif")))
+    run(generator_command(by_id[panel_id], stem, formats=("pdf", "tif")))
     shutil.copyfile(stem.with_suffix(".pdf"), pdf_out)
     shutil.copyfile(stem.with_suffix(".tif"), tif_out)
 
 
-# ── Figures 5, 6: panels placed 1:1 by ink box ───────────────────────────────────────────
+# ── Figures 4, 5: panels placed 1:1 by ink box ───────────────────────────────────────────
 def panel_entry(entry):
     import figure_io
     pdf = REPO / (entry["output"] + ".pdf")
@@ -303,7 +303,7 @@ def panel_entry(entry):
     return {"pdf": str(pdf), "clip": clip, "stem": entry["id"]}
 
 
-def compose_rows_1to1(spec, by_id, defaults, pdf_out):
+def compose_rows_1to1(spec, by_id, pdf_out):
     import figure_io
     page = spec["page"]
     rows = [[panel_entry(by_id[stem]) for stem in row] for row in spec["rows"]]
@@ -327,14 +327,6 @@ def rasterise_matplotlib_pdf(pdf_path, tiff_path, dpi):
         pix = doc[0].get_pixmap(dpi=dpi, alpha=False, colorspace=fitz.csRGB)
     image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
     image.save(tiff_path, format="TIFF", compression="tiff_lzw", dpi=(dpi, dpi))
-
-
-def write_png(tiff_path, png_path):
-    """A PNG of the TIFF's pixels, for previews and co-authors without a TIFF viewer."""
-    from PIL import Image
-    with Image.open(tiff_path) as image:
-        dpi = image.info.get("dpi", (300, 300))
-        image.save(png_path, format="PNG", dpi=dpi, optimize=True)
 
 
 def check(pdf_path, tiff_path, raster):
@@ -391,66 +383,69 @@ def check(pdf_path, tiff_path, raster):
     return problems
 
 
-COMPOSERS = ("fig02_stack", "fig03_fit", "single_panel", "rows_1to1")
+COMPOSERS = ("grid_pair", "fitted_rows", "single_panel", "rows_1to1")
 RASTERS = ("matplotlib_pdf", "generator_tiff", "fitz")
 
 
-def assemble(number, spec, by_id, defaults, output_dir, png=False):
+def assemble(number, spec, by_id, output_dir):
     import figure_io
+    import make_panels
     composer, raster = spec["composer"], spec["raster"]
     if composer not in COMPOSERS or raster["kind"] not in RASTERS:
         raise SystemExit("figure %s: unknown composer/raster %s/%s"
                          % (number, composer, raster["kind"]))
     stem = Path(spec["output"]).name
+    if stem != make_panels.figure_stem(number):
+        raise SystemExit("figure %s must publish as %s, not %s"
+                         % (number, make_panels.figure_stem(number), stem))
+    label = make_panels.figure_label(number)
     pdf = output_dir / ("%s_plos.pdf" % stem)
     tif = output_dir / ("%s.tif" % stem)
-    log("Figure %s (%s) -> %s" % (number, composer, tif))
-    if composer == "fig02_stack":
-        compose_fig02_stack(spec, by_id, defaults, pdf)
-    elif composer == "fig03_fit":
-        compose_fig03_fit(spec, by_id, defaults, pdf)
+    log("%s (%s) -> %s" % (label, composer, tif))
+    if composer == "grid_pair":
+        compose_grid_pair(spec, by_id, pdf)
+    elif composer == "fitted_rows":
+        compose_fitted_rows(spec, by_id, pdf, label)
     elif composer == "single_panel":
-        compose_single_panel(spec, by_id, defaults, pdf, tif)
+        compose_single_panel(spec, by_id, pdf, tif)
     else:
-        compose_rows_1to1(spec, by_id, defaults, pdf)
+        compose_rows_1to1(spec, by_id, pdf)
     if raster["kind"] == "matplotlib_pdf":
         rasterise_matplotlib_pdf(pdf, tif, int(raster["dpi"]))
     elif raster["kind"] == "fitz":
         figure_io.export_tiff(str(pdf), str(tif), float(raster["dpi"]))
-    if png:
-        write_png(tif, output_dir / ("%s.png" % stem))
     return pdf, tif
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--figure", type=int, action="append", help="2, 3, 4, 5 or 6")
+    parser.add_argument("--figure", type=str, action="append", help="S1, 2, 3, 4, 5 or 6")
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--manifest", type=Path, default=REPO / "config" / "panel_manifest.yaml")
     parser.add_argument("--output-dir", type=Path, default=OUT_DIR)
     parser.add_argument("--check", action="store_true", help="verify the outputs against the spec")
-    parser.add_argument("--png", action="store_true", help="also write Fig<N>.png, the same pixels")
     args = parser.parse_args(argv)
+    import make_panels
     document, by_id = load_manifest(args.manifest)
     figures_block = document["figures"]
     if not args.all and not args.figure:
         parser.error("name a figure (--figure 5) or pass --all")
-    unknown = [n for n in (args.figure or []) if n not in figures_block]
+    wanted = [n.upper() if n[:1] in "sS" else n for n in (args.figure or [])]
+    unknown = [n for n in wanted if n not in figures_block]
     if unknown:
         parser.error("no `figures:` entry for %s (have %s)"
-                     % (unknown, sorted(figures_block)))
-    figures = sorted(figures_block) if args.all else sorted(set(args.figure))
+                     % (unknown, sorted(figures_block, key=make_panels.figure_order)))
+    figures = sorted(figures_block if args.all else set(wanted), key=make_panels.figure_order)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     failed = False
     for number in figures:
         spec = figures_block[number]
-        pdf, tif = assemble(number, spec, by_id, document["defaults"], args.output_dir,
-                            args.png)
+        pdf, tif = assemble(number, spec, by_id, args.output_dir)
         if args.check:
             for problem in check(pdf, tif, spec["raster"]):
                 failed = True
-                log("  FAIL Fig%s: %s" % (number, problem))
+                log("  FAIL %s: %s" % (make_panels.figure_stem(number), problem))
     return 1 if failed else 0
 
 

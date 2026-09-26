@@ -70,11 +70,9 @@ def validate(rows, bams_root, columns=BAM_COLUMNS):
     return problems
 
 def sha256_file(path):
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    sys.path.insert(0, str(HERE.parent / "common"))
+    from inputs import sha256_of
+    return sha256_of(path)
 
 def build_one(row, args):
     sample = row["sample_id"]

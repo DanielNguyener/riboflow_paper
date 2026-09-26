@@ -1,4 +1,4 @@
-"""Figure 4's numbers: the shipped tables carry the published values, and the two R
+"""Figure 3's numbers: the shipped tables carry the published values, and the two R
 programs reproduce those tables from the shipped count matrices.
 
 The R layer runs only when `Rscript` is on PATH (base R, no packages). Everything is
@@ -21,7 +21,7 @@ COUNTS = REPO / "data" / "ribo_rna" / "counts"
 TABLES = REPO / "data" / "te_route" / "tables"
 ORF_CATALOG = REPO / "data" / "annotation" / "orf_catalog.tsv"
 
-#: The published numbers (manuscript Figure 4; docs/numeric_claims.tsv C13-C18).
+#: The published numbers (manuscript Figure 3; docs/numeric_claims.tsv C13-C18).
 N_TRANSCRIPTS = 19736
 N_GATED = 11589
 N_ESTIMATION = 7864

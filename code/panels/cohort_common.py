@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared loading for the five Figure-5 panels: the cohort ordering and its labels."""
+"""Shared loading for the four Figure-4 panels: the cohort ordering and its labels."""
 from __future__ import annotations
 
 import sys
@@ -10,12 +10,11 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 
 TAXONOMY_REQUIRED = (
-    "sample", "n_universe", "n_gU_tU", "n_gU_tM", "n_gM_tU", "n_gM_tM",
-    "n_gU_tA", "n_gM_tA", "n_gA_tU", "n_gA_tM",
+    "sample", "n_universe", "n_gU_tP", "n_gU_tA", "n_gM_tP", "n_gM_tA", "n_gA_tP",
     "n_genome_unique", "n_genome_multi", "n_genome_absent",
-    "n_txome_unique", "n_txome_multi", "n_txome_absent")
+    "n_txome_present", "n_txome_absent")
 
-#: The plot box shared by Figure 5's cohort panels A-D: distance from the PAGE TOP plus a
+#: The plot box shared by Figure 4's cohort panels A-D: distance from the PAGE TOP plus a
 #: HEIGHT, both in points. Both must match across panels or the 24 rows misalign at
 #: assembly; panels export with `tight=False` so the offsets survive to the file.
 STACK_PAGE_HEIGHT_IN = 8.0
@@ -38,18 +37,23 @@ def stack_axes_fractions(page_height_in=STACK_PAGE_HEIGHT_IN):
     return bottom, top
 
 def load_taxonomy(path):
-    """The read-ID taxonomy master, with the union partition derived and checked."""
+    """The read-ID taxonomy master, with the union partition named and checked.
+
+    The five Figure 4B segments are the five taxonomy cells: genome status (unique by
+    NH == 1, multimapping, absent) x transcriptome presence (a primary alignment in the
+    post-dedup BAM, which RiboFlow_v2 filtered at MAPQ >= 10).
+    """
     sys.path.insert(0, str(HERE))
     import panel_style as ps
 
     frame = pd.read_csv(path, sep="\t")
     ps.require_columns(frame, TAXONOMY_REQUIRED, str(path))
     frame = frame.copy()
-    frame["both_genome_unique"] = frame["n_gU_tU"] + frame["n_gU_tM"]
-    frame["both_genome_multi"] = frame["n_gM_tU"] + frame["n_gM_tM"]
+    frame["both_genome_unique"] = frame["n_gU_tP"]
+    frame["both_genome_multi"] = frame["n_gM_tP"]
     frame["genome_only_unique"] = frame["n_gU_tA"]
     frame["genome_only_multi"] = frame["n_gM_tA"]
-    frame["txome_only"] = frame["n_gA_tU"] + frame["n_gA_tM"]
+    frame["txome_only"] = frame["n_gA_tP"]
 
     total = (frame["both_genome_unique"] + frame["both_genome_multi"]
              + frame["genome_only_unique"] + frame["genome_only_multi"]
@@ -60,7 +64,7 @@ def load_taxonomy(path):
                          % ", ".join(bad))
 
     frame["genome_present"] = frame["n_genome_unique"] + frame["n_genome_multi"]
-    frame["txome_present"] = frame["n_txome_unique"] + frame["n_txome_multi"]
+    frame["txome_present"] = frame["n_txome_present"]
     for column, absent in (("genome_present", "n_genome_absent"),
                            ("txome_present", "n_txome_absent")):
         if not (frame[column] == frame["n_universe"] - frame[absent]).all():

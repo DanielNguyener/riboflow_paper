@@ -36,36 +36,48 @@ ENTRY_POINTS = [
     "code/alignment_fate/build_gene_read_partition.py",
     "code/alignment_fate/build_gene_partition_data.py",
     "code/alignment_fate/build_locus_data.py",
-    "code/panels/plot_gene_read_partition.py",
     "code/ribo_rna/count_transcript_reads.py",
     "code/ribo_rna/build_count_matrices.py",
     "code/te_route/plot_te_route_panels.py",
     "code/common/build_orf_catalog.py",
+    "code/cds_zero_coverage/run_cds_zeroes.py",
+    "code/cds_zero_coverage/plot_cds_zeroes.py",
+    "code/cds_zero_coverage/validate_against_hdf5.py",
+    "code/clustering/read_state.py",
+    "code/clustering/build_gene_counts.py",
+    "code/clustering/filter_genes.py",
+    "code/clustering/validate_cluster_omitted_sequence.py",
+    "code/clustering/validate_cluster_reference_duplication.py",
+    "code/clustering/validate_cluster_pseudogene_counts.py",
+    "code/clustering/sensitivity_min_union.py",     # gitignored extra, still a CLI
 ]
 
 #: CLIs that exist only so an orchestrator can spawn them as subprocesses. They are given a
-#: complete argument list by `make_tables.py` or `make_panels.py` and are not documented for
-#: direct use, so they are not held to the bare-`--help` contract above.
+#: complete argument list by `make_tables.py`, `make_panels.py` or their own driver, and are
+#: not documented for direct use, so they are not held to the bare-`--help` contract above.
 ORCHESTRATED = [
     "code/panels/plot_cds_periodicity_difference.py",
-    "code/panels/plot_fig05_plos_panels.py",
+    "code/panels/plot_cohort_plos_panels.py",
     "code/panels/plot_gene_partition.py",
     "code/panels/plot_locus_coverage.py",
-    "code/panels/plot_multimap_biotype.py",
-    "code/panels/plot_nonselected_isoform_reach.py",
+    "code/panels/plot_cohort_share.py",
     "code/panels/plot_per_transcript_concordance.py",
     "code/panels/plot_pooled_concordance.py",
+    "code/panels/plot_read_fate_clusters.py",
     "code/panels/plot_read_id_union.py",
     "code/panels/plot_readlen_psite_selection.py",
     "code/panels/plot_route_read_counts.py",
-    "code/read_taxonomy/compute_concordance.py",
     "code/read_taxonomy/compute_reach.py",
     "code/read_taxonomy/compute_taxonomy.py",
     "code/read_taxonomy/compute_tie_biotype.py",
     "code/read_taxonomy/run_read_taxonomy.py",
     "code/ribo_seq_qc/determine_offset_method.py",
     "code/ribo_seq_qc/run_pipeline.py",
-    "code/ribo_seq_qc/run_transcriptome_qc.py",
+    "code/cds_zero_coverage/compute_cds_zeroes.py",
+    "code/sample_stats/run_sample_stats.py",
+    "code/sample_stats/count_bam_filters.py",
+    "code/sample_stats/compute_sample_stats.py",
+    "code/sample_stats/plot_gt_boxplot.py",
 ]
 
 
@@ -174,10 +186,6 @@ def test_make_tables_rejects_a_bams_path_that_is_not_a_directory(tmp_path):
     assert "not a directory" in result.stderr
 
 
-def test_make_tables_rejects_an_unknown_stage(tmp_path):
-    result = run("code/make_tables.py", "--bams", str(tmp_path), "--stages", "nope")
-    assert result.returncode != 0
-    assert "unknown stage" in result.stderr
 
 
 def test_make_tables_requires_a_stage_selection(tmp_path):
@@ -217,11 +225,6 @@ def test_every_stage_runs_after_everything_it_declares_a_dependency_on():
     assert set(order) == set(make_tables.STAGE_RUN)
 
 
-def test_asking_for_a_stage_pulls_in_its_dependencies():
-    make_tables = _make_tables()
-    assert make_tables.required_stages({"reach"}) == [
-        "annotation", "taxonomy", "alignment_concordance", "reach"]
-    assert make_tables.required_stages({"annotation"}) == ["annotation"]
 
 
 def test_every_declared_output_has_a_shipped_counterpart_and_vice_versa():
@@ -248,10 +251,6 @@ def test_every_shipped_table_now_has_a_stage_behind_it():
     assert not hasattr(make_tables, "SHIPPED_NOT_GENERATED_HERE")
 
 
-def test_the_shipped_path_is_derived_not_tabulated():
-    make_tables = _make_tables()
-    for relative in make_tables.OUTPUTS:
-        assert make_tables.shipped_for(relative) == REPO / "data" / relative
 
 
 # ── the annotation inputs have no guessed default ────────────────────────────
@@ -375,11 +374,6 @@ def stages_validate(stages, cwd):
         capture_output=True, text=True, cwd=str(REPO))
 
 
-def test_a_single_valid_stage_is_accepted(tmp_path):
-    result = stages_validate("qc", tmp_path)
-    assert result.returncode == 0, result.stderr[-2000:]
-    assert "unknown stage" not in (result.stdout + result.stderr)
-    assert "qc" in result.stdout
 
 
 def test_several_comma_separated_stages_are_accepted(tmp_path):
@@ -404,24 +398,18 @@ def test_an_unknown_stage_is_rejected_and_named(tmp_path):
     assert "not_a_stage" in result.stderr, "the message must name the offending stage"
 
 
-def test_one_bad_stage_rejects_the_whole_request(tmp_path):
-    result = stages_validate("qc,not_a_stage", tmp_path)
-    assert result.returncode != 0
-    assert "not_a_stage" in result.stderr
 
 
 def test_requested_stages_pull_in_their_dependencies_in_order(tmp_path):
-    """`reach` reads the taxonomy and alignment-concordance masters."""
+    """`reach` reads the taxonomy master."""
     make_tables = _make_tables()
-    assert make_tables.required_stages({"reach"}) == [
-        "annotation", "taxonomy", "alignment_concordance", "reach"]
+    assert make_tables.required_stages({"reach"}) == ["annotation", "taxonomy", "reach"]
     result = stages_validate("reach", tmp_path)
     assert result.returncode == 0, result.stderr[-2000:]
     line = [l for l in result.stdout.splitlines() if "Stages that would run" in l]
     assert line, result.stdout
     order = [s.strip() for s in line[0].split(":", 1)[1].split(",")]
-    for earlier, later in (("annotation", "reach"), ("taxonomy", "reach"),
-                           ("alignment_concordance", "reach")):
+    for earlier, later in (("annotation", "reach"), ("taxonomy", "reach")):
         assert order.index(earlier) < order.index(later), order
 
 

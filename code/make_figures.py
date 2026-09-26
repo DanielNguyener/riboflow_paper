@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""End to end: panels -> the five published figures, optionally from BAMs first.
+"""End to end: panels -> the published figures, optionally from BAMs first.
 
-Figures 3A/3B additionally need results/coverage/HeLa.shared_coverage.h5 (see README).
+Figures 2A/2B additionally need results/coverage/HeLa.shared_coverage.h5 (see README).
 """
 from __future__ import annotations
 
@@ -13,15 +13,17 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 CODE = REPO / "code"
 
+sys.path.insert(0, str(CODE / "common"))
+import inputs  # noqa: E402
+
 #: The `make_tables.py` stages each figure's inputs come from.
-STAGES = {2: ["qc"], 3: ["coverage", "concordance"],
-          4: ["te_counts", "te_normalize", "te_stats"],
-          5: ["taxonomy", "reach", "multimap_biotype"],
-          6: ["gene_partition", "locus"]}
+STAGES = {"S1": ["qc"], "2": ["coverage", "concordance"],
+          "3": ["te_counts", "te_normalize", "te_stats"],
+          "4": ["taxonomy", "reach", "multimap_biotype"],
+          "5": ["gene_partition", "locus"], "6": ["clustering"]}
 
 
-def log(message):
-    print("[make_figures] %s" % message, flush=True)
+log = inputs.make_log("make_figures")
 
 
 def sh(cmd):
@@ -37,7 +39,7 @@ def panel_ids(spec):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--figure", type=int, action="append", help="2, 3, 4, 5 or 6")
+    parser.add_argument("--figure", type=str, action="append", help="S1, 2, 3, 4, 5 or 6")
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--check", action="store_true", help="verify every figure against the spec")
     parser.add_argument("--verify", action="store_true",
@@ -53,7 +55,12 @@ def main(argv=None):
     sys.path.insert(0, str(CODE))
     import make_panels
     document, panels = make_panels.load_manifest(REPO / "config" / "panel_manifest.yaml")
-    figures = sorted(document["figures"]) if args.all else sorted(set(args.figure))
+    wanted = {n.upper() if n[:1] in "sS" else n for n in (args.figure or [])}
+    unknown = sorted(wanted - set(document["figures"]))
+    if unknown:
+        parser.error("no `figures:` entry for %s" % unknown)
+    figures = sorted(document["figures"] if args.all else wanted,
+                     key=make_panels.figure_order)
 
     if args.bams:
         stages = [s for n in figures for s in STAGES[n]]
@@ -68,8 +75,8 @@ def main(argv=None):
         if sh(cmd):
             return 1
 
-    # Figures 2-4 re-render their panels at page size inside the assembler; 5 and 6 place
-    # the manifest's panel assets, so those are (re)built here.
+    # S1 Fig and Figures 2-3 re-render their panels at page size inside the assembler;
+    # Figures 4-6 place the manifest's panel assets, so those are (re)built here.
     wanted = [p for n in figures if document["figures"][n]["composer"] == "rows_1to1"
               for p in panel_ids(document["figures"][n])]
     if args.verify:

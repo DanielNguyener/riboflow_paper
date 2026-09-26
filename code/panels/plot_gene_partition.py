@@ -15,10 +15,7 @@ from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-
-
-def die(message):
-    raise SystemExit("error: %s" % message)
+from panel_style import die  # noqa: E402
 
 GENE_ORDER = ("COMT", "GAPDH", "LRRFIP1")
 
@@ -101,8 +98,7 @@ def main(argv=None):
         prepared, title=args.title if args.title is not None else meta["gsm"],
         figsize=tuple(args.figsize) if args.figsize else None,
         xlabel=args.xlabel, compact=args.compact, title_size=args.title_size,
-        bar_height=args.bar_height, grouped_key=True,
-        segments=[(k, l, c, x, h) for k, l, c, x, h in root.ROUTE7_SEGMENTS])
+        bar_height=args.bar_height)
     # A full-width panel has room for a tick every 10 %.
     axis.set_xticks(range(0, 101, 10))
     ps.save(figure, args.output, ps.resolve_formats(args.formats), force=args.force,

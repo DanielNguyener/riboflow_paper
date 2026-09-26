@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-"""STEP 05 — P-site frame counts across APPRIS CDS (phase1 lengths)."""
+"""STEP 03 — P-site frame counts across the CDS (phase1 lengths), genome or transcriptome route."""
 
 import sys
 import os
+import re
 import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "common"))
-import bam_inputs as fc          # the one uniqueness policy: fc.is_unique_genome_read
-
-import qc_core
-qc_core.require("pysam", "pyranges")
+import bam_inputs as fc          # the one uniqueness policy: fc.is_unique_{genome,txome}_read
 
 import pysam
 import pyranges as pr
@@ -22,16 +20,20 @@ import numpy as np
 p = argparse.ArgumentParser(description="P-site frame counts across APPRIS CDS.")
 p.add_argument("--sample", required=True)
 p.add_argument("--bam",    required=True)
-p.add_argument("--gtf",    default=config.gtf_path())
-p.add_argument("--appris", default=config.appris_path())
-p.add_argument("--out",    default=config.out_dir())
+p.add_argument("--route",  choices=["genome", "transcriptome"], default="genome",
+               help="Which alignments --bam holds: genome (NH == 1 kept; CDS exons from the "
+                    "annotation) or transcriptome (MAPQ >= 42 kept; CDS bounds from the "
+                    "reference names, stop codon excluded).")
+p.add_argument("--gtf",    default=None, help="genome route only")
+p.add_argument("--appris", default=None, help="genome route only")
+p.add_argument("--out",    default=None,
+               help="Output root; default config.out_dir() / config.tx_out_dir() by route.")
 args = p.parse_args()
 
 SAMPLE = args.sample
 BAM    = args.bam
-GTF    = args.gtf
-APPRIS = args.appris
-OUT    = args.out
+TX     = args.route == "transcriptome"
+OUT    = args.out or (config.tx_out_dir() if TX else config.out_dir())
 
 dir_tables  = os.path.join(OUT, "tables")
 dir_staging = os.path.join(dir_tables, "_staging")
@@ -39,7 +41,7 @@ for d in [dir_tables, dir_staging]:
     os.makedirs(d, exist_ok=True)
 
 QC_CSV = os.path.join(dir_staging, f"{SAMPLE}_readlen_window_qc.csv")
-print(f"=== [05 cds_frame] sample={SAMPLE} ===", flush=True)
+print(f"=== [03 cds_frame{' (transcriptome)' if TX else ''}] sample={SAMPLE} ===", flush=True)
 
 # ── 1. Load phase1 lengths, P-site offsets ────────────────────────────────────
 print("Loading phase1 lengths and P-site offsets from step 01...", flush=True)
@@ -58,10 +60,32 @@ psite_offsets    = dict(zip(phase1_rows["read_length"].astype(int),
 print(f"  Phase1 lengths:   {sorted(phase1_lengths)}")
 print(f"  Periodic lengths: {sorted(periodic_lengths)}")
 
-print("Loading CDS annotation cache...", flush=True)
-cds_df = config.load_annotation()
-print(f"  {len(cds_df):,} CDS exon records, "
-      f"{cds_df['transcript_id'].nunique():,} transcripts")
+# Reference names embed "|CDS:start-end|" (1-based, inclusive, stop codon INCLUDED).
+_CDS_RE = re.compile(r"\|CDS:(\d+)-(\d+)\|")
+
+def _cds_bounds_from_refname(ref):
+    """(cds_start0, cds_len_nostop) or (None, None). Stop codon trimmed (-3)."""
+    m = _CDS_RE.search(ref)
+    if not m:
+        return None, None
+    start1, end1 = int(m.group(1)), int(m.group(2))
+    cds_len_nostop = (end1 - start1 + 1) - 3  # drop the stop codon (CDS:end includes it)
+    if cds_len_nostop <= 0:
+        return None, None
+    return start1 - 1, cds_len_nostop
+
+if TX:
+    bam = pysam.AlignmentFile(BAM, "rb")
+    ref_bounds = {ref: _cds_bounds_from_refname(ref) for ref in bam.references}
+    print(f"  {len(ref_bounds):,} references; "
+          f"{sum(1 for v in ref_bounds.values() if v[0] is not None):,} carry a CDS region",
+          flush=True)
+else:
+    print("Loading CDS annotation cache...", flush=True)
+    cds_df = config.load_annotation(args.gtf, args.appris)
+    print(f"  {len(cds_df):,} CDS exon records, "
+          f"{cds_df['transcript_id'].nunique():,} transcripts")
+    bam = pysam.AlignmentFile(BAM, "rb")
 
 # ── 4. Load BAM reads (phase1 lengths), compute P-site positions ──────────────
 print("Reading BAM (phase1 lengths only)...", flush=True)
@@ -69,12 +93,15 @@ chrom_col  = []
 psite_col  = []
 strand_col = []
 length_col = []
+frame_col  = []   # transcriptome route: frame and rel_pos are known per read, no join needed
+rel_col    = []
 
-bam = pysam.AlignmentFile(BAM, "rb")
-for read in bam.fetch():
-    if read.is_unmapped or read.is_secondary or read.is_supplementary:
-        continue
-    if not fc.is_unique_genome_read(read):        # NH == 1
+for read in bam.fetch(until_eof=TX):
+    if TX:
+        if not fc.is_unique_txome_read(read):     # MAPQ >= 42
+            continue
+    elif (read.is_unmapped or read.is_secondary or read.is_supplementary
+          or not fc.is_unique_genome_read(read)):   # NH == 1
         continue
     rlen = read.query_length
     if rlen not in phase1_lengths:
@@ -82,71 +109,82 @@ for read in bam.fetch():
     offset = psite_offsets.get(rlen)
     if offset is None:
         continue
-    if read.is_reverse:
-        pos5   = read.reference_end - 1
-        p_site = pos5 - offset
-        strand = "-"
+    if TX:
+        cds_start0, cds_len_nostop = ref_bounds.get(read.reference_name, (None, None))
+        if cds_start0 is None:
+            continue
+        # bowtie2 --norc: all reads forward on the transcript, 5' end = reference_start
+        rel_pos = read.reference_start + offset - cds_start0
+        if rel_pos < 0 or rel_pos >= cds_len_nostop:
+            continue
+        frame_col.append(rel_pos % 3)
+        rel_col.append(rel_pos)
     else:
-        pos5   = read.reference_start
-        p_site = pos5 + offset
-        strand = "+"
-    chrom_col.append(read.reference_name)
-    psite_col.append(p_site)
-    strand_col.append(strand)
+        if read.is_reverse:
+            p_site, strand = read.reference_end - 1 - offset, "-"
+        else:
+            p_site, strand = read.reference_start + offset, "+"
+        chrom_col.append(read.reference_name)
+        psite_col.append(p_site)
+        strand_col.append(strand)
     length_col.append(rlen)
 bam.close()
 
-n_loaded = len(chrom_col)
+n_loaded = len(length_col)
 print(f"  {n_loaded:,} phase1-length reads loaded")
 
-# ── 5. PyRanges join: P-sites vs CDS exons (with Phase + cds_genomic_start) ───
-print("Joining P-site positions to CDS exons...", flush=True)
+if TX:
+    reads_df = pd.DataFrame({"length": length_col, "frame": frame_col, "rel_pos": rel_col})
+    print(f"  {n_loaded:,} reads with P-site in CDS body (0 <= rel_pos < CDS len, stop excluded)")
+else:
+    # ── 5. PyRanges join: P-sites vs CDS exons (with Phase + cds_genomic_start) ───
+    print("Joining P-site positions to CDS exons...", flush=True)
 
-reads_df = pd.DataFrame({
-    "length": length_col,
-    "frame":   np.nan,
-    "rel_pos": np.nan,
-})
+    reads_df = pd.DataFrame({
+        "length": length_col,
+        "frame":   np.nan,
+        "rel_pos": np.nan,
+    })
 
-if n_loaded > 0 and len(cds_df) > 0:
-    read_idx = np.arange(n_loaded)
-    psite_pr = pr.PyRanges(pd.DataFrame({
-        "Chromosome": chrom_col,
-        "Start":      psite_col,
-        "End":        np.array(psite_col) + 1,
-        "Strand":     strand_col,
-        "read_idx":   read_idx,
-    }))
-    cds_pr = pr.PyRanges(
-        cds_df[["Chromosome", "Start", "End", "Strand", "Phase", "cds_genomic_start"]]
-    )
-    joined = psite_pr.join(cds_pr, strandedness="same")
+    if n_loaded > 0 and len(cds_df) > 0:
+        read_idx = np.arange(n_loaded)
+        psite_pr = pr.PyRanges(pd.DataFrame({
+            "Chromosome": chrom_col,
+            "Start":      psite_col,
+            "End":        np.array(psite_col) + 1,
+            "Strand":     strand_col,
+            "read_idx":   read_idx,
+        }))
+        cds_pr = pr.PyRanges(
+            cds_df[["Chromosome", "Start", "End", "Strand", "Phase", "cds_genomic_start"]]
+        )
+        joined = psite_pr.join(cds_pr, strandedness="same")
 
-    if not joined.df.empty:
-        jdf  = joined.df.copy()
-        plus = jdf["Strand"] == "+"
+        if not joined.df.empty:
+            jdf  = joined.df.copy()
+            plus = jdf["Strand"] == "+"
 
-        # subtract Phase: using +Phase mislabels in-frame P-sites in phase-1/2 exons.
-        jdf["frame"] = np.where(
-            plus,
-            (jdf["Start"] - jdf["Start_b"] - jdf["Phase"]) % 3,
-            (jdf["End_b"] - 1 - jdf["Start"] - jdf["Phase"]) % 3,
-        ).astype(float)
+            # subtract Phase: using +Phase mislabels in-frame P-sites in phase-1/2 exons.
+            jdf["frame"] = np.where(
+                plus,
+                (jdf["Start"] - jdf["Start_b"] - jdf["Phase"]) % 3,
+                (jdf["End_b"] - 1 - jdf["Start"] - jdf["Phase"]) % 3,
+            ).astype(float)
 
-        jdf["rel_pos"] = np.where(
-            plus,
-            jdf["Start"] - jdf["cds_genomic_start"],
-            jdf["cds_genomic_start"] - jdf["Start"],
-        ).astype(float)
+            jdf["rel_pos"] = np.where(
+                plus,
+                jdf["Start"] - jdf["cds_genomic_start"],
+                jdf["cds_genomic_start"] - jdf["Start"],
+            ).astype(float)
 
-        jdf = jdf.drop_duplicates("read_idx", keep="first")
-        reads_df.loc[jdf["read_idx"].values, "frame"]   = jdf["frame"].values
-        reads_df.loc[jdf["read_idx"].values, "rel_pos"] = jdf["rel_pos"].values
+            jdf = jdf.drop_duplicates("read_idx", keep="first")
+            reads_df.loc[jdf["read_idx"].values, "frame"]   = jdf["frame"].values
+            reads_df.loc[jdf["read_idx"].values, "rel_pos"] = jdf["rel_pos"].values
 
-        n_in_cds = int((reads_df["rel_pos"] >= 0).sum())
-        print(f"  {n_in_cds:,} reads with P-site in CDS body (rel_pos >= 0)")
-    else:
-        print("  No P-site positions overlapped any CDS exon.")
+            n_in_cds = int((reads_df["rel_pos"] >= 0).sum())
+            print(f"  {n_in_cds:,} reads with P-site in CDS body (rel_pos >= 0)")
+        else:
+            print("  No P-site positions overlapped any CDS exon.")
 
 print("Aggregating frame counts per read length...", flush=True)
 out_rows = []

@@ -15,20 +15,17 @@ fc = tl.fc
 OUT = fc.output_root() / "read_taxonomy" / "taxonomy"
 STAGING = OUT / "_staging"
 
-_ABBR = {"unique": "U", "multi": "M", "absent": "A"}
-CELLS = [(g, t) for g in tl.STATES for t in tl.STATES if not (g == "absent" and t == "absent")]
-
 def build_row(sample, counts, n_universe):
     row = {"sample": sample, "n_universe": n_universe}
-    for g, t in CELLS:
+    for g, t in tl.CELLS:
         n = counts[(g, t)]
-        key = f"g{_ABBR[g]}_t{_ABBR[t]}"
+        key = tl.cell_key(g, t)
         row[f"n_{key}"] = n
         row[f"pct_{key}"] = 100.0 * n / n_universe if n_universe else float("nan")
-    for g in tl.STATES:
-        row[f"n_genome_{g}"] = sum(counts[(g, t)] for t in tl.STATES if (g, t) in counts)
-    for t in tl.STATES:
-        row[f"n_txome_{t}"] = sum(counts[(g, t)] for g in tl.STATES if (g, t) in counts)
+    for g in tl.GENOME_STATES:
+        row[f"n_genome_{g}"] = sum(counts[(g, t)] for t in tl.TXOME_STATES if (g, t) in counts)
+    for t in tl.TXOME_STATES:
+        row[f"n_txome_{t}"] = sum(counts[(g, t)] for g in tl.GENOME_STATES if (g, t) in counts)
     return row
 
 def main():
@@ -44,12 +41,9 @@ def main():
     out = STAGING / f"{args.sample}.tsv"
     pd.DataFrame([row]).to_csv(out, sep="\t", index=False)
 
-    core = {k: row[f"pct_g{_ABBR[g]}_t{_ABBR[t]}"]
-            for k, (g, t) in {"gU_tU": ("unique", "unique"), "gU_tM": ("unique", "multi"),
-                              "gM_tU": ("multi", "unique"), "gM_tM": ("multi", "multi")}.items()}
-    print(f"[{args.sample}] n_universe={n_universe:,}  "
-          f"gU_tU={core['gU_tU']:.2f}%  gU_tM={core['gU_tM']:.2f}%  "
-          f"gM_tU={core['gM_tU']:.2f}%  gM_tM={core['gM_tM']:.2f}%", flush=True)
+    print(f"[{args.sample}] n_universe={n_universe:,}  " + "  ".join(
+        "%s=%.2f%%" % (tl.cell_key(g, t), row["pct_" + tl.cell_key(g, t)])
+        for g, t in tl.CELLS), flush=True)
     print(f"wrote {out}", flush=True)
 
 if __name__ == "__main__":

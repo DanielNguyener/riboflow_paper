@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Figure 5 B -- composition of the union of read IDs across the two routes."""
+"""Figure 4 B -- composition of the union of read IDs across the two routes."""
 from __future__ import annotations
 
 import argparse
@@ -11,11 +11,11 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 
 SEGMENTS = (
-    ("both_genome_unique", "genome uniquely mapping", "#a6d96a"),
-    ("both_genome_multi", "genome multimapping", "#1a7d1a"),
-    ("genome_only_unique", "uniquely mapping", "#7fb9da"),
-    ("genome_only_multi", "multimapping", "#0d57a1"),
-    ("txome_only", "transcriptome only", "#cc3d3d"))
+    ("both_genome_unique", "SH-U", "#a6d96a"),
+    ("both_genome_multi", "SH-M", "#1a7d1a"),
+    ("genome_only_unique", "GO-U", "#7fb9da"),
+    ("genome_only_multi", "GO-M", "#0d57a1"),
+    ("txome_only", "TO", "#cc3d3d"))
 NOT_IN_UNION = "#dddddd"
 
 def _format_count(value):
@@ -28,22 +28,22 @@ def _format_count(value):
 
 def prepare(taxonomy_path, samples_csv=None):
     sys.path.insert(0, str(HERE))
-    import fig05_common as common
+    import cohort_common as common
 
     frame = common.load_taxonomy(taxonomy_path)
     order = common.sample_order(frame)
-    provenance = "shared Figure-5 order, derived from %s" % taxonomy_path
+    provenance = "shared cohort order, derived from %s" % taxonomy_path
     frame = frame.set_index("sample").loc[order].reset_index()
     for column, _label, _colour in SEGMENTS:
         frame["pct_" + column] = 100.0 * frame[column] / frame["n_universe"]
     labels = common.load_labels(samples_csv)
     return {"frame": frame, "order": order, "order_provenance": provenance,
-            "labels": [labels.get(s, s) for s in order], "source": str(taxonomy_path)}
+            "labels": [labels.get(s, s) for s in order]}
 
 def draw(prepared, figsize=(6.4, 8.6), show_labels=True, show_key=True):
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
-    import fig05_common as common
+    import cohort_common as common
     import panel_style as ps
 
     ps.apply_rcparams()
@@ -73,7 +73,7 @@ def draw(prepared, figsize=(6.4, 8.6), show_labels=True, show_key=True):
     cells = {(0, 0): SEGMENTS[0][2], (0, 1): SEGMENTS[2][2],
              (1, 0): SEGMENTS[1][2], (1, 1): SEGMENTS[3][2],
              (2, 0): SEGMENTS[4][2], (2, 1): NOT_IN_UNION}
-    # The key hangs below the shared fig05_common box. Its anchor is a FRACTION of the axes
+    # The key hangs below the shared cohort_common box. Its anchor is a FRACTION of the axes
     # height, so at small sizes it lands on the x label -- draw small with the key off.
     if not show_key:
         figure.tight_layout()
@@ -105,9 +105,6 @@ def main(argv=None):
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--taxonomy", required=True, type=Path)
     parser.add_argument("--samples-csv", type=Path)
-    parser.add_argument("--hide-key", action="store_true",
-                        help="omit the genome x transcriptome key (define it in the "
-                             "caption instead); for a panel drawn small")
     parser.add_argument("--hide-labels", action="store_true",
                         help="omit the y tick labels (panel A carries them in the figure)")
     parser.add_argument("--figsize", nargs=2, type=float, default=(6.4, 8.6))
@@ -126,8 +123,7 @@ def main(argv=None):
     for column, _label, _colour in SEGMENTS:
         print("[panel]   %-20s median %5.2f%%" % (column, medians[column]))
 
-    figure, _axis, extra = draw(prepared, tuple(args.figsize), not args.hide_labels,
-                                show_key=not args.hide_key)
+    figure, _axis, extra = draw(prepared, tuple(args.figsize), not args.hide_labels)
     written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
                       extra_artists=extra, tight=False)
     for path in written:

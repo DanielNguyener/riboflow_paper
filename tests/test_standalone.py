@@ -9,6 +9,7 @@ Scope is the WHOLE of `code/`, not a favoured subset.
 from __future__ import annotations
 
 import ast
+import functools
 import re
 import subprocess
 import sys
@@ -61,6 +62,10 @@ def tracked_files():
             continue
         if str(relative) in ALLOWED or relative.name == "CLAUDE.md":
             continue
+        if str(relative) == "config/local.yaml":
+            # machine-local input paths; gitignored (test_clean_copy checks that), so
+            # never distributed -- it is *supposed* to hold an absolute path.
+            continue
         out.append(relative)
     return sorted(out)
 
@@ -78,66 +83,41 @@ def test_there_are_files_to_check():
     assert len(source_files()) > 40
 
 
-def test_no_tracked_file_names_the_original_project():
-    offenders = []
-    for relative in tracked_files():
-        for number, line in enumerate((REPO / relative).read_text(
-                errors="replace").splitlines(), 1):
-            if ORIGINAL_PROJECT.search(line):
-                offenders.append("%s:%d: %s" % (relative, number, line.strip()[:100]))
-    assert not offenders, "\n".join(offenders)
+@functools.lru_cache(maxsize=None)
+def _lines(relative):
+    return (REPO / relative).read_text(errors="replace").splitlines()
 
 
-def test_no_source_file_contains_an_author_specific_absolute_path():
+#: (rule, files scanned, forbidden pattern). Source-only rules skip ALLOWED themselves.
+FORBIDDEN = [
+    ("the original project", tracked_files, ORIGINAL_PROJECT),
+    ("an author-specific absolute path", source_files, ABSOLUTE_PATH),
+    ("the deprecated pipeline repository (say RiboFlow_v2)", tracked_files,
+     re.compile(re.escape(DEPRECATED_PIPELINE_NAME))),
+    ("another local checkout", tracked_files,
+     re.compile("|".join(re.escape(m) for m in OTHER_CHECKOUTS))),
+    # Output directories are named for what they hold, not for a figure part.
+    ("a part-numbered output directory", source_files,
+     re.compile(r'"(0[0-9]|1[0-9])_[a-z_]+"')),
+]
+
+
+@pytest.mark.parametrize("rule,files,pattern", FORBIDDEN, ids=[f[0] for f in FORBIDDEN])
+def test_no_file_names(rule, files, pattern):
     offenders = []
-    for relative in source_files():
+    for relative in files():
         if str(relative) in ALLOWED:
             continue
-        for number, line in enumerate((REPO / relative).read_text().splitlines(), 1):
-            if ABSOLUTE_PATH.search(line):
-                offenders.append("%s:%d: %s" % (relative, number, line.strip()[:100]))
-    assert not offenders, "\n".join(offenders)
-
-
-def test_no_tracked_file_names_the_deprecated_pipeline_repository():
-    offenders = []
-    for relative in tracked_files():
-        text = (REPO / relative).read_text(errors="replace")
-        if DEPRECATED_PIPELINE_NAME in text:
-            offenders.append(str(relative))
-    assert not offenders, "say RiboFlow_v2, not %s: %s" % (DEPRECATED_PIPELINE_NAME, offenders)
-
-
-def test_no_tracked_file_reaches_into_another_local_checkout():
-    offenders = []
-    for relative in tracked_files():
-        text = (REPO / relative).read_text(errors="replace")
-        for marker in OTHER_CHECKOUTS:
-            if marker in text:
-                offenders.append("%s references %s" % (relative, marker))
-    assert not offenders, "\n".join(offenders)
-
-
-def test_no_part_numbered_output_directory_is_constructed():
-    """Output directories are named for what they hold, not for a figure part."""
-    pattern = re.compile(r'"(0[0-9]|1[0-9])_[a-z_]+"')
-    offenders = []
-    for relative in source_files():
-        for number, line in enumerate((REPO / relative).read_text().splitlines(), 1):
+        for number, line in enumerate(_lines(relative), 1):
             if pattern.search(line):
                 offenders.append("%s:%d: %s" % (relative, number, line.strip()[:100]))
-    assert not offenders, "\n".join(offenders)
+    assert not offenders, "%s is named by:\n%s" % (rule, "\n".join(offenders))
 
 
 def test_no_directory_is_named_after_a_figure():
     for directory in CODE.iterdir():
         if directory.is_dir():
             assert not re.match(r"fig\d", directory.name), directory.name
-
-
-def test_no_compatibility_tree_is_created():
-    assert not (REPO / "balanced25").exists()
-    assert not (REPO / "results" / "balanced25").exists()
 
 
 def test_the_suite_guards_the_repository_output_tree():
@@ -173,13 +153,20 @@ DELETED_PATHS = [
      "(went with the reference-offset P-site rule)"),
     ("code/coverage/verify_against_published.py",
      "code/coverage/compute_coverage_concordance.py --compare"),
+    ("code/gene_fate_atlas", "(no longer part of this repository)"),
+    ("code/gene_discordance", "code/clustering/"),
+    # The MAPQ >= 42 transcriptome-uniqueness split left Figures 4-6: transcriptome status
+    # is presence in the post-dedup BAM (RiboFlow_v2 MAPQ >= 10), so the read-ID
+    # concordance stage and its categories had nothing left to feed.
+    ("code/read_taxonomy/compute_concordance.py", "(the taxonomy is present/absent now)"),
+    ("code/read_taxonomy/concordance_lib.py", "code/read_taxonomy/reference_lib.py"),
     ("archive", "(no longer part of this repository)"),
     ("docs/audit", "docs/data_availability.md"),
     ("code/ribo_rna/compute_ribo_rna_route.py",
      "code/ribo_rna/count_transcript_reads.py (it re-derived the same universe and "
      "re-counted the same four BAMs)"),
     # The flattening: the two figure sub-projects and the per-figure assemblers they
-    # replaced, plus the Figure 4/5E panels the manuscript no longer carries.
+    # replaced, plus the Figure 3/4E panels the manuscript no longer carries.
     ("TE_Estimation", "code/te_route/ + code/ribo_rna/build_count_matrices.py"),
     ("Alternative_Isoforms", "code/alignment_fate/ + code/panels/ + assemble_figures.py"),
     ("code/assemble_plos.py", "code/assemble_figures.py"),
@@ -204,7 +191,13 @@ def test_deleted_paths_stay_gone(path, replacement):
 def test_no_program_invokes_a_deleted_one():
     """A stage that shells out to something that no longer exists fails at runtime, not
     at import, so nothing else would catch it."""
-    gone = ["make_examples.py", "analyze_transcript_pseudogene_tie.py",
+    gone = ["cluster_gene_fate.py", "run_fate_cluster.py", "run_fate_category.py",
+            "plot_fate_cluster.py", "run_gene_fate_atlas.py", "compute_gene_fate.py",
+            "build_gene_covariates.py",
+            "build_gene_discordance.py", "cluster_hellinger.R",
+            "gene_discordance_report.py", "plot_classification.py", "null_f_alt.py",
+            "dedup_dribo.py", "dedup_artifact_test.py", "plot_pseudo_vs_dribo.py",
+            "make_examples.py", "analyze_transcript_pseudogene_tie.py",
             "run_region_concordance.py", "run_region_coverage.py",
             "plot_ribo_rna_counts_scatter.py", "plot_pooled_with_example.py",
             "plot_union_combined.py", "verify_audit_baseline.py",
@@ -220,7 +213,13 @@ def test_no_program_invokes_a_deleted_one():
            # and printing a warning when each failed, so a full run emitted five
            # "failed (exit 2)" lines and still exited 0.
            "plot_frame_periodicity.py", "plot_cds_frame_breakdown.py",
-           "plot_region_breakdown.py", "plot_readlen_distribution.py"]
+           "plot_region_breakdown.py", "plot_readlen_distribution.py",
+           # The clustering exploration, reduced to the Figure 6 path: one R script
+           # (ward_cluster.R) and the panel generator in code/panels/.
+           "run_clustering.py", "plot_clustering.py", "plot_hclust.py",
+           "hellinger_transform.R", "hclust_sweep.R", "choose_k.R", "kmeans_sweep.R",
+           "ilr_transform.R", "clustering_lib.R",
+           "compute_concordance.py", "concordance_lib.py"]
     offenders = []
     for relative in source_files():
         text = (REPO / relative).read_text()
@@ -269,7 +268,7 @@ def test_every_directory_put_on_sys_path_exists():
             parts = re.findall(r'"([A-Za-z0-9_]+)"', match.group(1))
             if parts[0] not in ("code", "common", "read_taxonomy", "coverage",
                                 "panels", "ribo_seq_qc", "alignment_fate", "ribo_rna",
-                                "te_route"):
+                                "te_route", "clustering"):
                 continue
             base = REPO if parts[0] == "code" else CODE
             candidate = base.joinpath(*parts)
@@ -280,15 +279,15 @@ def test_every_directory_put_on_sys_path_exists():
 
 def test_the_alignment_fate_loader_resolves_its_siblings():
     """`load_libraries()` is the only cross-package import in the gene-partition stage, and
-    no other test imports it -- a stale directory there breaks Figure 6A and nothing else
+    no other test imports it -- a stale directory there breaks Figure 5A and nothing else
     notices."""
     sys.path.insert(0, str(CODE / "alignment_fate"))
     try:
-        import transcript_fate_lib
-        concordance_lib, mm_concordance_lib = transcript_fate_lib.load_libraries()
+        import gene_read_partition_lib
+        modules = gene_read_partition_lib.load_libraries()
     finally:
         sys.path.remove(str(CODE / "alignment_fate"))
-    for module in (concordance_lib, mm_concordance_lib):
+    for module in modules:
         assert Path(module.__file__).parent == CODE / "read_taxonomy", module.__file__
 
 
@@ -309,7 +308,6 @@ def code_only(path):
     Docstrings discuss environment variables -- that is how a reader learns
     what is configurable. Matching raw text would forbid explaining the thing.
     """
-    import io
     import tokenize
     pieces = []
     with open(path, "rb") as handle:
@@ -321,17 +319,11 @@ def code_only(path):
     return pieces
 
 
-#: Nothing is exempt.
-IMPORT_TIME_ENV_EXEMPT = set()
-
-
 @pytest.mark.parametrize("relative", source_files(), ids=lambda p: p.name)
 def test_no_module_reads_the_environment_at_import_time(relative):
     """An `os.environ` read at module scope is what makes code impossible to configure
     in-process and forces launchers to smuggle values through PYTHONPATH. Reads INSIDE a
     function are fine: that is an explicit fallback, not import-time state."""
-    if str(relative) in IMPORT_TIME_ENV_EXEMPT:
-        pytest.skip("retained unchanged as a record of the panel selection")
     tree = ast.parse((REPO / relative).read_text())
     offenders = []
     for node in tree.body:
@@ -390,15 +382,25 @@ def test_no_environment_variable_defaults_to_a_path_outside_the_repository():
 # ── the panel manifest ───────────────────────────────────────────────────────
 
 def load_manifest():
-    import yaml
-    return yaml.safe_load((REPO / "config" / "panel_manifest.yaml").read_text())
+    """The manifest as the pipeline sees it: figure keys normalised to strings."""
+    sys.path.insert(0, str(REPO / "code"))
+    import make_panels
+    document, _panels = make_panels.load_manifest(REPO / "config" / "panel_manifest.yaml")
+    return document
+
+
+def figure_stem(number):
+    sys.path.insert(0, str(REPO / "code"))
+    import make_panels
+    return make_panels.figure_stem(number)
 
 
 def test_the_panel_manifest_declares_exact_output_paths():
     document = load_manifest()
     outputs = [p["output"] for p in document["panels"] if p.get("generator")]
-    # 2A-B, 3A-D, 4 (+ its three single panels), 5A-D (+ the four page-size renders), 6A-B.
-    assert len(outputs) == 20, "expected 20 panel outputs, found %d" % len(outputs)
+    # S1A-B, 2A-D, 3 (+ its three single panels), 4A-D (+ the four page-size renders),
+    # 5A-B, 6.
+    assert len(outputs) == 21, "expected 21 panel outputs, found %d" % len(outputs)
     assert len(set(outputs)) == len(outputs), "duplicate output paths"
     for output in outputs:
         assert not ORIGINAL_PROJECT.search(output), output
@@ -417,7 +419,7 @@ def test_every_declared_panel_input_is_shipped_or_a_coverage_product():
     """A panel input is either a file in the repository or the coverage HDF5.
 
     Those are the only two kinds. No panel reads a file another panel wrote: values several
-    panels share -- Figure 4's axis maximum, Figure 5's cohort ordering -- are pure
+    panels share -- Figure 3's axis maximum, Figure 4's cohort ordering -- are pure
     functions of a table they all declare, so each derives its own. Anything else would be
     a hidden dependency on whatever happens to be lying around in `results/`.
     """
@@ -445,22 +447,23 @@ def test_no_panel_writes_a_file_another_panel_reads():
                     panel["id"], value)
 
 
-EXPECTED_FIGURES = {2, 3, 4, 5, 6}
+#: Main-text figures by number, supporting figures as `S<n>`; keys are strings.
+EXPECTED_FIGURES = {"S1", "2", "3", "4", "5", "6"}
 
 
 def test_the_figures_block_names_every_published_figure_once():
-    """Five figures, each with a known composer and raster rule, output under
-    figures/published/, built from panels the manifest declares."""
+    """Six figures (five main-text, one supporting), each with a known composer and
+    raster rule, output under figures/published/, built from panels the manifest declares."""
     document = load_manifest()
     figures = document["figures"]
     assert set(figures) == EXPECTED_FIGURES, sorted(figures)
     ids = {p["id"] for p in document["panels"] if p.get("generator")}
     outputs = []
     for number, spec in figures.items():
-        assert spec["composer"] in ("fig02_stack", "fig03_fit", "single_panel", "rows_1to1"), number
+        assert spec["composer"] in ("grid_pair", "fitted_rows", "single_panel", "rows_1to1"), number
         assert spec["raster"]["kind"] in ("matplotlib_pdf", "generator_tiff", "fitz"), number
         assert 300 <= int(spec["raster"]["dpi"]) <= 600, number
-        assert spec["output"].startswith("figures/published/Fig%d" % number), spec["output"]
+        assert spec["output"] == "figures/published/" + figure_stem(number), spec["output"]
         outputs.append(spec["output"])
         rows = spec.get("rows") or [spec["panels"]]
         used = [panel for row in rows for panel in row]
@@ -490,7 +493,7 @@ def test_every_figure_panel_a_rows_figure_places_is_in_results_panels():
 def test_the_published_figures_ship():
     for number in sorted(EXPECTED_FIGURES):
         for suffix in (".tif", "_plos.pdf"):
-            path = REPO / "figures" / "published" / ("Fig%d%s" % (number, suffix))
+            path = REPO / "figures" / "published" / (figure_stem(number) + suffix)
             assert path.exists(), path
 
 

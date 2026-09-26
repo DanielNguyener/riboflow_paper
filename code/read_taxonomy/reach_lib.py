@@ -15,13 +15,13 @@ for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc")):
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
 import bam_inputs as fc
+import taxonomy_lib as tl
 
 OUTDIR = fc.output_root() / "read_taxonomy" / "reach"
 
+#: How a genome-unique read that is ABSENT from the transcriptome BAM relates to the
+#: selected transcript of its gene.
 REACH_CATEGORIES = [
-    "shared_unique_concordant",
-    "shared_unique_discordant",
-    "genome_unique_transcriptome_multimapped",
     "representable_not_present_in_dedup_bam",
     "splice_junction_absent",
     "nonselected_isoform_exon",
@@ -34,9 +34,6 @@ REACH_CATEGORIES = [
 ]
 
 CATEGORY_LABEL = {
-    "shared_unique_concordant": "concordant (both unique, same locus)",
-    "shared_unique_discordant": "discordant (both unique, different locus)",
-    "genome_unique_transcriptome_multimapped": "genome unique, transcriptome multimapped",
     "representable_not_present_in_dedup_bam": "representable, not in dedup'd txome BAM",
     "splice_junction_absent": "splice junction absent from selected isoform",
     "nonselected_isoform_exon": "exon of a nonselected isoform",
@@ -52,33 +49,6 @@ UNREACHABLE_CATEGORIES = [
     "splice_junction_absent", "nonselected_isoform_exon", "protein_coding_gene_omitted",
     "pseudogene", "non_protein_coding_gene", "intronic", "intergenic", "other_unclassified",
 ]
-
-def genome_status_sets(bam_path):
-    """(all_q, uniq_q) over primary genome alignments — same rule as
-    `taxonomy_lib.status_sets(kind="genome")`."""
-    all_q, uniq_q = set(), set()
-    bam = pysam.AlignmentFile(str(bam_path), "rb")
-    for r in bam.fetch(until_eof=True):
-        if r.is_unmapped or r.is_secondary or r.is_supplementary:
-            continue
-        q = r.query_name
-        all_q.add(q)
-        uniq = fc.is_unique_genome_read(r)
-        if uniq:
-            uniq_q.add(q)
-    bam.close()
-    return all_q, uniq_q
-
-def txome_all_qnames(bam_path):
-    """All primary txome qnames (any MAPQ); gU_tA = genome-unique minus this set."""
-    all_q = set()
-    bam = pysam.AlignmentFile(str(bam_path), "rb")
-    for r in bam.fetch(until_eof=True):
-        if r.is_unmapped or r.is_secondary or r.is_supplementary:
-            continue
-        all_q.add(r.query_name)
-    bam.close()
-    return all_q
 
 def read_genome_blocks(bam_path, qnames):
     """qname -> (chrom, strand, blocks) for the given qname set only."""
@@ -106,6 +76,93 @@ def omitted_pc_genes(exon_gene_df, selected_genes):
     pc = exon_gene_df[exon_gene_df["gene_type"] == "protein_coding"]
     all_pc = set(pc["gene_id"].unique())
     return all_pc - selected_genes
+
+# ── direct overlap with omitted exonic sequence (Figure 4D) ─────────────────
+# The gene-level test of Figure 5A (`alignment_fate/gene_read_partition_lib.
+# alt_exon_overlap`) applied cohort-wide: a gU_tA read counts once per library when an
+# aligned block of its primary genomic alignment overlaps exonic sequence of ANY gene
+# that is absent from that gene's selected transcript. Strand-agnostic, indifferent to
+# junctions and to whether the rest of the alignment fits the selected transcript.
+
+def _merge(intervals):
+    """Sorted, merged [start, end) intervals (as in gene_read_partition_lib)."""
+    out = []
+    for start, end in sorted(intervals):
+        if out and start <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], end)
+        else:
+            out.append([start, end])
+    return [tuple(i) for i in out]
+
+def _subtract(intervals, holes):
+    """Merged `intervals` minus merged `holes` (as in gene_read_partition_lib)."""
+    out = []
+    holes = _merge(holes)
+    for start, end in _merge(intervals):
+        cursor = start
+        for h_start, h_end in holes:
+            if h_end <= cursor or h_start >= end:
+                continue
+            if h_start > cursor:
+                out.append((cursor, h_start))
+            cursor = max(cursor, h_end)
+        if cursor < end:
+            out.append((cursor, end))
+    return out
+
+def build_omitted_exon_index(exon_gene_df, table):
+    """{chrom: (starts, ends)}: the union, over every gene with a selected transcript, of
+    the gene's exonic sequence its selected transcript omits.
+
+    Per gene, exactly Figure 5A's `omitted_exonic_sequence`: the gene's exons are merged
+    over EVERY annotated transcript (all `exon_gene_df` rows sharing the version-stripped
+    gene_id, chromosome taken from the first row), and the selected transcript's exon
+    intervals are subtracted. The per-gene results are unioned per chromosome, so a read
+    that qualifies at several genes is still one read.
+    """
+    frame = exon_gene_df
+    base = frame["gene_id"].astype(str).str.split(".").str[0]
+    gene_index = {}
+    for gene, rows in frame.groupby(base, sort=False):
+        gene_index[gene] = (str(rows["Chromosome"].iat[0]),
+                            _merge(zip(rows["Start"].tolist(), rows["End"].tolist())))
+    by_chrom = {}
+    for tid, info in table.items():
+        entry = gene_index.get(str(info["gene_id"]).split(".", 1)[0])
+        if entry is None:
+            continue
+        chrom, exons = entry
+        selected = list(zip(info["g_start"].tolist(), info["g_end"].tolist()))
+        by_chrom.setdefault(chrom, []).extend(_subtract(exons, selected))
+    out = {}
+    for chrom, intervals in by_chrom.items():
+        merged = _merge(intervals)
+        out[chrom] = (np.array([i[0] for i in merged], dtype=np.int64),
+                      np.array([i[1] for i in merged], dtype=np.int64))
+    return out
+
+def omitted_exon_overlap_qnames(qnames, genome_blocks, omitted_by_chrom):
+    """The qnames whose primary's aligned blocks overlap any omitted exonic interval."""
+    import bisect
+
+    hits = set()
+    for q in qnames:
+        rec = genome_blocks.get(q)
+        if rec is None:
+            continue
+        chrom, _strand, blocks = rec
+        entry = omitted_by_chrom.get(str(chrom))
+        if entry is None:
+            continue
+        starts, ends = entry
+        for b_start, b_end in blocks:
+            # merged disjoint intervals sorted by start: the only candidate for a
+            # `start < b_end` overlap is the last interval starting before b_end.
+            j = bisect.bisect_left(starts, b_end)
+            if j > 0 and ends[j - 1] > b_start:
+                hits.add(q)
+                break
+    return hits
 
 def _find_exon_idx(bs, be, g_start, g_end):
     """Index of the exon fully containing block [bs,be), or -1 if none."""

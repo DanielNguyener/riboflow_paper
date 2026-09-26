@@ -1,4 +1,4 @@
-"""Ink cropping, the fit loop, 1:1 PDF composition and the fitz TIFF export (Figures 5, 6).
+"""Ink cropping, the fit loop, 1:1 PDF composition and the fitz TIFF export (Figures 4, 5).
 
 The thresholds, dpi, tolerances and geometry reproduce the shipped
 figures pixel for pixel. `assemble_figures.py` and `make_panels.py` import from here.
@@ -11,22 +11,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from panel_style import die
+
 REPO = Path(__file__).resolve().parents[2]
-
-
-def die(message):
-    raise SystemExit("error: %s" % message)
-
-#: PLOS Computational Biology's box: 789-2250 px wide, <= 2625 px tall at 300 dpi.
-PAGE_MAX_W_PT = 540.0
-PAGE_MAX_H_PT = 630.0
-PAGE_MIN_W_PT = 789 / 300.0 * 72.0
 
 MARGIN_PT = 4.0
 GUTTER_PT = 6.0
 ROW_GAP_PT = 10.0
 LETTER_PT = 10.0
-LETTER_BAND_PT = LETTER_PT * 1.25
 
 FIT_TOL_PT = 0.4
 FIT_MAX_ITER = 6
@@ -190,6 +182,7 @@ def export_tiff(pdf_path, tiff_path, dpi=600.0):
 
 
 def check_page(name, page_w, page_h):
+    """PLOS Computational Biology's box: 789-2250 px wide, <= 2625 px tall at 300 dpi."""
     px_w, px_h = page_w / 72.0 * 300, page_h / 72.0 * 300
     ok = 789 <= px_w <= 2250 and px_h <= 2625
     print("[plos] %s page %.2f x %.2f pt = %.0f x %.0f px at 300 dpi  %s"

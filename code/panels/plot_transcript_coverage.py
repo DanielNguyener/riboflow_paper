@@ -277,10 +277,12 @@ def _draw_region_overlay(axes, tracks, style):
                      fontsize=style["annotation"], color="#888")
 
 def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=None,
-                  labels="full", title_correlations=False):
+                  labels="full", title_correlations=False, route_legend=False):
     """Draw one transcript's coverage. Returns (figure, axes).
 
     `labels="minimal"` drops the in-axes text; boundary lines stay, numbers go to the record.
+    `route_legend` adds an unframed genome/transcriptome colour key on the x-label line,
+    flush right (returned as `figure._route_legend`; hand it to `save(..., extra_artists=[...])`).
     """
     import matplotlib.pyplot as plt
     import panel_style as ps
@@ -354,6 +356,24 @@ def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=
     else:
         axes[0].set_title(heading, fontsize=style["title"], pad=14)
     figure.tight_layout()
+    figure._route_legend = None
+    if route_legend:
+        # A colour key, not a data annotation, so it is drawn even with minimal labels.
+        # It shares the x label's line: vertically centred on the label (measured after
+        # tight_layout, which moves the axes), right-aligned to the axes' right edge.
+        from matplotlib.patches import Patch
+        axis = axes[-1]
+        figure.canvas.draw()
+        label_box = axis.xaxis.label.get_window_extent(figure.canvas.get_renderer())
+        y_mid = float(axis.transAxes.inverted().transform(
+            (0.0, (label_box.y0 + label_box.y1) / 2.0))[1])
+        figure._route_legend = axis.legend(
+            [Patch(facecolor=ps.GENOME, edgecolor="none"),
+             Patch(facecolor=ps.TXOME, edgecolor="none")],
+            ["genome", "transcriptome"], loc="center right", bbox_to_anchor=(1.0, y_mid),
+            bbox_transform=axis.transAxes, ncol=2, frameon=False,
+            fontsize=style["annotation"], handlelength=1.2, handleheight=0.9,
+            columnspacing=1.5, borderaxespad=0.0, borderpad=0.0)
     return figure, axes
 
 def render(argv=None):
@@ -384,6 +404,9 @@ def render(argv=None):
     parser.add_argument("--title-correlations", action="store_true",
                         help="add a second title line with each track's rho and r "
                              "(needs --annotate-correlation)")
+    parser.add_argument("--route-legend", action="store_true",
+                        help="add an unframed genome/transcriptome colour key on the "
+                             "x-label line, flush right (drawn even with --labels minimal)")
     parser.add_argument("--record-json", type=Path,
                         help="also write the render record (resolved transcript, window, "
                              "correlations) to this JSON file")
@@ -425,8 +448,10 @@ def render(argv=None):
     correlations = annotate_correlations(tracks) if args.annotate_correlation else None
     figure, _axes = plot_coverage(tracks, args.signal, correlations,
                                   tuple(args.figsize) if args.figsize else None,
-                                  args.title, args.labels, args.title_correlations)
-    written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force)
+                                  args.title, args.labels, args.title_correlations,
+                                  args.route_legend)
+    written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
+                      extra_artists=[figure._route_legend] if figure._route_legend else None)
     record = {
         "generator": "code/panels/plot_transcript_coverage.py",
         "coverage_file": args.coverage.name,
@@ -444,6 +469,7 @@ def render(argv=None):
         "coverage_states": tracks["states"],
         "correlations": correlations,
         "labels": args.labels,
+        "route_legend": args.route_legend,
         "outputs": [str(p) for p in written],
     }
     if args.record_json:

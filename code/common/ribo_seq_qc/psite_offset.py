@@ -1,43 +1,36 @@
 #!/usr/bin/env python3
 """The P-site offset detector behind every `psite_offset` value this repository ships."""
 
-def ribotish_get_offset(counts_by_pos, defOffset=12, flank=6, default=12):
-    """Port of ribotish get_offset() (ribo.py:1111).
-
-    Returns a positive offset (nt from 5' end) or `default` on failure.
-    """
+def _scan(counts_by_pos, frame, defOffset, flank, default):
+    """The ribotish threshold scan for one reading frame: a positive offset or `default`."""
     CODON = 3
-
-    upstream = {p: c for p, c in counts_by_pos.items() if p < 0}
-    if not upstream or max(upstream.values()) == 0:
-        return default
-
-    tis_pos = max(upstream, key=upstream.get)
-    frame   = tis_pos % 3
-
     threshold_pos = -defOffset - flank
-
     a0 = [counts_by_pos.get(p, 0) for p in sorted(counts_by_pos)
           if p % CODON == frame and p <= threshold_pos]
     a1 = [counts_by_pos.get(p, 0) for p in sorted(counts_by_pos)
           if p % CODON == frame and p >= threshold_pos]
     ai = [counts_by_pos.get(p, 0) for p in sorted(counts_by_pos)
           if p % CODON == frame and threshold_pos < p < -defOffset + flank]
-
     if not a0 or not a1 or not ai:
         return default
-
-    a0m = max(a0)
-    a1m = max(a1)
-    th  = a0m + int((a1m - a0m) / 6.0)
-
+    th = max(a0) + int((max(a1) - max(a0)) / 6.0)
     for p in range(-defOffset - flank + 1, -defOffset + flank):
         if p % CODON != frame:
             continue
         if counts_by_pos.get(p, 0) > th:
             return -p
-
     return default
+
+def ribotish_get_offset(counts_by_pos, defOffset=12, flank=6, default=12):
+    """Port of ribotish get_offset() (ribo.py:1111).
+
+    Returns a positive offset (nt from 5' end) or `default` on failure.
+    """
+    upstream = {p: c for p, c in counts_by_pos.items() if p < 0}
+    if not upstream or max(upstream.values()) == 0:
+        return default
+    tis_pos = max(upstream, key=upstream.get)
+    return _scan(counts_by_pos, tis_pos % 3, defOffset, flank, default)
 
 def get_offset_periodicity(counts_by_pos, defOffset=12, flank=6, default=12,
                            win_codons=10, min_down=200, dom_frac=0.40):
@@ -61,20 +54,4 @@ def get_offset_periodicity(counts_by_pos, defOffset=12, flank=6, default=12,
     if total < min_down or max(mass) / total < dom_frac:
         return ribotish_get_offset(counts_by_pos, defOffset, flank, default)
     frame = max(range(CODON), key=lambda r: mass[r])
-
-    threshold_pos = -defOffset - flank
-    a0 = [counts_by_pos.get(p, 0) for p in sorted(counts_by_pos)
-          if p % CODON == frame and p <= threshold_pos]
-    a1 = [counts_by_pos.get(p, 0) for p in sorted(counts_by_pos)
-          if p % CODON == frame and p >= threshold_pos]
-    ai = [counts_by_pos.get(p, 0) for p in sorted(counts_by_pos)
-          if p % CODON == frame and threshold_pos < p < -defOffset + flank]
-    if not a0 or not a1 or not ai:
-        return default
-    th = max(a0) + int((max(a1) - max(a0)) / 6.0)
-    for p in range(-defOffset - flank + 1, -defOffset + flank):
-        if p % CODON != frame:
-            continue
-        if counts_by_pos.get(p, 0) > th:
-            return -p
-    return default
+    return _scan(counts_by_pos, frame, defOffset, flank, default)

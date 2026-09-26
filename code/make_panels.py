@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import re
 import subprocess
@@ -17,10 +16,12 @@ REPO = Path(__file__).resolve().parents[1]
 MANIFEST = REPO / "config" / "panel_manifest.yaml"
 REFERENCES = REPO / "figures" / "panel_references"
 
+sys.path.insert(0, str(REPO / "code" / "common"))
+import inputs  # noqa: E402
+
 PDF_CREATIONDATE = re.compile(rb"/CreationDate \(D:[0-9+'\-Z]+\)")
 
-def log(message):
-    print("[make_panels] %s" % message, flush=True)
+log = inputs.make_log("make_panels")
 
 def load_manifest(path=MANIFEST):
     import yaml
@@ -29,6 +30,12 @@ def load_manifest(path=MANIFEST):
     if document.get("schema_version") != expected:
         raise SystemExit("%s has schema_version %r, expected %r"
                          % (path, document.get("schema_version"), expected))
+    # Figure keys are labels, not integers: main-text figures are digits, supporting
+    # figures are `S<n>`. YAML reads a bare digit as int, so normalise once here.
+    document["figures"] = {str(k): v for k, v in document["figures"].items()}
+    for panel in document["panels"]:
+        if panel.get("figure") is not None:
+            panel["figure"] = str(panel["figure"])
     panels = [p for p in document["panels"] if p.get("generator")]
     outputs = [p["output"] for p in panels]
     duplicates = {o for o in outputs if outputs.count(o) > 1}
@@ -36,6 +43,29 @@ def load_manifest(path=MANIFEST):
         raise SystemExit("the manifest declares the same output more than once: %s"
                          % ", ".join(sorted(duplicates)))
     return document, panels
+
+def is_supporting(number):
+    """`S1`, `S2`, ... are supporting-information figures; digits are main-text figures."""
+    return str(number)[:1].upper() == "S"
+
+
+def figure_order(number):
+    """Sort key: main-text figures by number, then supporting figures by number."""
+    number = str(number)
+    return (1, int(number[1:])) if is_supporting(number) else (0, int(number))
+
+
+def figure_stem(number):
+    """The published file stem PLOS expects: `Fig2` for the main text, `S1_Fig` for SI."""
+    number = str(number)
+    return "%s_Fig" % number.upper() if is_supporting(number) else "Fig%s" % number
+
+
+def figure_label(number):
+    """How the figure is cited: `Figure 2`, `S1 Fig`."""
+    number = str(number)
+    return "%s Fig" % number.upper() if is_supporting(number) else "Figure %s" % number
+
 
 def compare_to_reference(generated, reference):
     """Byte comparison, tolerating ONLY the PDF /CreationDate field."""
@@ -49,10 +79,7 @@ def compare_to_reference(generated, reference):
     offsets = [i for i, (x, y) in enumerate(zip(a, b)) if x != y]
     span = PDF_CREATIONDATE.search(b)
     if span and all(span.start() <= i < span.end() for i in offsets):
-        normalized = (PDF_CREATIONDATE.sub(b"/CreationDate (NORMALIZED)", a),
-                      PDF_CREATIONDATE.sub(b"/CreationDate (NORMALIZED)", b))
-        if hashlib.sha256(normalized[0]).hexdigest() == \
-                hashlib.sha256(normalized[1]).hexdigest():
+        if PDF_CREATIONDATE.sub(b"", a) == PDF_CREATIONDATE.sub(b"", b):
             return ("IDENTICAL_MOD_TIMESTAMP",
                     "%d byte(s) differ, all inside /CreationDate" % len(offsets))
     return "DIFFERS", ("%d byte(s) differ, NOT confined to /CreationDate (first at %d)"
@@ -67,17 +94,15 @@ def _flag_pairs(args_block):
             if value:
                 flags.append(flag)
         elif isinstance(value, (list, tuple)):
-            if key in ("ylim", "figsize"):
+            if key == "ylim":
                 flags += [flag] + [str(v) for v in value]
             else:
                 flags += [flag, ",".join(str(v) for v in value)]
-        elif isinstance(value, dict):
-            continue
         else:
             flags += [flag, str(value)]
     return flags
 
-def build_command(entry, defaults, formats, force, output=None, figsize=None):
+def build_command(entry, formats, force, output=None, figsize=None):
     command = [sys.executable, str(REPO / entry["generator"])]
     for key, value in (entry.get("inputs") or {}).items():
         command += ["--" + key.replace("_", "-"), str(REPO / value)
@@ -92,7 +117,7 @@ def build_command(entry, defaults, formats, force, output=None, figsize=None):
     return command
 
 
-def fit_and_run(entry, defaults, formats, force, dry_run=False):
+def fit_and_run(entry, formats, force):
     """Render a `fit:` panel until its ink is the declared width; record the clip."""
     import json
     sys.path.insert(0, str(REPO / "code" / "panels"))
@@ -103,14 +128,9 @@ def fit_and_run(entry, defaults, formats, force, dry_run=False):
     pdf = stem.with_suffix(".pdf")
     if pdf.exists() and not force:
         return 1, "%s exists; pass --force (fitted panels are re-rendered several times)" % pdf
-    if dry_run:
-        print("    " + " ".join(build_command(entry, defaults, formats, True, stem,
-                                              (fit["width_pt"] / 72.0, fit["height_in"]))))
-        return 0, ""
-
     def build(width_in, height_in):
         # --force on every iteration: the loop overwrites its own previous render.
-        return build_command(entry, defaults, formats, True, stem, (width_in, height_in))
+        return build_command(entry, formats, True, stem, (width_in, height_in))
 
     clip = figure_io.fit_panel(entry["id"], build, str(pdf), fit["width_pt"],
                                fit["height_in"], start_w_in=fit["width_pt"] / 72.0)
@@ -119,29 +139,24 @@ def fit_and_run(entry, defaults, formats, force, dry_run=False):
                    "target_w_pt": fit["width_pt"]}, handle, indent=2)
     return 0, ""
 
-def run(command, dry_run=False):
-    if dry_run:
-        print("    " + " ".join(command))
-        return 0, ""
+def run(command):
     completed = subprocess.run(command, capture_output=True, text=True)
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
-def _failure_excerpt(output, head=6, tail=18):
-    """The first lines of a failure AND the last, indented (summary head, remedy tail)."""
+def _failure_excerpt(output):
+    """The first 6 lines of a failure AND the last 18, indented (summary head, remedy tail)."""
     lines = output.splitlines()
-    if len(lines) <= head + tail:
+    if len(lines) <= 24:
         shown = lines
     else:
-        shown = lines[:head] + ["    ... %d lines omitted ..." % (len(lines) - head - tail)] \
-            + lines[-tail:]
+        shown = lines[:6] + ["    ... %d lines omitted ..." % (len(lines) - 24)] + lines[-18:]
     return "\n".join("    " + line for line in shown)
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("panels", nargs="*", help="panel ids, e.g. fig03A fig06B")
+    parser.add_argument("panels", nargs="*", help="panel ids, e.g. fig02A fig05B")
     parser.add_argument("--all", action="store_true")
-    parser.add_argument("--list", action="store_true")
     parser.add_argument("--manifest", type=Path, default=MANIFEST)
     parser.add_argument("--format", dest="formats", default=None,
                         help="override the manifest's formats, e.g. pdf,svg,png")
@@ -150,33 +165,21 @@ def main(argv=None):
     parser.add_argument("--accept", action="store_true",
                         help="store the current renders as the references (explicit act)")
     parser.add_argument("--force", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
     document, panels = load_manifest(args.manifest)
     by_id = {p["id"]: p for p in panels}
-
-    if args.list:
-        print("%d panel outputs from %d generator programs\n"
-              % (len(panels), len({p["generator"] for p in panels})))
-        for entry in panels:
-            print("%-8s Figure %s %s" % (entry["id"], entry["figure"], entry.get("panel", "")))
-            print("         %s" % entry["generator"])
-            print("         -> %s" % entry["output"])
-        for entry in document["panels"]:
-            if not entry.get("generator"):
-                print("%-8s %s" % (entry["id"], entry.get("note", "").strip().split("\n")[0]))
-        return 0
 
     if args.all:
         wanted = [p["id"] for p in panels]
     elif args.panels:
         unknown = [p for p in args.panels if p not in by_id]
         if unknown:
-            raise SystemExit("unknown panel(s): %s (see --list)" % ", ".join(unknown))
+            raise SystemExit("unknown panel(s): %s (have %s)"
+                             % (", ".join(unknown), ", ".join(by_id)))
         wanted = args.panels
     else:
-        raise SystemExit("nothing selected. Pass panel ids, or --all, or --list.")
+        raise SystemExit("nothing selected. Pass panel ids, or --all.")
 
     if sys.version_info[:2] != (3, 9):
         log("WARNING: running Python %d.%d; the published artifacts were produced on 3.9"
@@ -189,26 +192,23 @@ def main(argv=None):
     results = []
     for panel_id in wanted:
         entry = by_id[panel_id]
-        panel_formats = tuple(entry.get("formats", formats))
-        log("%s (Figure %s %s)" % (panel_id, entry["figure"], entry.get("panel", "")))
+        log("%s (%s %s)" % (panel_id, figure_label(entry["figure"]), entry.get("panel", "")))
         if entry.get("fit"):
-            code, output = fit_and_run(entry, document["defaults"], panel_formats,
-                                       args.force, args.dry_run)
+            code, output = fit_and_run(entry, formats, args.force)
         else:
-            code, output = run(build_command(entry, document["defaults"], panel_formats,
-                                             args.force), args.dry_run)
+            code, output = run(build_command(entry, formats, args.force))
         if code:
             log("  FAILED\n%s" % _failure_excerpt(output))
             results.append((panel_id, False, None, None))
             continue
-        primary = REPO / (entry["output"] + "." + panel_formats[0])
+        primary = REPO / (entry["output"] + "." + formats[0])
         verdict = detail = None
-        if args.accept and not args.dry_run:
+        if args.accept:
             REFERENCES.mkdir(parents=True, exist_ok=True)
             destination = REFERENCES / primary.name
             destination.write_bytes(primary.read_bytes())
             log("  accepted as reference: %s" % destination.relative_to(REPO))
-        if args.verify and not args.dry_run:
+        if args.verify:
             verdict, detail = compare_to_reference(primary, REFERENCES / primary.name)
             log("  vs reference: %s -- %s" % (verdict, detail))
         results.append((panel_id, True, verdict, detail))
@@ -225,7 +225,7 @@ def main(argv=None):
         print(line)
     print("\n%d/%d panels produced." % (len(results) - len(failed), len(results)))
     print("These are PANEL ASSETS. `python code/assemble_figures.py --all --check` composes")
-    print("them into figures/published/Fig<N>.tif.")
+    print("them into figures/published/<Fig<N>|S<N>_Fig>.tif.")
     return 1 if failed else 0
 
 if __name__ == "__main__":

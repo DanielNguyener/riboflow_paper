@@ -19,28 +19,8 @@ import bam_inputs as fc
 _UTR5_RE = re.compile(r"\|UTR5:(\d+)-(\d+)\|")
 _CDS_RE = re.compile(r"\|CDS:(\d+)-(\d+)\|")
 
-REGIONS = ["UTR5", "UTR5J", "CDS", "UTR3J", "UTR3"]
-
 DEFAULT_LEFT_SPAN = 35
 DEFAULT_RIGHT_SPAN = 10
-
-def load_ribo_params(ribo_path) -> dict:
-    """Read left_span / right_span / length_min / length_max out of a `.ribo` file.
-
-    Intentionally uncalled: kept so a holder of the original `.ribo` can confirm the spans.
-    """
-    import h5py
-
-    if ribo_path is None:
-        raise ValueError(
-            "load_ribo_params needs an explicit .ribo path. No .ribo file is shipped "
-            "with this repository; the spans default to DEFAULT_LEFT_SPAN=%d / "
-            "DEFAULT_RIGHT_SPAN=%d." % (DEFAULT_LEFT_SPAN, DEFAULT_RIGHT_SPAN))
-    with h5py.File(ribo_path, "r") as h:
-        p = {k: int(h.attrs[k]) for k in
-             ("left_span", "right_span", "length_min", "length_max")}
-    p["ribo_path"] = ribo_path
-    return p
 
 # ── region classifier (vectorised port of get_extended_boundaries) ──────────────
 def classify(x, start_site, stop_site, left_span, right_span):
@@ -64,15 +44,11 @@ def classify(x, start_site, stop_site, left_span, right_span):
     code[(x >= u3j_hi)] = 4
     return code
 
-def tally(codes) -> np.ndarray:
-    """5-element count vector [UTR5, UTR5J, CDS, UTR3J, UTR3] from classify() codes."""
-    return np.array([int((codes == i).sum()) for i in range(5)], dtype=np.int64)
-
 def build_genome_exon_table(allowed_base_ids: set | None = None):
     """Per-(transcript, region) exon table with 5′→3′ cumulative offsets → (exons_df, base2ver).
 
     NOT a universe: the three-region requirement reproduces RiboPy's `get_length_dist("CDS")`
-    population for read-length selection only; Figure 4 uses a different transcript set.
+    population for read-length selection only; Figure 3 uses a different transcript set.
     """
     _as_bool = fc._as_bool
     cds_df = fc.config.load_annotation()

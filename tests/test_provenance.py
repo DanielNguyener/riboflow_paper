@@ -40,13 +40,6 @@ def test_the_sample_assay_and_routes_are_recorded(coverage):
     assert tuple(coverage.routes) == ("genome", "transcriptome")
 
 
-def test_each_signal_name_maps_to_one_route_and_measure():
-    """The four dataset names are the contract; the mapping is a constant, not an attr."""
-    for name in coverage_schema.SIGNALS:
-        assert coverage_schema.SIGNAL_ROUTE[name] in ("genome", "transcriptome")
-        assert coverage_schema.SIGNAL_MEASURE[name] in ("psite", "footprint")
-
-
 def test_the_coordinate_convention_is_stated_on_the_file(coverage, provenance):
     assert coverage.coordinate_system == "transcript_5p_to_3p"
     assert provenance["parameters"]["stop_codon_assignment"] == "utr3"

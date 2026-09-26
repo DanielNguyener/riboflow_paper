@@ -15,6 +15,8 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+sys.path.insert(0, str(REPO / "code"))
+from common import inputs  # noqa: E402
 COUNTER = HERE / "count_transcript_reads.py"
 MANIFEST = REPO / "config" / "cohort_manifest.tsv"
 
@@ -33,8 +35,7 @@ REFERENCE_COUNTS = REPO / "data" / "ribo_rna" / "counts"
 class BuildError(RuntimeError):
     pass
 
-def log(message):
-    print("[counts] %s" % message, flush=True)
+log = inputs.make_log("counts")
 
 # ── the cohort ───────────────────────────────────────────────────────────────
 

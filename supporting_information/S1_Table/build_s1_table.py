@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -88,7 +89,7 @@ def load_qc(rda=None, qc_csv=None, dump_to=None):
         rda = Path(rda).resolve()
         if not rda.exists():
             raise SystemExit("no such .rda: %s" % rda)
-        if not _which("Rscript"):
+        if not shutil.which("Rscript"):
             raise SystemExit(
                 "Rscript is not on PATH, and it is what reads the .rda.\nEither install R, "
                 "or dump the table elsewhere and pass --qc-csv:\n"
@@ -129,13 +130,6 @@ def load_matched_rna(xlsx):
     if sheet["experiment_alias"].duplicated().any():
         raise SystemExit("%s sheet %r has duplicate experiment_alias values" % (xlsx, SHEET))
     return sheet.set_index("experiment_alias")
-
-def _which(program):
-    for directory in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = Path(directory) / program
-        if candidate.exists() and os.access(str(candidate), os.X_OK):
-            return str(candidate)
-    return None
 
 def parse_distr(value):
     """`"[0.68812, 0.6241, …]"` -> a list of floats, exactly as the original parsed it."""

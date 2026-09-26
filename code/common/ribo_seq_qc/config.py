@@ -2,10 +2,13 @@
 """Shared configuration for the multi-sample Ribo-Seq QC pipeline."""
 
 import os
+import sys
 
 _CODE_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.dirname(os.path.dirname(_CODE_DIR))
 _REPO = os.path.dirname(_REPO)
+if os.path.dirname(_CODE_DIR) not in sys.path:      # `inputs` lives one directory up
+    sys.path.insert(0, os.path.dirname(_CODE_DIR))
 
 class AnnotationError(RuntimeError):
     pass
@@ -52,13 +55,8 @@ def cache_dir():
 def tables_dir():
     return os.path.join(out_dir(), "tables")
 
-_tables_dir = tables_dir
-
 def staging_dir():
     return os.path.join(tables_dir(), "_staging")
-
-def plots_dir():
-    return os.path.join(out_dir(), "plots")
 
 # One fingerprinted bundle file, written atomically; never five files reused on existence.
 
@@ -71,17 +69,10 @@ def bundle_path():
     """The single cache file. `.pkl` so no parquet engine is required."""
     return os.path.join(cache_dir(), "qc_annotation_bundle.pkl")
 
-def _digest_file(path):
-    import hashlib
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
 def bundle_fingerprint(gtf=None, appris=None):
     """A content digest of everything that determines the bundle."""
     import hashlib
+    from inputs import sha256_of as _digest_file
 
     gtf = gtf or gtf_path()
     appris = appris or appris_path()

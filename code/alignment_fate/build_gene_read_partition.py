@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gene-anchored read-ID partition: every read at a gene, on either route, in one chain.
 
-`--dump-reads` writes the per-read table Figure 6A is folded from.
+`--dump-reads` writes the per-read table Figure 5A is folded from.
 """
 from __future__ import annotations
 
@@ -11,10 +11,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+sys.path.insert(0, str(REPO / "code"))
+from common import inputs  # noqa: E402
 
 
-def log(message):
-    print("[partition] %s" % message, flush=True)
+log = inputs.make_log("partition")
 
 
 def main(argv=None):

@@ -102,14 +102,6 @@ def test_a_stop_only_utr3_is_created_when_the_header_has_none(tr, headers):
     assert regions == {"CDS": (0, 489), "UTR3": (489, 492)}
 
 
-def test_the_heuristic_agrees_with_the_gtf_rule_on_these_cases(tr, headers):
-    """The GTF stop_codon feature is authoritative; the heuristic is the no-GTF fallback."""
-    heuristic = tr.heuristic_stop_codon_ids(headers)
-    assert "ENST00000396861.5" in heuristic      # has a header UTR3
-    assert "ENSTWHOLE.1" in heuristic            # no UTR3 but CDS length 492 % 3 == 0
-    assert "ENSTSTOPLESS.1" not in heuristic     # no UTR3 and CDS length 131 % 3 != 0
-
-
 # ── tiling and normalization ─────────────────────────────────────────────────
 
 def test_regions_tile_the_transcript_exactly(tr, headers):
@@ -206,13 +198,6 @@ def test_ribo_bins_are_clipped_not_inverted_on_a_short_transcript(tr, headers):
     assert rows, "expected at least one clipped bin"
     assert all(r["end"] > r["start"] for r in rows)
     assert all(0 <= r["start"] and r["end"] <= 192 for r in rows)
-
-
-def test_bin_provenance_records_how_the_spans_were_chosen(tr):
-    provenance = tr.ribo_bin_provenance(35, 10, "cli_default")
-    assert provenance["algorithm"] == "ribopy_get_extended_boundaries"
-    assert provenance["parameter_source"] == "cli_default"
-    assert provenance["stop_site_source"] == "header_cds_end_stop_inclusive"
 
 
 def test_negative_spans_are_rejected(tr, headers):

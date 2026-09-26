@@ -13,6 +13,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
 import bam_inputs                      # the one uniqueness policy
+from inputs import sha256_of
 
 _CDS_HEADER = re.compile(r"\|CDS:(\d+)-(\d+)\|")
 
@@ -366,31 +367,7 @@ def accumulate_intervals(starts, ends, n_positions):
         raise BuildError("footprint depth went negative -- intervals are malformed")
     return depth
 
-def per_transcript_sums(values, coverage_offset, transcript_len):
-    """Sum a full-coordinate array within each transcript's span."""
-    return np.fromiter(
-        (values[offset:offset + length].sum(dtype=np.int64)
-         for offset, length in zip(coverage_offset, transcript_len)),
-        dtype=np.int64, count=len(coverage_offset))
-
-def region_slice_sums(values, coverage_offset, starts, ends):
-    """Sum a full-coordinate array over one transcript-relative [start, end) window each;
-    end <= start contributes 0."""
-    return np.fromiter(
-        (values[offset + max(int(start), 0):offset + max(int(end), int(start))]
-         .sum(dtype=np.int64)
-         for offset, start, end in zip(coverage_offset, starts, ends)),
-        dtype=np.int64, count=len(coverage_offset))
-
-def sha256_file(path):
-    import hashlib
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-def file_identity(path, with_digest=True, record_path=False):
+def file_identity(path, record_path=False):
     """Identify an input by name, size and content digest.
 
     The full path is recorded only under `--record-input-paths` (shareable files, no machine names).
@@ -399,8 +376,7 @@ def file_identity(path, with_digest=True, record_path=False):
     record = {"name": path.name, "bytes": path.stat().st_size}
     if record_path:
         record["path"] = str(path)
-    if with_digest:
-        record["sha256"] = sha256_file(path)
+    record["sha256"] = sha256_of(path)
     return record
 
 def bam_identity(path, hash_bams=False, record_path=False):
@@ -414,10 +390,10 @@ def bam_identity(path, hash_bams=False, record_path=False):
         index = Path(str(path) + suffix)
         if index.exists():
             record["index"] = index.name
-            record["index_sha256"] = sha256_file(index)
+            record["index_sha256"] = sha256_of(index)
             break
     if hash_bams:
-        record["sha256"] = sha256_file(path)
+        record["sha256"] = sha256_of(path)
     return record
 
 def build(config):
@@ -430,7 +406,7 @@ def build(config):
     import annotation_cache
 
     bundle, reused = annotation_cache.load_or_build(
-        getattr(config, "annotation_cache", None), config.gtf, config.appris,
+        config.annotation_cache, config.gtf, config.appris,
         config.regions, LEFT_SPAN, RIGHT_SPAN)
     report["annotation_cache_reused"] = reused
 
@@ -473,7 +449,7 @@ def build(config):
         transcripts=transcripts[list(coverage_schema.TRANSCRIPT_COLUMNS)],
         provenance=provenance, paper_cds_trim=config.trim, chunk=config.chunk,
         gzip_level=config.gzip_level, shuffle=config.shuffle,
-        assay=getattr(config, "assay", "ribo"))
+        assay=config.assay)
 
     try:
         log("genome P-sites: streaming the BAM")
@@ -552,7 +528,7 @@ def _provenance(config, coords, cds_table, region_summary, genome_offsets, txome
     import pysam
     import scipy
 
-    keep_paths = bool(getattr(config, "record_input_paths", False))
+    keep_paths = bool(config.record_input_paths)
     inputs = {
         "gtf": file_identity(config.gtf, record_path=keep_paths),
         "appris_lengths": file_identity(config.appris, record_path=keep_paths),
@@ -566,7 +542,7 @@ def _provenance(config, coords, cds_table, region_summary, genome_offsets, txome
     return {
         "schema": coverage_schema.SCHEMA,
         "sample": config.sample,
-        "assay": getattr(config, "assay", "ribo"),
+        "assay": config.assay,
         "routes": list(coverage_schema.ROUTES),
         "generation": coverage_schema.invocation(record_paths=keep_paths),
         "code_version": coverage_schema.code_version(),
@@ -578,7 +554,7 @@ def _provenance(config, coords, cds_table, region_summary, genome_offsets, txome
             "psite_placement": psite_placement.PSITE_PLACEMENT,
             "stop_codon_assignment": "utr3",
             "exon_source": "gencode_exon_features",
-            "reference_name": getattr(config, "reference_name", "appris_human_v2_selected"),
+            "reference_name": config.reference_name,
             "appris_principal_ranks_consumed": False,
         },
         "assignment_policies": {
@@ -653,7 +629,7 @@ def main(argv=None):
         raise SystemExit("--trim must be a multiple of 3 to keep the CDS slice in frame; "
                          "got %d" % args.trim)
     check_inputs(args)
-    _final, report = build(args)
+    build(args)
     return 0
 
 if __name__ == "__main__":

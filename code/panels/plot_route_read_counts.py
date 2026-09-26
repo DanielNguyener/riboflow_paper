@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Figure 5 A -- distinct mapped read IDs per alignment route."""
+"""Figure 4 A -- distinct mapped read IDs per alignment route."""
 from __future__ import annotations
 
 import argparse
@@ -12,7 +12,7 @@ HERE = Path(__file__).resolve().parent
 
 def prepare(taxonomy_path, samples_csv=None):
     sys.path.insert(0, str(HERE))
-    import fig05_common as common
+    import cohort_common as common
 
     frame = common.load_taxonomy(taxonomy_path).sort_values("delta_reads")
     labels = common.load_labels(samples_csv)
@@ -20,13 +20,12 @@ def prepare(taxonomy_path, samples_csv=None):
             "order": frame["sample"].tolist(),
             "labels": [labels.get(s, s) for s in frame["sample"]],
             "genome_m": (frame["genome_present"] / 1e6).to_numpy(float),
-            "txome_m": (frame["txome_present"] / 1e6).to_numpy(float),
-            "source": str(taxonomy_path)}
+            "txome_m": (frame["txome_present"] / 1e6).to_numpy(float)}
 
 def draw(prepared, figsize=(4.6, 8.0)):
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
-    import fig05_common as common
+    import cohort_common as common
     import panel_style as ps
 
     ps.apply_rcparams()
@@ -69,7 +68,7 @@ def main(argv=None):
     parser.add_argument("--taxonomy", required=True, type=Path)
     parser.add_argument("--samples-csv", type=Path)
     parser.add_argument("--figsize", nargs=2, type=float, default=(4.6, 8.0))
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
@@ -84,8 +83,6 @@ def main(argv=None):
     print("[panel] gap median %.2fM, range [%.2f, %.2f]"
           % (np.median(gap), gap.min(), gap.max()))
 
-    if not args.output:
-        return 0
     figure, _axis = draw(prepared, tuple(args.figsize))
     # tight=False: a tight crop would undo the shared-box row alignment.
     written = ps.save(figure, args.output, ps.resolve_formats(args.formats),

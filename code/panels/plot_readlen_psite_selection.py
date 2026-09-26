@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Figure 2 A -- read-length selection and P-site offsets, genome versus transcriptome."""
+"""S1 Fig A -- read-length selection and P-site offsets, genome versus transcriptome."""
 from __future__ import annotations
 
 import argparse
@@ -18,7 +18,7 @@ STATUS_LABELS = ("both selected, equal offset", "both selected, different offset
 def prepare(qc_genome, qc_txome, samples_csv):
     """The status grid, its cell labels, and the agreement counts the caption quotes."""
     sys.path.insert(0, str(HERE))
-    import _fig02_common as common
+    import _qc_grid_common as common
 
     samples, lengths, genome, txome = common.load_pair(qc_genome, qc_txome, "psite_offset")
     status = np.zeros((len(samples), len(lengths)), dtype=int)
@@ -53,21 +53,19 @@ def prepare(qc_genome, qc_txome, samples_csv):
     return {"samples": samples, "lengths": lengths, "status": status, "labels": labels,
             "n_agree": n_agree, "n_disagree": n_disagree,
             "identical_sets": identical_sets,
-            "gsm": common.gsm_labels(samples_csv, samples),
-            "sources": {"qc_genome": str(qc_genome), "qc_txome": str(qc_txome),
-                        "samples_csv": str(samples_csv)}}
+            "gsm": common.gsm_labels(samples_csv, samples)}
 
 def draw(prepared, axes_size=None, margins=None, type_scale="large", legend_ncol=2):
     import matplotlib.pyplot as plt
     from matplotlib.colors import ListedColormap
     sys.path.insert(0, str(HERE))
-    import _fig02_common as common
+    import _qc_grid_common as common
     import panel_style as ps
 
     ps.apply_rcparams()
     sizes = common.grid_type(type_scale)
     samples, lengths = prepared["samples"], prepared["lengths"]
-    # Shared with fig02B (`_fig02_common.MARGINS`); right gutter left blank here.
+    # Shared with figS1B (`_qc_grid_common.MARGINS`); right gutter left blank here.
     width, height = axes_size or common.AXES_SIZE
     left, bottom, right, top = margins or common.MARGINS
     fig_w, fig_h = left + width + right, bottom + height + top
@@ -110,9 +108,9 @@ def main(argv=None):
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--axes-size", nargs=2, type=float, metavar=("W", "H"),
-                        help="grid size in inches (default: _fig02_common.AXES_SIZE)")
+                        help="grid size in inches (default: _qc_grid_common.AXES_SIZE)")
     parser.add_argument("--margins", nargs=4, type=float, metavar=("L", "B", "R", "T"),
-                        help="margins in inches (default: _fig02_common.MARGINS)")
+                        help="margins in inches (default: _qc_grid_common.MARGINS)")
     parser.add_argument("--type-scale", choices=("large", "base"), default="large",
                         help="large: standalone panel type; base: journal-page type (8-12 pt)")
     parser.add_argument("--legend-ncol", type=int, default=2)

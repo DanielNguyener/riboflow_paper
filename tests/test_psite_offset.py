@@ -98,12 +98,12 @@ def test_the_scan_stays_inside_the_flank():
 # ── the two routes must run the identical algorithm ──────────────────────────
 
 def test_both_route_steps_import_the_same_detector():
-    """A drift between the genome and transcriptome offset calls would turn the route
-    comparison into a comparison of offset tables."""
+    """Both routes run through the one step, and it imports the detector rather than
+    re-implementing it: a drift would turn the route comparison into a comparison of offset
+    tables."""
     from pathlib import Path
     qc = Path(__file__).resolve().parents[1] / "code" / "ribo_seq_qc"
-    for name in ("01_readlen_psite_qc.py", "01t_readlen_psite_qc_transcriptome.py"):
-        text = (qc / name).read_text()
-        assert "from psite_offset import" in text or "import psite_offset" in text, name
-        assert "def ribotish_get_offset" not in text, "%s re-implements the detector" % name
-        assert "def get_offset_periodicity" not in text, "%s re-implements the detector" % name
+    text = (qc / "01_readlen_psite_qc.py").read_text()
+    assert "from psite_offset import" in text or "import psite_offset" in text
+    assert "def ribotish_get_offset" not in text, "the step re-implements the detector"
+    assert "def get_offset_periodicity" not in text, "the step re-implements the detector"

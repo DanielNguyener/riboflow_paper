@@ -2,7 +2,7 @@
 
 Give it one coverage HDF5 and a gene ID and it draws genome-versus-transcriptome coverage
 in the shared transcript coordinate, with the transcript's regions marked. It is the tool
-a reader uses on their own data; the paper's Figure 3 A and B are two invocations of it.
+a reader uses on their own data; the paper's Figure 2 A and B are two invocations of it.
 
 Two properties are tested here rather than assumed:
 

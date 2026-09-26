@@ -1,0 +1,5 @@
+cluster	n	pct_shared_genome_unique	pct_shared_genome_multimapped	pct_genome_only_unique	pct_genome_only_multimapped	pct_transcriptome_only
+1	9699	83.4244	5.9676	6.4948	3.0963	1.0169
+2	811	18.0126	68.2448	5.5683	7.057	1.1173
+3	690	17.5739	3.4762	68.0066	10.5161	0.4272
+4	664	9.1306	11.7832	4.776	73.3447	0.9655

@@ -15,22 +15,19 @@ from pathlib import Path
 
 import numpy as np
 
+_COMMON = str(Path(__file__).resolve().parent.parent / "common")
+if _COMMON not in sys.path:
+    sys.path.insert(0, _COMMON)
+from inputs import sha256_of  # noqa: E402
+
 SCHEMA = "riboflow_paper/shared-coverage/3"
 SCHEMA_VERSION = 3
 
 SIGNALS = ("genome_psite", "txome_psite", "genome_footprint", "txome_footprint")
-PSITE_SIGNALS = ("genome_psite", "txome_psite")
-FOOTPRINT_SIGNALS = ("genome_footprint", "txome_footprint")
-
 ROUTES = ("genome", "transcriptome")
-SIGNAL_ROUTE = {"genome_psite": "genome", "genome_footprint": "genome",
-                "txome_psite": "transcriptome", "txome_footprint": "transcriptome"}
-SIGNAL_MEASURE = {"genome_psite": "psite", "txome_psite": "psite",
-                  "genome_footprint": "footprint", "txome_footprint": "footprint"}
 ASSAYS = ("ribo", "rna")
 
 COORDINATE_SYSTEM = "transcript_5p_to_3p"
-REGION_LABELS = ("UTR5", "CDS", "UTR3")
 #: cds_start == cds_end == NO_CDS marks a transcript without a CDS.
 NO_CDS = -1
 
@@ -65,15 +62,6 @@ def _text(value) -> str:
     return value if isinstance(value, str) else str(value)
 
 
-def sha256_file(path) -> str:
-    import hashlib
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 CODE_VERSION_MODULES = ("build_shared_coverage.py", "coverage_schema.py",
                         "psite_placement.py", "transcript_coords.py",
                         "transcript_regions.py")
@@ -87,7 +75,7 @@ def code_version(here=None) -> dict:
     per_module = {}
     for name in CODE_VERSION_MODULES:
         path = here / name
-        per_module[name] = sha256_file(path) if path.exists() else None
+        per_module[name] = sha256_of(path) if path.exists() else None
     combined = hashlib.sha256()
     for name in CODE_VERSION_MODULES:
         combined.update(("%s=%s\n" % (name, per_module[name])).encode())
@@ -186,8 +174,7 @@ class CoverageWriter:
         self.assay = assay
         self.final_path = Path(path)
         self.tmp_path = self.final_path.with_name(
-            "%s.tmp-%d-%s" % (self.final_path.name, os.getpid(),
-                              _datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%S")))
+            "%s.tmp-%d-%s" % (self.final_path.name, os.getpid(), _utc_now()))
         self.sample = sample
         self.transcripts = transcripts
         self.n_positions = int(transcripts["transcript_len"].sum())
@@ -234,7 +221,6 @@ class CoverageWriter:
     def _write_transcripts(self):
         group = self.handle.create_group("transcripts")
         frame = self.transcripts
-        n = len(frame)
         for column in TRANSCRIPT_STR_COLUMNS:
             values = frame[column].astype(str).to_numpy()
             width = max((len(v.encode()) for v in values), default=1) or 1
@@ -243,7 +229,6 @@ class CoverageWriter:
             group.create_dataset(column, data=frame[column].to_numpy(dtype=np.int32))
         group.create_dataset("coverage_offset",
                              data=frame["coverage_offset"].to_numpy(dtype=np.int64))
-        del n
 
     def _create_coverage(self, chunk, gzip_level, shuffle):
         group = self.handle.create_group("coverage")
@@ -546,9 +531,6 @@ class CoverageFile:
                               % (signal, ", ".join(SIGNALS)))
         start = int(self._offset[index])
         return self.handle["coverage"][signal][start:start + int(self._len[index])]
-
-    def get_tracks(self, index: int, signals=SIGNALS) -> dict:
-        return {name: self.get_track(index, name) for name in signals}
 
     def event_counts(self, index: int) -> dict:
         """{signal: sum over the whole transcript} -- P-site events, footprint bases."""

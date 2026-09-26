@@ -208,7 +208,6 @@ def main(argv=None):
                         help="directory of <sample>.shared_coverage.h5 files")
     parser.add_argument("--samples", help="comma-separated subset")
     parser.add_argument("--output", type=Path, default=Path("results/coverage/concordance"))
-    parser.add_argument("--gzip-per-transcript", action="store_true", default=True)
     args = parser.parse_args(argv)
 
     files = sorted(args.coverage.glob("*.shared_coverage.h5"))
@@ -219,7 +218,6 @@ def main(argv=None):
         raise SystemExit("no coverage files found in %s" % args.coverage)
     log("%d coverage file(s)" % len(files))
 
-    results = {}
     for kind, spec in SIGNAL_SETS.items():
         per_sample, per_transcript = [], []
         for path in files:
@@ -238,11 +236,8 @@ def main(argv=None):
         sample_path = write_tsv(sample_frame, args.output / spec["per_sample"])
         transcript_path = write_tsv(
             transcript_frame,
-            args.output / (spec["per_transcript"] + (".gz" if args.gzip_per_transcript else "")),
-            gzip_it=args.gzip_per_transcript)
+            args.output / (spec["per_transcript"] + ".gz"), gzip_it=True)
         log("wrote %s and %s" % (sample_path.name, transcript_path.name))
-        results[kind] = {"per_sample": str(sample_path),
-                         "per_transcript": str(transcript_path)}
 
     return 0
 

@@ -50,8 +50,7 @@ def prepare(psite_path, footprint_path, samples_csv=None, highlight=None):
                                     "pearson": float(row["pearson"].iloc[0])}
     return {"frames": frames, "order": order, "labels": labels, "marks": marks,
             "highlight_sample": (highlight or {}).get("sample"),
-            "n_rows": {k: int(len(v)) for k, v in frames.items()},
-            "sources": {"P-site": str(psite_path), "footprint": str(footprint_path)}}
+            "n_rows": {k: int(len(v)) for k, v in frames.items()}}
 
 def _half_box(axis, data, positions, fill, line):
     boxes = axis.boxplot(data, positions=positions, widths=0.4, showfliers=False,

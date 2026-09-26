@@ -1,5 +1,6 @@
 {
   "alternative_chosen_by": "most genome-only unique reads on non-selected sequence",
+  "alternative_gene": "LRRFIP1",
   "alternative_support_top5": {
     "ENST00000244815.9": 701,
     "ENST00000289175.10": 701,
@@ -11,19 +12,76 @@
   "builder": "code/alignment_fate/build_locus_data.py",
   "chrom": "chr2",
   "counts": {
-    "genome_cov_total": 984.0,
+    "genome_cov_total": 1388.0,
+    "genome_member_reads_in_window": 1418,
+    "genome_multi": 412,
     "genome_only_unique": 739,
     "genome_psite_dropped": 0,
-    "genome_reads_at_locus_in_window": 1264,
+    "genome_track_cov_by_layer": {
+      "genome_only": 717.0,
+      "genome_only_multi": 350.0,
+      "shared_multi": 54.0,
+      "shared_unique": 267.0
+    },
+    "genome_track_placed_by_layer": {
+      "genome_only": 739,
+      "genome_only_multi": 358,
+      "shared_multi": 54,
+      "shared_unique": 267
+    },
+    "genome_track_position_ambiguous_by_layer": {
+      "genome_only": 0,
+      "genome_only_multi": 0,
+      "shared_multi": 0,
+      "shared_unique": 0
+    },
+    "genome_track_psite_unresolved_by_layer": {
+      "genome_only": 0,
+      "genome_only_multi": 0,
+      "shared_multi": 0,
+      "shared_unique": 0
+    },
+    "genome_track_reads_by_layer": {
+      "genome_only": 739,
+      "genome_only_multi": 358,
+      "shared_multi": 54,
+      "shared_unique": 267
+    },
     "genome_unique": 1006,
-    "txome_cov_total": 295.0,
+    "status_membership_audit": {
+      "joined_by_tied_secondary_only": 166,
+      "missing_as": 0,
+      "secondary_only_lower_score": 7,
+      "secondary_only_no_primary": 2
+    },
+    "txome_cov_total": 333.0,
+    "txome_on_selected": 333,
     "txome_psite_dropped": 0,
-    "txome_unique_on_selected": 295
+    "txome_track_cov_by_layer": {
+      "shared_multi": 54.0,
+      "shared_unique": 267.0,
+      "txome_only": 12.0
+    },
+    "txome_track_reads_by_layer": {
+      "shared_multi": 54,
+      "shared_unique": 267,
+      "txome_only": 12
+    }
   },
   "coverage_semantics": {
-    "genome_cov": "genome route, NH==1 primaries in the read-length window, one count per read at its P-site (cigar_aware)",
+    "genome_cov": "genome route, reads with a top-score placement at the locus in the read-length window, at most one count per read at its P-site (cigar_aware). Only placements tied for the read's highest genomic score qualify; identical P-sites from several qualifying placements collapse to one count; disagreeing P-sites omit the read from position-resolved coverage (counted in genome_track_position_ambiguous_by_layer), never an arbitrary pick",
+    "layers": {
+      "genome_cov_genome_only": "genome_cov, NH==1, reads absent from the transcriptome BAM (partition: genome-only, unique)",
+      "genome_cov_genome_only_multi": "genome_cov, NH>1, reads absent from the transcriptome BAM (partition: genome-only, multimapping)",
+      "genome_cov_shared_multi": "genome_cov, NH>1, reads present in the transcriptome BAM (partition: shared, multimapping)",
+      "genome_cov_shared_unique": "genome_cov, NH==1, reads present in the transcriptome BAM (partition: shared, unique)",
+      "stacking": "GENOME_LAYERS / TXOME_LAYERS order, baseline first; each route's layers sum exactly to its track",
+      "txome_cov_shared_multi": "txome_cov, reads with a top-score genome placement at the locus and NH>1 (partition: shared, multimapping)",
+      "txome_cov_shared_unique": "txome_cov, reads with a top-score genome placement at the locus and NH==1 (partition: shared, unique)",
+      "txome_cov_txome_only": "txome_cov, reads with no top-score genome placement at the locus (partition: transcriptome-only at gene)"
+    },
     "order": "5'->3' over the merged exons of both models (SplicedAxis order)",
-    "txome_cov": "transcriptome route, MAPQ>=42 primaries on the selected transcript, P-site projected through the transcript->genome map"
+    "txome_cov": "transcriptome route, every primary on the selected transcript (post-dedup BAM, RiboFlow_v2 MAPQ>=10), P-site projected through the transcript->genome map"
   },
   "gene": "LRRFIP1",
   "genome_window": {
@@ -79,7 +137,7 @@
   "selected_transcript": "ENST00000308482.14",
   "signal": "psite",
   "strand": "+",
-  "txome_min_mapq": 42,
+  "txome_reads": "every primary alignment in the post-dedup BAM (RiboFlow_v2 MAPQ>=10)",
   "txome_window": {
     "lengths": [
       26,

@@ -20,19 +20,11 @@ TX_GLOB = "*/transcriptome/alignment_ribo/merged/*.transcriptome.post_dedup.bam"
 def _out(*parts):
     return fc.output_root().joinpath("read_taxonomy", *parts)
 
-def _cache(*parts):
-    return fc.output_root().joinpath(".cache", "read_taxonomy", *parts)
-
 ANALYSES = {
     "taxonomy": {
         "worker": "compute_taxonomy.py",
         "staging": _out("taxonomy", "_staging"),
         "master": _out("taxonomy", "taxonomy_all.tsv"),
-    },
-    "alignment_concordance": {
-        "worker": "compute_concordance.py",
-        "staging": _cache("alignment_concordance", "_staging"),
-        "master": _cache("alignment_concordance", "alignment_concordance_all.tsv"),
     },
     "reach": {
         "worker": "compute_reach.py",
@@ -91,7 +83,7 @@ def aggregate(analysis, samples):
 def _summarise(analysis, table):
     """A short console summary. Console only -- nothing downstream parses this."""
     if analysis == "taxonomy":
-        cells = ["pct_gU_tU", "pct_gU_tM", "pct_gM_tU", "pct_gM_tM"]
+        cells = ["pct_" + tl.cell_key(g, t) for g, t in tl.CELLS]
         if all(c in table.columns for c in cells):
             median = table[cells].median()
             print("core-cell medians: " + "  ".join(

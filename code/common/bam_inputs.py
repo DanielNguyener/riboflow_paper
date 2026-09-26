@@ -77,7 +77,12 @@ def is_unique_genome_read(read) -> bool:
             "BAM this cohort documents." % (read.query_name,))
 
 def is_unique_txome_read(read) -> bool:
-    """A primary transcriptome alignment at or above the Bowtie2 confident-unique ceiling."""
+    """A primary transcriptome alignment at or above the Bowtie2 confident-unique ceiling.
+
+    Used by the QC, coverage and TE-count analyses (S1 Fig, Figures 2-3). The read-ID
+    analyses of Figures 4-6 and the 5B locus count transcriptome PRESENCE instead: every
+    primary in the post-dedup BAM, which RiboFlow_v2 filtered at MAPQ >= 10.
+    """
     if read.is_unmapped or read.is_secondary or read.is_supplementary:
         return False
     return read.mapping_quality >= txome_min_mapq()

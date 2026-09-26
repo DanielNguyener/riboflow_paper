@@ -3,7 +3,7 @@
 `categorize()` produced the four tie-class counts directly until `categorize_reads()` was
 split out beneath it, so that a caller working on one named gene can ask WHICH reads landed
 in each class rather than only how many. The counts feed
-`data/read_taxonomy/multimap_biotype/multimap_tie_biotype_all.tsv`, and Figure 5 C reads that
+`data/read_taxonomy/multimap_biotype/multimap_tie_biotype_all.tsv`, and Figure 4 C reads that
 shipped table rather than a BAM -- so a drift introduced by the split would not show up in
 any panel render. It would show up the next time the table is regenerated, silently, as
 different published numbers.

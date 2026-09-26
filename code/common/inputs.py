@@ -21,6 +21,26 @@ def die(message):
     raise SystemExit("error: %s" % message)
 
 
+def make_log(prefix):
+    """`log("...")` -> `[prefix] ...` on stdout, flushed."""
+    def log(message):
+        print("[%s] %s" % (prefix, message), flush=True)
+    return log
+
+
+def import_from(directory, name, extra=()):
+    """Import module `name` from `directory` (+ `extra` dirs) without leaving sys.path changed."""
+    import sys
+    saved = list(sys.path)
+    try:
+        for entry in [str(directory)] + [str(e) for e in extra]:
+            if entry not in sys.path:
+                sys.path.insert(0, entry)
+        return __import__(name)
+    finally:
+        sys.path[:] = saved + [p for p in sys.path if p not in saved]
+
+
 def repo_path(relative):
     """A repository-relative path made absolute; absolute paths pass through."""
     path = Path(relative)
@@ -49,8 +69,10 @@ def resolve_external_inputs(bams=None, gtf=None, appris=None, sample="HeLa"):
     if missing:
         die("raw inputs not configured: %s (see config/inputs.example.yaml)"
             % "; ".join(missing))
-    paths = {"ribo_genome": os.path.join(str(bams), RIBO_GENOME_BAM.format(s=sample)),
-             "ribo_txome": os.path.join(str(bams), RIBO_TXOME_BAM.format(s=sample)),
+    genome_tpl = os.environ.get("RIBOFLOW_PAPER_GENOME_BAM_TPL", RIBO_GENOME_BAM)
+    txome_tpl = os.environ.get("RIBOFLOW_PAPER_TXOME_BAM_TPL", RIBO_TXOME_BAM)
+    paths = {"ribo_genome": os.path.join(str(bams), genome_tpl.format(s=sample)),
+             "ribo_txome": os.path.join(str(bams), txome_tpl.format(s=sample)),
              "gtf": str(gtf), "appris": str(appris)}
     for key in ("ribo_genome", "ribo_txome", "gtf", "appris"):
         if not os.path.exists(paths[key]):
