@@ -5,7 +5,7 @@
 Analysis and figure code for the RiboFlow_v2 manuscript: ribosome profiling and matched
 RNA-seq from 24 human cell lines, aligned to the genome and to the transcriptome, with the
 two alignment routes compared. From RiboFlow_v2 alignments, the code produces the analysis
-tables, Figures 2–6 and S1 Fig, the performance benchmark, and S1 Table.
+tables, Figures 2–6 and S1 Fig, and S1 Table.
 
 Read processing is done by the separate
 [RiboFlow_v2](https://github.com/ribosomeprofiling/riboflow) pipeline, with the
@@ -22,7 +22,6 @@ configurations in
 | `results/` | regenerated output |
 | `figures/` | `panel_references/*.pdf` and `published/{Fig2,Fig3,Fig4,Fig5,Fig6,S1_Fig}.{tif,_plos.pdf}` |
 | `docs/` | `methods_te_route.md` (Figure 3 statistics), `hdf5_schema.md` (coverage file format), `numeric_claims.tsv` (every published number and its source), `accessions.tsv` |
-| `benchmark/` | performance benchmark: Nextflow traces, scenario definitions and results ([`benchmark/README.md`](benchmark/README.md)) |
 | `supporting_information/S1_Table/` | `samples.csv` and its generator |
 | `tests/` | test suite |
 
@@ -53,10 +52,7 @@ Renders the panels from `data/` and writes `figures/published/{Fig2,Fig3,Fig4,Fi
 Figure 2A/2B also need `results/coverage/HeLa.shared_coverage.h5`, built from the GSM2100602 BAMs
 by `code/coverage/build_shared_coverage.py` ([`docs/hdf5_schema.md`](docs/hdf5_schema.md)).
 
-`python code/make_panels.py --all --verify` compares panels with `figures/panel_references/`;
-
-`python benchmark/summarize_benchmarks.py --check` recomputes the performance benchmark
-results ([`benchmark/README.md`](benchmark/README.md)).
+`python code/make_panels.py --all --verify` compares panels with `figures/panel_references/`.
 
 ## External inputs
 

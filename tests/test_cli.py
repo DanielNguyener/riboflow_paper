@@ -40,16 +40,12 @@ ENTRY_POINTS = [
     "code/ribo_rna/build_count_matrices.py",
     "code/te_route/plot_te_route_panels.py",
     "code/common/build_orf_catalog.py",
-    "code/cds_zero_coverage/run_cds_zeroes.py",
-    "code/cds_zero_coverage/plot_cds_zeroes.py",
-    "code/cds_zero_coverage/validate_against_hdf5.py",
     "code/clustering/read_state.py",
     "code/clustering/build_gene_counts.py",
     "code/clustering/filter_genes.py",
     "code/clustering/validate_cluster_omitted_sequence.py",
     "code/clustering/validate_cluster_reference_duplication.py",
     "code/clustering/validate_cluster_pseudogene_counts.py",
-    "code/clustering/sensitivity_min_union.py",     # gitignored extra, still a CLI
 ]
 
 #: CLIs that exist only so an orchestrator can spawn them as subprocesses. They are given a
@@ -73,11 +69,6 @@ ORCHESTRATED = [
     "code/read_taxonomy/run_read_taxonomy.py",
     "code/ribo_seq_qc/determine_offset_method.py",
     "code/ribo_seq_qc/run_pipeline.py",
-    "code/cds_zero_coverage/compute_cds_zeroes.py",
-    "code/sample_stats/run_sample_stats.py",
-    "code/sample_stats/count_bam_filters.py",
-    "code/sample_stats/compute_sample_stats.py",
-    "code/sample_stats/plot_gt_boxplot.py",
 ]
 
 
@@ -433,12 +424,16 @@ def test_every_main_block_is_accounted_for():
 
     The check is that the union is exact. A new CLI must be classified explicitly, and a
     file left in either list after its CLI is deleted fails here rather than lingering."""
+    tracked = set(subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "code/*.py"],
+        capture_output=True, text=True, check=True).stdout.split())
     found = set()
     for path in sorted((REPO / "code").rglob("*.py")):
-        if "__pycache__" in path.parts:
+        rel = str(path.relative_to(REPO))
+        if rel not in tracked:            # gitignored extras are not part of the release
             continue
         if "__main__" in path.read_text():
-            found.add(str(path.relative_to(REPO)))
+            found.add(rel)
     classified = set(ENTRY_POINTS) | set(ORCHESTRATED)
     assert not (set(ENTRY_POINTS) & set(ORCHESTRATED)), "a file cannot be in both lists"
     assert found == classified, (

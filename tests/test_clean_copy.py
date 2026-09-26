@@ -119,7 +119,6 @@ SHIPS = ("code/make_panels.py",
          "supporting_information/S1_Table/build_s1_table.py",
          "config/panel_manifest.yaml",
          "config/inputs.example.yaml",
-         "benchmark/summarize_benchmarks.py",
          "figures/panel_references/figS1A_readlen_psite_selection.pdf",
          # The published figures ship: they are what the clean-copy test reproduces.
          "figures/published/S1_Fig.tif", "figures/published/Fig5.tif",
@@ -147,6 +146,8 @@ DOES_NOT_SHIP = ("figures/published/Figure5_assembled.pdf",
                  # mechanism against the real repository instead.
                  "config/local.yaml",
                  "code/clustering/sensitivity_min_union.py",
+                 # the performance benchmark left the manuscript; the tree stays local-only
+                 "benchmark/summarize_benchmarks.py",
                  # a stray HDF5 under data/ must NOT slip past *.h5
                  "data/example.h5",
                  "sample.bam", "sample.bam.bai", "sample.bam.csi", "sample.cram",

@@ -68,3 +68,5 @@ secrets.*
 /tests/test_genome_coverage.py
 # the min-union sensitivity check is an extra, not part of Figure 6
 /code/clustering/sensitivity_min_union.py
+# the performance benchmark left the manuscript; kept on disk, not in the repository
+/benchmark/
