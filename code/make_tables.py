@@ -201,7 +201,7 @@ def stage_te_stats(samples, args):
 def stage_gene_partition(samples, args):
     """Figure 5A: the per-read gene partition dump, folded to the seven-segment table."""
     coverage = args.out / "coverage" / ("%s.shared_coverage.h5" % EXAMPLE_SAMPLE)
-    command = [sys.executable, CODE / "alignment_fate" / "build_gene_read_partition.py",
+    command = [sys.executable, CODE / "read_categories" / "build_gene_read_partition.py",
                "--sample", EXAMPLE_SAMPLE,
                "--genome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_genome_bam"),
                "--transcriptome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_txome_bam"),
@@ -212,7 +212,7 @@ def stage_gene_partition(samples, args):
     code = sh(command)
     if code:
         return code
-    return sh([sys.executable, CODE / "alignment_fate" / "build_gene_partition_data.py",
+    return sh([sys.executable, CODE / "read_categories" / "build_gene_partition_data.py",
                "--reads", args.out / "alignment_fate"
                / ("%s.gene_read_partition_reads.tsv" % EXAMPLE_SAMPLE),
                "--sample", EXAMPLE_SAMPLE, "--gsm", EXAMPLE_GSM,
@@ -221,7 +221,7 @@ def stage_gene_partition(samples, args):
 def stage_locus(samples, args):
     """Figure 5B: the LRRFIP1 locus coverage artifact."""
     qc_genome, qc_txome = _qc_tables(args)
-    return sh([sys.executable, CODE / "alignment_fate" / "build_locus_data.py",
+    return sh([sys.executable, CODE / "read_categories" / "build_locus_data.py",
                "--gene", LOCUS_GENE, "--sample", EXAMPLE_SAMPLE, "--gsm", EXAMPLE_GSM,
                "--bams", args.bams, "--gtf", args.gtf, "--appris", args.appris,
                "--qc-genome", qc_genome, "--qc-txome", qc_txome,
@@ -233,7 +233,7 @@ def stage_clustering(samples, args):
     cut, and the three per-gene validation tables. The read-state store (~20 min) is a
     durable product: it is reused when present, like the coverage HDF5."""
     rscript = _rscript()
-    clustering = CODE / "clustering"
+    clustering = CODE / "read_categories"
     out = args.out / "clustering"
     stem = "%s.post_dedup" % EXAMPLE_SAMPLE
     common = ["--bams", args.bams, "--gtf", args.gtf, "--appris", args.appris]
@@ -274,7 +274,7 @@ def _taxonomy_driver(analysis, samples, args):
     Capped at 2 workers regardless of `--workers`: each subprocess peaks near 5 GB.
     """
     selection = ["--samples", ",".join(samples)] if samples else []
-    return sh([sys.executable, CODE / "read_taxonomy" / "run_read_taxonomy.py", analysis,
+    return sh([sys.executable, CODE / "read_categories" / "run_read_taxonomy.py", analysis,
                "--workers", str(min(args.workers, 2))] + selection)
 
 STAGES = [

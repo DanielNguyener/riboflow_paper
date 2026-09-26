@@ -40,7 +40,6 @@ REPO = HERE.parents[1]
 
 SCHEMA = "riboflow_paper/read_state/3"
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "read_categories"))
 from categories import MISSING_AS  # noqa: E402
 
 FLAG_SECONDARY = 1
@@ -675,7 +674,7 @@ def main(argv=None):
         raise SystemExit("%s exists; pass --force to rebuild" % destination)
 
     saved = list(sys.path)
-    for entry in (REPO / "code" / "read_taxonomy", REPO / "code" / "common",
+    for entry in (REPO / "code" / "read_categories", REPO / "code" / "common",
                   REPO / "code" / "common" / "ribo_seq_qc"):
         sys.path.insert(0, str(entry))
     import bam_inputs

@@ -109,7 +109,7 @@ SHIPS = ("code/make_panels.py",
          "data/alignment_fate/locus_LRRFIP1.npz",
          "data/clustering/HeLa.post_dedup.clusters_k4.tsv",
          "data/clustering/gencode.v34.2wayconspseudos.gtf.gz",
-         "code/clustering/ward_cluster.R",
+         "code/read_categories/ward_cluster.R",
          "data/annotation/orf_catalog.tsv",
          "data/ribo_rna/counts/ribo_counts_genome.csv",
          "data/te_route/tables/per_gene_delta.tsv",
@@ -144,7 +144,7 @@ DOES_NOT_SHIP = ("figures/published/Figure5_assembled.pdf",
                  # published .gitignore stays free of them. The test below checks that
                  # mechanism against the real repository instead.
                  "config/local.yaml",
-                 "code/clustering/sensitivity_min_union.py",
+                 "code/read_categories/sensitivity_min_union.py",
                  # the performance benchmark left the manuscript; the tree stays local-only
                  "benchmark/summarize_benchmarks.py",
                  # a stray HDF5 under data/ must NOT slip past *.h5

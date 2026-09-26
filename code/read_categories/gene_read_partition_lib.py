@@ -31,8 +31,8 @@ if str(REPO / "code" / "common") not in sys.path:
     sys.path.insert(0, str(REPO / "code" / "common"))
 from intervals import merge as _merge, subtract as _subtract  # noqa: E402
 
-if str(REPO / "code" / "read_categories") not in sys.path:
-    sys.path.insert(0, str(REPO / "code" / "read_categories"))
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
 from categories import MISSING_AS, qualifies  # noqa: E402
 
 #: The chain, in evaluation order; one read gets exactly one of these. The order nests by
@@ -88,7 +88,7 @@ def load_libraries():
     """The read-taxonomy libraries, imported by path without disturbing sys.path."""
     sys.path.insert(0, str(REPO / "code"))
     from common.inputs import import_from
-    dirs = (REPO / "code" / "read_taxonomy", REPO / "code" / "common",
+    dirs = (REPO / "code" / "read_categories", REPO / "code" / "common",
             REPO / "code" / "common" / "ribo_seq_qc")
     return tuple(import_from(dirs[0], name, dirs[1:])
                  for name in ("reference_lib", "reach_lib", "tie_biotype_lib"))

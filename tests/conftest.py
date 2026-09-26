@@ -51,9 +51,7 @@ COVERAGE_CODE = CODE / "coverage"
 # No two modules across these directories share a file name, so one path list serves
 # every test.
 for _entry in (COVERAGE_CODE, CODE / "panels", CODE / "common",
-               CODE / "common" / "ribo_seq_qc", CODE / "alignment_fate",
-               CODE / "read_categories",
-               CODE / "read_taxonomy", CODE / "clustering", CODE / "ribo_rna",
+               CODE / "common" / "ribo_seq_qc", CODE / "read_categories", CODE / "ribo_rna",
                REPO / "supporting_information" / "S1_Table"):
     if str(_entry) not in sys.path:
         sys.path.insert(0, str(_entry))

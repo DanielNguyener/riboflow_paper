@@ -117,7 +117,7 @@ def test_fetch_keeps_primary_and_tied_secondaries(lib, bams, expected):
 
 
 def test_read_state_gene_side_matches_the_fetch(bams, expected, tmp_path):
-    sys.path.insert(0, str(CODE / "clustering"))
+    sys.path.insert(0, str(CODE / "read_categories"))
     import read_state
     path = read_state.build("T", bams[0], bams[1], {"ENSTT0001": "ENSTT0001.1"},
                             tmp_path / "state.h5", log=lambda _m: None)

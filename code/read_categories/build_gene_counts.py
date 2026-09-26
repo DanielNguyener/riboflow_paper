@@ -103,7 +103,7 @@ MECHANISM_COLUMNS = (["gene", "gene_id", "transcript_id", "status", "n_union"]
 
 def load_partition_lib():
     """`alignment_fate.gene_read_partition_lib` -- the ten-category chain."""
-    return inputs.import_from(REPO / "code" / "alignment_fate", "gene_read_partition_lib",
+    return inputs.import_from(REPO / "code" / "read_categories", "gene_read_partition_lib",
                               extra=(REPO / "code" / "common",
                                      REPO / "code" / "common" / "ribo_seq_qc"))
 

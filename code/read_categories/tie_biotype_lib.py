@@ -13,7 +13,7 @@ import pandas as pd
 _HERE = Path(__file__).resolve().parent
 _COMMON = _HERE.parent / "common"
 for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc"),
-               str(_HERE.parent / "read_categories")):
+               str(_HERE)):
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
 import biotype_lib as bl
