@@ -56,21 +56,37 @@ Figures 2–3 use a stricter rule instead: MAPQ ≥ 42.
 Python 3.9, R ≥ 4 (base only), and the Arial font.
 
 ```bash
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements.txt
 ```
 
-## Rebuilding everything
+## Reproducing everything
+
+Two steps. Step 1 builds the analysis tables from the BAM files. Step 2 builds the
+figures from the tables.
+
+**Step 1: BAMs to tables.** Download the RiboFlow_v2 alignments (Zenodo link below) and
+run:
 
 ```bash
 python code/make_tables.py --bams DIR --gtf GTF --appris APPRIS --all --into-data
-python code/make_figures.py --all --check
-python code/make_panels.py --all --verify    # compares panels with figures/panel_references/
 ```
 
-Figures rebuild from the shipped tables alone, except Figure 2A/2B, which also needs
-`results/coverage/HeLa.shared_coverage.h5`
-(built by `code/coverage/build_shared_coverage.py`; format in
-[`docs/hdf5_schema.md`](docs/hdf5_schema.md)).
+This writes every analysis table to `data/` and the per-sample coverage files to
+`results/coverage/` (one HDF5 per sample; format in
+[`docs/hdf5_schema.md`](docs/hdf5_schema.md)). It takes hours. If you already have the
+coverage HDF5 files, or you only want the figures, skip this step: the repository ships
+every table the figures read, and only Figure 2A/2B needs an HDF5
+(`results/coverage/HeLa.shared_coverage.h5`).
+
+**Step 2: tables to figures.**
+
+```bash
+python code/make_figures.py --all --check
+```
+
+This draws every panel from `data/` and writes
+`figures/published/{Fig2,Fig3,Fig4,Fig5,Fig6,S1_Fig}.tif`. To compare the panels against
+the shipped references, run `python code/make_panels.py --all --verify`.
 
 ## External inputs
 

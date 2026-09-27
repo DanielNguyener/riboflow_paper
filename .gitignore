@@ -21,10 +21,9 @@ _staging*/
 _build/
 .cache/
 # regenerated output; only the coverage checksum manifest is versioned
-/results/*
+/results/
 !/results/coverage/
 /results/coverage/*
-!/results/coverage/coverage_checksums.tsv
 
 # figures: the panel references and the six published figures are versioned
 /figures/*
