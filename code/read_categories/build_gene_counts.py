@@ -66,19 +66,19 @@ import inputs  # noqa: E402
 
 log = inputs.make_log("clustering/counts")
 
-#: The seven route-7 segment keys, in the order `ROUTE7_SEGMENTS` declares them. Checked
-#: against the panel module at run time.
-#: The single gene-depth cutoff, in union reads. Every later step inherits it through
-#: the filtered table; nothing downstream re-filters.
+#: seven route 7 segment keys in the order ROUTE7_SEGMENTS declares them  checked
+#: against the panel module at run time
+#: single gene depth cutoff in union reads  every later step inherits it through
+#: the filtered table  nothing downstream refilters
 MIN_UNION = 100
 
 SEGMENT_KEYS = ("r7_shared_unique", "r7_shared_multi_pp", "r7_shared_multi_other",
                 "r7_gonly_unique_omit", "r7_gonly_unique_other", "r7_gonly_multi",
                 "r7_txonly")
 
-#: The five metrics, each the SUM of named route-7 segments. Named explicitly, never
-#: derived by subtraction: `fold_route5` asserts every segment is used exactly once and
-#: that the five sum to `n_union`, which is what gives a typo here something to fail on.
+#: five metrics each the SUM of named route 7 segments  named explicitly never
+#: derived by subtraction  fold_route5 asserts every segment used exactly once and
+#: the five sum to n_union  that is what gives a typo here something to fail on
 ROUTE5_FOLD = (
     ("n_shared_genome_unique", ("r7_shared_unique",)),
     ("n_shared_genome_multimapped", ("r7_shared_multi_pp", "r7_shared_multi_other")),
@@ -88,15 +88,15 @@ ROUTE5_FOLD = (
 )
 METRIC_COLUMNS = tuple(name for name, _segments in ROUTE5_FOLD)
 
-#: The shipped Figure 5A counts. Reproducible only from the post-dedup BAMs they were
-#: built from, so the comparison is reported, not enforced.
+#: shipped figure 5A counts  reproducible only from the post dedup BAMs they were
+#: built from so the comparison is reported not enforced
 EXPECT_TABLE = REPO / "data" / "read_categories" / "gene_partition_route7.tsv"
 CHECK_GENES = ("COMT", "GAPDH", "LRRFIP1")
 
 COLUMNS = ["gene", "gene_id", "transcript_id", "status", "n_union"] + list(METRIC_COLUMNS)
 
-#: The mechanism table: two route-7 segments under their own names, as subsets of the
-#: metrics they belong to (genome_only_unique and shared_genome_multimapped).
+#: mechanism table  two route 7 segments under their own names as subsets of the
+#: metrics they belong to  genome_only_unique and shared_genome_multimapped
 
 
 # ── the chain, imported by path ──────────────────────────────────────────────
@@ -129,8 +129,8 @@ def gene_universe(annotation, spans, log):
         if n_chrom == 0:
             dropped.append((gene_id, tid, "no exon in the annotation"))
         elif n_chrom != 1:
-            # PAR genes: the version-stripped id collapses the X and Y copies, so
-            # `gene_locus` raises. Excluded up front rather than mid-run.
+            # PAR genes  version stripped id collapses the X and Y copies so
+            # gene_locus raises  excluded up front rather than mid run
             dropped.append((gene_id, tid, "gene_locus spans %d chromosomes" % n_chrom))
         else:
             tids.append(tid)
@@ -166,8 +166,8 @@ def classify_gene(partition_lib, fold, libs, annotation, state, tid):
 
     counts = dict.fromkeys(SEGMENT_KEYS, 0)
     for read_id, category in labels.items():
-        # The seventh dimension: a genome multimapper is "shared" only if the read itself
-        # has a transcriptome primary. Same test the panel makes on the per-read dump.
+        # seventh dimension  a genome multimapper is shared only if the read itself
+        # has a transcriptome primary  same test the panel makes on the per read dump
         segment = fold._route7_segment(category, read_id in state.txome_present)
         counts[segment] += 1
     return int(len(labels)), counts
@@ -430,8 +430,8 @@ def main(argv=None):
     table[COLUMNS].to_csv(destination, sep="\t", index=False, lineterminator="\n")
     log("wrote %s (%d genes)" % (destination, len(table)))
 
-    # The clustering input: status ok and a union deep enough that the five proportions
-    # are estimates rather than coin flips (MIN_UNION reads resolve a component to 1 %).
+    # clustering input  status ok and a union deep enough that the five proportions
+    # are estimates not coin flips  MIN_UNION reads resolve a component to 1 %
     kept = table[(table["status"].astype(str) == "ok") & (table["n_union"] >= MIN_UNION)]
     if kept.empty:
         raise SystemExit("no gene survives the n_union >= %d filter" % MIN_UNION)

@@ -157,7 +157,7 @@ def load_exon_gene_pr(rebuild=False):
     return pr.PyRanges(df.reset_index(drop=True))
 
 
-# ── gene bodies with biotype (the tie tests' annotation side) ─────────────────
+# ── gene bodies with biotype  the tie tests annotation side ───────────────────
 
 def _rank_int(gt):
     if gt == "protein_coding":

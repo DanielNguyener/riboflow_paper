@@ -36,8 +36,8 @@ if str(HERE) not in sys.path:
 import categories  # noqa: E402
 from categories import MISSING_AS, qualifies  # noqa: E402
 
-#: The chain, in evaluation order; one read gets exactly one of these. The order nests by
-#: definedness — `classify_go_u` must only see transcriptome-ABSENT reads.
+#: the chain in evaluation order  one read gets exactly one of these  order nests by
+#: definedness  classify_go_u must only see transcriptome ABSENT reads
 PARTITION_CATEGORIES = (
     "txome_only_genome_absent",
     "txome_only_genome_elsewhere",
@@ -52,11 +52,11 @@ PARTITION_CATEGORIES = (
 )
 
 
-#: `reach_lib` category -> this chain's label, for a genome-only unique read that does NOT
-#: overlap the gene's omitted exonic sequence. `reach_lib` (Figure 4D) is not a gene-level
-#: test -- it calls a strand mismatch or an unrepresentable block "nonselected isoform
-#: exon" -- so here it only names the rest; its `nonselected_isoform_exon` falls to
-#: `genome_unique_absent_other`. The raw label survives in the `--dump-reads` table.
+#: reach_lib category -> this chain label  for a genome only unique read that does NOT
+#: overlap the gene omitted exonic sequence  reach_lib Figure 4D is not a gene level
+#: test  it calls a strand mismatch or an unrepresentable block nonselected isoform
+#: exon  so here it only names the rest  its nonselected_isoform_exon falls to
+#: genome_unique_absent_other  the raw label survives in the --dump-reads table
 REACH_TO_CATEGORY = {
     "splice_junction_absent": "genome_unique_absent_splice_junction",
     "representable_not_present_in_dedup_bam": "genome_unique_absent_representable",
@@ -209,11 +209,11 @@ def collect_genome_state(genome_bam, target_qnames):
                     "multimapping, so a BAM that cannot report NH cannot answer it."
                     % genome_bam)
             blocks = read.get_blocks()
-            # A missing AS is a sentinel far below any real score, never None and never 0:
-            # `tie_biotype_lib` compares scores for equality to find ties, so None crashes it
-            # and 0 would let an unscored alignment tie with a real one. Same convention as
-            # `tie_biotype_lib._MISSING_AS`. STAR always emits AS, so this is unreachable on
-            # the published cohort and cannot move its numbers.
+            # missing AS is a sentinel far below any real score  never None and never 0
+            # tie_biotype_lib compares scores for equality to find ties so None crashes it
+            # and 0 would let an unscored alignment tie with a real one  same convention as
+            # tie_biotype_lib._MISSING_AS  STAR always emits AS so this is unreachable on
+            # the published cohort and cannot move its numbers
             score = int(read.get_tag("AS")) if read.has_tag("AS") else MISSING_AS
             if not read.is_secondary:
                 present.add(qname)
@@ -349,13 +349,13 @@ def classify_union(libs, annotation, tid, locus, genome_side, txome_side,
     labels = pd.Series(index=sorted(union), dtype=object)
     tie_detail, reach_label, alt_exon = {}, {}, {}
 
-    # 1-2. Transcriptome route here, no top-score genome placement HERE: absent vs elsewhere.
+    # steps 1 and 2  txome route here no top score genome placement HERE  absent vs elsewhere
     for qname in txome_side - genome_side:
         labels[qname] = ("txome_only_genome_elsewhere" if qname in genome_present
                          else "txome_only_genome_absent")
 
     at_gene = sorted(genome_side)
-    # A qualifying placement needs a primary (a secondary ties only against the primary's AS).
+    # qualifying placement needs a primary  a secondary ties only against the primary AS
     orphan = [q for q in at_gene if q not in genome_present]
     if orphan:
         raise PartitionError(
@@ -364,8 +364,8 @@ def classify_union(libs, annotation, tid, locus, genome_side, txome_side,
     uniq = [q for q in at_gene if q in genome_unique]
     multi = [q for q in at_gene if q not in genome_unique]
 
-    # 3-4. Genome multimappers with a top-score placement here: the tie is tested at THIS
-    # gene, over every top-score placement, whichever of them is primary.
+    # steps 3 and 4  genome multimappers with a top score placement here  tie is tested
+    # at THIS gene over every top score placement whichever of them is primary
     if multi:
         ties = gene_pseudogene_tie(tie_biotype_lib, annotation,
                                    annotation["table"][tid]["gene_id"],
@@ -376,13 +376,13 @@ def classify_union(libs, annotation, tid, locus, genome_side, txome_side,
             labels[qname] = ("genome_multi_top_at_gene_pseudogene_tie" if tie
                              else "genome_multi_top_at_gene_no_pseudogene_tie")
 
-    # 5. Genome-unique and present on the transcriptome route (on this transcript or any).
+    # step 5  genome unique and present on the transcriptome route  this transcript or any
     for qname in uniq:
         if qname in txome_present:
             labels[qname] = "genome_unique_txome_present"
 
-    # 6-10. Genome-unique, absent from every transcriptome primary. The alternative exon is
-    # the gene-level overlap test; `reach_lib` only names the rest.
+    # steps 6 to 10  genome unique absent from every transcriptome primary  alternative
+    # exon is the gene level overlap test  reach_lib only names the rest
     absent = [q for q in uniq if q not in txome_present]
     if absent:
         alt_exon = alt_exon_overlap(annotation, tid, primary, absent)
@@ -534,7 +534,7 @@ def compute_partition(sample, genome_bam, txome_bam, gene_ids=(), transcript_ids
         if unknown:
             raise PartitionError("undeclared category/ies: %s" % sorted(unknown))
 
-        # Every category is emitted, zero included.
+        # every category is emitted zero included
         for category in PARTITION_CATEGORIES:
             n_reads = int(counts.get(category, 0))
             tidy_rows.append({
@@ -602,11 +602,11 @@ def _display(table, tids, coverage):
     return names, genes
 
 
-# ── the ten-to-seven fold (Figure 5A's segments) ──────────────────────────────
+# ── the ten to seven fold  Figure 5A segments ──────────────────────────────
 
-#: The route-explicit seven-segment fold, folded from the PER-READ dump -- the tidy table
-#: never records a genome multimapper's transcriptome status. "Shared" is read-level
-#: presence in both BAMs, not "assigned to this gene by both routes".
+#: route explicit seven segment fold  folded from the PER READ dump  the tidy table
+#: never records a genome multimapper transcriptome status  shared is read level
+#: presence in both BAMs not assigned to this gene by both routes
 ROUTE7_SEGMENTS = (
     ("r7_shared_unique", "Genome-unique", categories.COLOR["sh_u"], "black", None),
     ("r7_shared_multi_pp", "Genome-multi, pseudogene tie", categories.COLOR["sh_m"], "white", "//"),
@@ -618,10 +618,10 @@ ROUTE7_SEGMENTS = (
 )
 
 
-#: Raw chain category -> genome-status half of the seven-way fold; the transcriptome half
-#: comes from the dump's per-read `txome_primary_transcript`.
-#: A genome-multimapped read at a gene has a top-score placement there (its primary or a
-#: score-tied secondary); any other multi category is unknown and raises.
+#: raw chain category -> genome status half of the seven way fold  transcriptome half
+#: comes from the dump per read txome_primary_transcript
+#: genome multimapped read at a gene has a top score placement there  its primary or a
+#: score tied secondary  any other multi category is unknown and raises
 _R7_MULTI = ("genome_multi_top_at_gene_pseudogene_tie",
              "genome_multi_top_at_gene_no_pseudogene_tie")
 _R7_MULTI_PP = _R7_MULTI[:1]

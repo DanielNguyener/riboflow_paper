@@ -65,7 +65,7 @@ def draw(prepared, axes_size=None, margins=None, type_scale="large", legend_ncol
     ps.apply_rcparams()
     sizes = common.grid_type(type_scale)
     samples, lengths = prepared["samples"], prepared["lengths"]
-    # Shared with figS1B (`_qc_grid_common.MARGINS`); right gutter left blank here.
+    # shared with figS1B via _qc_grid_common.MARGINS  right gutter left blank here
     width, height = axes_size or common.AXES_SIZE
     left, bottom, right, top = margins or common.MARGINS
     fig_w, fig_h = left + width + right, bottom + height + top
@@ -84,7 +84,7 @@ def draw(prepared, axes_size=None, margins=None, type_scale="large", legend_ncol
                           color="white" if prepared["status"][i, j] else "black",
                           linespacing=0.9)
     common.style_grid(axis, samples, lengths, prepared["gsm"], sizes)
-    # Only the statuses that occur in the grid; the caption names the full scheme.
+    # only the statuses that occur in the grid  the caption names the full scheme
     present = set(np.unique(prepared["status"]))
     entries = [(AGREE_C, STATUS_LABELS[0], 1), (DIFFER_C, STATUS_LABELS[1], 2),
                (GENOME_C, STATUS_LABELS[2], 3), (TXOME_C, STATUS_LABELS[3], 4),
@@ -92,7 +92,7 @@ def draw(prepared, axes_size=None, margins=None, type_scale="large", legend_ncol
     entries = [(c, label) for c, label, code in entries if code in present and code != 0]
     handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c, _ in entries]
     labels = [label for _, label in entries]
-    # Two columns: ncol=3 overruns the 7 in axes. Anchor is MEASURED, not an axes fraction.
+    # two columns  ncol=3 overruns the 7 in axes  anchor is MEASURED not an axes fraction
     legend = ps.legend_below(axis, handles, labels, ncol=legend_ncol,
                              fontsize=sizes["tick"], frameon=False, handlelength=1.2,
                              handletextpad=0.5)

@@ -58,7 +58,7 @@ def select_read_lengths(cds_length_counts,
 
     return list(range(lo, hi + 1)), lo, hi, captured
 
-# Both histogram builders use raw 5' ends: selection runs BEFORE offset estimation.
+# both histogram builders use raw 5' ends  selection runs BEFORE offset estimation
 
 _CDS_HEADER_RE = re.compile(r"\|CDS:(\d+)-(\d+)\|")
 
@@ -242,7 +242,7 @@ def plot_preshift(pre_counts, phase1_lengths, phase2, up, down, plots_dir, sampl
     figure, axes = _panels(len(phase1_lengths))
     for axis, length in zip(axes, phase1_lengths):
         raw = np.array([pre_counts[length].get(p, 0) for p in positions])
-        # per-panel max-normalised: otherwise the CDS body dwarfs the upstream P-site peak.
+        # per panel max normalised  otherwise CDS body dwarfs the upstream P-site peak
         ys = raw / (raw.max() if raw.max() > 0 else 1)
         axis.axvspan(-up, 0, color="lightgrey", alpha=0.35, zorder=0)
         axis.axvline(0, color="black", linewidth=1.0, linestyle="--", zorder=2)

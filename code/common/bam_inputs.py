@@ -23,7 +23,7 @@ RNA_GENOME_BAM_TEMPLATE = "{s}/rnaseq/genome/alignment_ribo/merged/{s}.rnaseq.po
 RNA_TXOME_BAM_TEMPLATE = ("{s}/rnaseq/transcriptome/alignment_ribo/merged/"
                           "{s}.rnaseq.transcriptome.post_dedup.bam")
 
-#: Transcriptome BAMs carry no NH tag; Bowtie2 MAPQ 42 = confident unique (~94 % of reads).
+#: transcriptome BAMs carry no NH tag  Bowtie2 MAPQ 42 = confident unique  ~94 % of reads
 DEFAULT_TXOME_MIN_MAPQ = 42
 
 
@@ -55,8 +55,8 @@ def txome_min_mapq() -> int:
     return DEFAULT_TXOME_MIN_MAPQ
 
 # ── the one uniqueness policy ────────────────────────────────────────────────
-# Genome uniqueness is `NH == 1` from the tag, never inferred from MAPQ; a missing NH is
-# an input error, not a fallback.
+# genome uniqueness is NH == 1 from the tag  never inferred from MAPQ  missing NH is
+# an input error not a fallback
 
 def is_unique_genome_read(read) -> bool:
     """A primary, uniquely-mapping genome alignment: `NH == 1`.

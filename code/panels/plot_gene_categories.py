@@ -24,10 +24,10 @@ from panel_style import die  # noqa: E402
 
 GENE_ORDER = ("COMT", "GAPDH", "LRRFIP1")
 
-#: The two-section key for the hatched design: colour = route/uniqueness, hatch = mechanism.
+#: two section key for the hatched design  colour = route and uniqueness  hatch = mechanism
 ROUTE7_KEY = (
     tuple((abbr, colour, None) for abbr, colour in categories.KEY),
-    # Mechanism entries name the biology alone; wording matches Figure 4C's panel title.
+    # mechanism entries name the biology alone  wording matches figure 4C panel title
     (("Protein-coding–pseudogene ties", "#ffffff", "//"),
      ("Alternative exon", "#ffffff", "..")),
 )
@@ -58,8 +58,8 @@ def draw(prepared, title=None, figsize=None, label_threshold=6.0, xlabel=None,
             axis.barh(yi, width, left=left, color=colour, edgecolor="white",
                       linewidth=0.6, height=bar_height or BAR_HEIGHT)
             if hatch and width > 0:
-                # Hatch colour rides the artist's EDGE colour, so draw a second fill-less
-                # bar; linewidth=0 keeps the overlay from doubling the boundary.
+                # hatch colour rides the artist EDGE colour  so draw a second fill less
+                # bar  linewidth=0 keeps the overlay from doubling the boundary
                 axis.barh(yi, width, left=left, fill=False, hatch=hatch,
                           edgecolor="white", linewidth=0.0,
                           height=bar_height or BAR_HEIGHT)
@@ -71,7 +71,7 @@ def draw(prepared, title=None, figsize=None, label_threshold=6.0, xlabel=None,
             left += width
 
     axis.set_yticks(list(y))
-    # `compact` uses one-line labels and drops the read count (belongs in the caption).
+    # compact uses one line labels and drops the read count  belongs in the caption
     axis.set_yticklabels(
         [e["gene_name"] if compact
          else "%s\n%s reads" % (e["gene_name"], format(e["n_union"], ","))
@@ -89,7 +89,7 @@ def draw(prepared, title=None, figsize=None, label_threshold=6.0, xlabel=None,
                    fontweight="normal", pad=2.0)
 
     figure.tight_layout()
-    # One band: the five fates, then the two mechanism hatches.
+    # one band  the five fates then the two mechanism hatches
     handles = [Patch(facecolor=colour, edgecolor="#666666" if hatch else "white",
                      hatch=hatch, linewidth=0.6 if hatch else 0.4, label=label)
                for members in ROUTE7_KEY for label, colour, hatch in members]
@@ -128,7 +128,7 @@ def load_compact(table, meta_path, genes=None):
         if sum(entry["counts"].values()) != entry["n_union"]:
             die("%s: counts sum to %d, union %d"
                       % (gene, sum(entry["counts"].values()), entry["n_union"]))
-        # Percentages recomputed from counts, not trusted from the text column.
+        # percentages recomputed from counts  not trusted from the text column
         entry["pct"] = {k: 100.0 * entry["counts"][k] / entry["n_union"] for k in keys}
         if abs(sum(entry["pct"].values()) - 100.0) > 1e-9:
             die("%s: percentages sum to %.9f" % (gene, sum(entry["pct"].values())))
@@ -178,7 +178,7 @@ def main(argv=None):
         figsize=tuple(args.figsize) if args.figsize else None,
         xlabel=args.xlabel, compact=args.compact, title_size=args.title_size,
         bar_height=args.bar_height)
-    # A full-width panel has room for a tick every 10 %.
+    # full width panel has room for a tick every 10 %
     axis.set_xticks(range(0, 101, 10))
     ps.save(figure, args.output, ps.resolve_formats(args.formats), force=args.force,
             extra_artists=extra)

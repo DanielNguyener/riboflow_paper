@@ -13,7 +13,7 @@ import pysam
 import bam_inputs as fc
 
 _CDS_RE = re.compile(r"\|CDS:(\d+)-(\d+)\|")
-#: ±nt around an internal exon boundary counted as junction-proximal.
+#: ±nt around an internal exon boundary counted as junction proximal
 JUNC_WIN = 3
 
 def txome_ref_transcripts(bam_path) -> set:

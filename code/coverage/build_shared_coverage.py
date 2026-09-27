@@ -12,14 +12,14 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
-import bam_inputs                      # the one uniqueness policy
+import bam_inputs                      # the one uniqueness policy lives here
 from inputs import make_log, sha256_of
 
 _CDS_HEADER = re.compile(r"\|CDS:(\d+)-(\d+)\|")
 REFERENCE_NAME = "appris_human_v2_selected"
 
-#: The junction-window spans the annotation cache is keyed on. Schema 3 stores no junction
-#: bins, so these only fingerprint the cache; they do not change any stored number.
+#: junction window spans that key the annotation cache  schema 3 stores no junction
+#: bins so these only fingerprint the cache  no stored number changes
 LEFT_SPAN, RIGHT_SPAN = 35, 10
 
 
@@ -253,7 +253,7 @@ def project_genome_footprints(blocks, exon_pr, cds_pr, tx_index_of_id, coverage_
     ex_tx_start = rows["ex_tx_start"].to_numpy()
     ex_g_start = rows["ex_g_start"].to_numpy()
     ex_g_end = rows["ex_g_end"].to_numpy()
-    # on '-' the transcript runs the other way, so the overlap's 5' end is its genomic END
+    # on "-" transcript runs the other way  overlap 5' end is its genomic END
     tx_start = np.where(plus, ex_tx_start + (ostart - ex_g_start),
                         ex_tx_start + (ex_g_end - oend))
     base = coverage_offset[rows["tx_index"].to_numpy()]
@@ -550,9 +550,9 @@ def build(config):
         ls = _library_scan()
         cat_state = ls.new_state()
 
-    # The transcriptome BAM goes FIRST: the categories' genome collector tests membership
-    # in the transcriptome presence set, which must be complete by then. The h5 WRITE
-    # order below is unchanged.
+    # transcriptome BAM goes FIRST  categories genome collector tests membership in the
+    # transcriptome presence set  set must be complete by then  h5 WRITE order below
+    # is unchanged
     try:
         log("transcriptome: streaming the BAM once")
         tx_psites, txome_fp_starts, txome_fp_ends = read_txome_signals(
@@ -587,7 +587,7 @@ def build(config):
             writer.write_signal("txome_psite", values)
             del values
 
-            # already read, in the same pass as the genome P-sites
+            # already read  same pass as the genome P sites
             blocks = genome_blocks
             del genome_blocks
             log("  %d reads, %d aligned blocks; projecting" % (blocks[5], len(blocks[0])))
@@ -600,7 +600,7 @@ def build(config):
             writer.write_signal("genome_footprint", values)
             del values
 
-            # already read, in the same pass as the transcriptome P-sites
+            # already read  same pass as the transcriptome P sites
             starts, ends = txome_fp_starts, txome_fp_ends
             del txome_fp_starts, txome_fp_ends
             report["steps"]["txome_footprint"] = {"n_intervals": int(starts.size)}
@@ -638,8 +638,8 @@ def build(config):
             % (counts_path, n_assigned, counts_tally.n_assigned))
 
     if do_cats:
-        # The row builders load the annotation through the RIBOFLOW_PAPER_* environment,
-        # as the standalone scan always did; fill it in for standalone runs.
+        # row builders load annotation through the RIBOFLOW_PAPER_* environment  same as
+        # the standalone scan always did  fill it in for standalone runs
         import os
         os.environ.setdefault("RIBOFLOW_PAPER_GTF", str(config.gtf))
         os.environ.setdefault("RIBOFLOW_PAPER_APPRIS", str(config.appris))

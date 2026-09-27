@@ -24,9 +24,9 @@ PC = "protein_coding"
 PP = "processed_pseudogene"
 from categories import MISSING_AS as _MISSING_AS  # noqa: E402
 
-#: Columns `classify_loci_frame` consumes. `qname` is an opaque key: the per-gene callers pass
-#: read-id strings, but a bulk caller may pass integer read indices instead so that millions of
-#: read-id strings never need to be materialised.
+#: columns classify_loci_frame consumes  qname is an opaque key  per gene callers pass
+#: read id strings  a bulk caller may pass integer read indices instead so millions of
+#: read id strings never need to be materialised
 LOCUS_FRAME_COLUMNS = ("locus_idx", "qname", "Chromosome", "Start", "AS", "is_secondary")
 
 def _loci_frame(records_by_qname):

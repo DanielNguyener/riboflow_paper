@@ -52,14 +52,14 @@ TABLES = {
 CATS = ["cross_pc_pp", "cross_pp_pc", "same_pc_pc", "same_pp_pp"]
 
 
-# ── the one scan: fed record by record from the shared ribo pass ──────────────
+# ── the one scan  fed record by record from the shared ribo pass ──────────────
 #
-# The transcriptome loop collects the presence set; it must be COMPLETE before the genome
-# loop starts (the genome collector tests membership). The genome loop then collects, in
-# one traversal: the primary and unique read-id sets (taxonomy), every genome locus of
-# the multimapping presence-set reads (the tie test), and the primary blocks of the
-# unique reads outside the presence set (the reach test). Secondaries are needed: the
-# caller must not filter them out before calling the genome collector.
+# transcriptome loop collects presence set  must be COMPLETE before genome loop starts
+# genome collector tests membership  genome loop then collects in one traversal
+# primary and unique read id sets for taxonomy  every genome locus of multimapping
+# presence set reads for tie test  primary blocks of unique reads outside presence set
+# for reach test  secondaries needed  caller must not filter them out before calling
+# genome collector
 
 def new_state():
     return {"t_all": set(), "g_all": set(), "g_uniq": set(),
@@ -113,7 +113,7 @@ def finish_state(state):
     return state
 
 
-# ── taxonomy: one row of the five categories per library (4A, 4B) ─────────────
+# ── taxonomy  one row of the five categories per library  4A 4B ───────────────
 
 def build_row(sample, counts, n_universe):
     row = {"sample": sample, "n_universe": n_universe}
@@ -161,7 +161,7 @@ def taxonomy_row(sample, state, log=print):
     return row, counts
 
 
-# ── tie_biotype: protein-coding-pseudogene ties per library (4C) ──────────────
+# ── tie_biotype  protein coding pseudogene ties per library  4C ───────────────
 
 def tie_row(sample, state, tax_counts, log=print):
     recs = state["tie_records"]
@@ -186,7 +186,7 @@ def tie_row(sample, state, tax_counts, log=print):
     return row
 
 
-# ── reach: omitted alternative-exon overlap per library (4D) ──────────────────
+# ── reach  omitted alternative exon overlap per library  4D ───────────────────
 
 def reach_row(sample, state, tax_counts, log=print):
     n_sh_u = tax_counts[("unique", "present")]
@@ -226,8 +226,8 @@ def reach_row(sample, state, tax_counts, log=print):
     assert check_sum == n_genome_unique, f"partition does not sum to N_G ({check_sum} != {n_genome_unique})"
     for cat in rl.REACH_CATEGORIES:
         row[f"pct_{cat}"] = 100.0 * row[f"n_{cat}"] / n_go_u if n_go_u else float("nan")
-    # Figure 4D: NOT a partition slice. The gene-level alternative-exon test of Figure 5A
-    # applied to the whole GO-U population; each read ID counts at most once.
+    # figure 4D NOT a partition slice  gene level alternative exon test of figure 5A
+    # applied to whole GO-U population  each read ID counts at most once
     row["n_omitted_exon_overlap"] = len(overlap_qnames)
     row["pct_omitted_exon_overlap"] = (
         100.0 * len(overlap_qnames) / n_go_u if n_go_u else float("nan"))
@@ -242,7 +242,7 @@ def _all_gene_body_pr():
     return pr.PyRanges(df.reset_index(drop=True))
 
 
-# ── the per-library worker ─────────────────────────────────────────────────────
+# ── the per library worker ─────────────────────────────────────────────────────
 
 def _stage(analysis, sample, row):
     staging = TABLES[analysis]["staging"]

@@ -20,11 +20,11 @@ import te_panel_style as ps  # noqa: E402
 
 PANELS = ("combined", "A", "B", "C")
 
-#: White at exactly zero, then viridis; the white stop needs the vmin solve below.
+#: white at exactly zero then viridis  white stop needs the vmin solve below
 WHITE_VIRIDIS = [(0.0, "#ffffff"), (1e-20, "#440053"), (0.2, "#404388"), (0.4, "#2a788e"),
                  (0.6, "#21a784"), (0.8, "#78d151"), (1.0, "#fde624")]
 BAND, MEAN = "#b9c9d8", "#2c5f8a"
-#: INK is text (black, print-safe); ZERO is a reference rule and stays grey.
+#: INK is text  black print safe  ZERO is a reference rule and stays grey
 IDENTITY, ZERO, INK, HILITE = "#1a1a19", "#9b9b97", "#000000", "#e34948"
 
 LINTHRESH = 0.02
@@ -32,9 +32,9 @@ TICKS = (-4, -2, -1, -0.5, -0.2, -0.05, 0, 0.05, 0.2, 0.5, 1)
 PADJ, LFC, STATIC = 0.05, 1.0, 0.5
 EXAMPLES = ("GAPDH", "COMT", "LRRFIP1")
 
-#: Panel A matches fig02D_pooled_concordance's 2.082 x 3.669 in axes-box proportions.
+#: panel A matches fig02D_pooled_concordance 2.082 x 3.669 in axes box proportions
 A_RATIO = 2.082 / 3.669
-#: ...but never narrower than this: two 10-pt tick labels need ~2 in between centres.
+#: but never narrower than this  two 10 pt tick labels need ~2 in between centres
 A_MIN_WIDTH = 2.1
 
 
@@ -68,13 +68,13 @@ class Geometry:
     """
 
     left, right, top = 0.72, 0.10, 0.32
-    #: Under row 1: B's x label, then C's letter.
+    #: under row 1  B x label then C letter
     row_gap, bottom = 0.95, 0.62
     gap = 0.85
     cbar_pad, cbar_w, cbar_label = 0.10, 0.16, 0.55
 
     def __init__(self, width=ps.PAGE_WIDTH_MAX, height=ps.PAGE_HEIGHT_MAX):
-        # PLOS measures the file including the 2-pt TIFF border, so draw the page LESS it.
+        # PLOS measures file including the 2 pt TIFF border  so draw the page LESS it
         border = 2 * ps.BORDER_PT / 72.0
         by_width = (width - border - self.left - self.gap - self.right) / (1.0 + A_RATIO)
         by_height = (height - border - self.top - self.row_gap - self.bottom) / 2.0
@@ -88,7 +88,7 @@ class Geometry:
     def page_height(self):
         return self.top + 2 * self.height + self.row_gap + self.bottom
 
-    #: The colorbar rides with panel C, so C's page carries it and the others do not.
+    #: colorbar rides with panel C  so C page carries it and the others do not
     def colorbar_width(self):
         return self.cbar_pad + self.cbar_w + self.cbar_label
 
@@ -170,7 +170,7 @@ def draw_b(ax, genes):
                     zorder=3, rasterized=True, label="95% CI")
     ax.plot(rank, mean[order], color=MEAN, linewidth=ps.lw(1.4), zorder=4,
             label="mean over cell lines")
-    # symlog crossover sits BELOW the IQR so the tail lives in the logarithmic part.
+    # symlog crossover sits BELOW the IQR so tail lives in the logarithmic part
     ax.set_yscale("symlog", linthresh=LINTHRESH, linscale=0.4)
     ax.set_yticks(list(TICKS))
     ax.set_yticklabels(["%g" % t for t in TICKS])
@@ -225,7 +225,7 @@ def draw_c(figure, ax, cax, genes, housekeeping=()):
     ax.set_ylabel("mean $\\Delta$Ribo (log$_2$)", fontsize=ps.FONT_LABEL)
     ax.grid(alpha=0.13, zorder=0)
     dress(ax, "C")
-    # Framed key inside the plane, upper left (empty corner); highlighted entry first.
+    # framed key inside the plane upper left empty corner  highlighted entry first
     handles, labels = ax.get_legend_handles_labels()
     order = sorted(range(len(handles)), key=lambda i: 0 if "p_{adj}" in labels[i] else 1)
     leg = ax.legend([handles[i] for i in order], [labels[i] for i in order],
@@ -234,7 +234,7 @@ def draw_c(figure, ax, cax, genes, housekeeping=()):
     for text in leg.get_texts():
         text.set_color(INK)
 
-    # Labels chosen by ROLE, not rank; ranking alone would show none of the atlas genes.
+    # labels chosen by ROLE not rank  ranking alone would show none of the atlas genes
     hk = housekeeping_ids(housekeeping)
     base = np.array([i.split(".")[0] for i in genes.transcript_id])
     is_hk = np.isin(base, list(hk)) if hk else np.zeros(len(base), bool)
@@ -256,7 +256,7 @@ def draw_c(figure, ax, cax, genes, housekeeping=()):
     names = genes.gene_name.to_numpy()
     colour_of = {k: IDENTITY for k in picked}
     for gene in EXAMPLES:
-        hits = np.where(names == gene)[0]          # exact match: the catalog holds GAPDHS too
+        hits = np.where(names == gene)[0]          # exact match  catalog holds GAPDHS too
         if len(hits) and int(hits[0]) not in colour_of:
             colour_of[int(hits[0])] = HILITE
             picked.append(int(hits[0]))
@@ -290,7 +290,7 @@ def draw_c(figure, ax, cax, genes, housekeeping=()):
                   (1, 1, "left", "bottom"), (1, -1, "left", "top"),
                   (-1, 1, "right", "bottom"), (-1, -1, "right", "top"),
                   (0, 1, "center", "bottom"), (0, -1, "center", "top")]
-    # A point on the delta-Ribo ~ 0 band is offered vertical positions first.
+    # point on the delta ribo ~ 0 band is offered vertical positions first
     VERTICAL = [(0, -1, "center", "top"), (0, 1, "center", "bottom"),
                 (1, -1, "left", "top"), (1, 1, "left", "bottom"),
                 (-1, -1, "right", "top"), (-1, 1, "right", "bottom"),
@@ -324,7 +324,7 @@ def draw_c(figure, ax, cax, genes, housekeeping=()):
             dropped.append(name)
 
     bar = figure.colorbar(dots, cax=cax)
-    # Not "transcripts per dot": one dot IS one transcript; the bar counts its neighbours.
+    # not transcripts per dot  one dot IS one transcript  bar counts its neighbours
     bar.set_label("local transcript density", fontsize=ps.FONT_ANNOTATION, color=INK)
     bar.ax.tick_params(labelsize=ps.FONT_TICK, length=0, labelcolor=INK)
     bar.outline.set_visible(False)

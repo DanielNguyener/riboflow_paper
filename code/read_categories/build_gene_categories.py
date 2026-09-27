@@ -37,8 +37,8 @@ import inputs as paths  # noqa: E402
 
 DEFAULT_OUTPUT = os.path.join(paths.REPO, "results", "read_categories", "gene_partition_route7")
 
-#: The validated counts (gene-partition segment semantics audit). Refusing to write anything else
-#: is the point: a short bar is the one failure a stacked figure cannot show you.
+#: validated counts from the gene partition segment semantics audit  refusing to write
+#: anything else is the point  a short bar is the one failure a stacked figure cannot show
 EXPECTED_COUNTS = {
     "COMT":    {"r7_shared_unique": 1084, "r7_shared_multi_pp": 0,
                 "r7_shared_multi_other": 34, "r7_gonly_unique_omit": 88,
@@ -62,7 +62,7 @@ def fold(reads_path, sample, genes):
     import gene_read_partition_lib as root
 
     prepared = root.prepare_route_explicit(reads_path, sample=sample, genes=genes)
-    # Re-check the partition invariants from the raw frame, independently of the root module.
+    # recheck partition invariants from the raw frame  independent of the root module
     frame = pd.read_csv(reads_path, sep="\t")
     frame = frame[frame["sample"].astype(str) == str(sample)]
     for entry in prepared["entries"]:

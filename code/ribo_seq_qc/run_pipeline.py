@@ -18,7 +18,7 @@ import config
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_WORKERS = 10
 
-SAMPLE_SCRIPT = "sample_qc.py"   # one program, one BAM traversal, both staging CSVs
+SAMPLE_SCRIPT = "sample_qc.py"   # one program  one BAM traversal  both staging CSVs
 
 DEFAULT_BAM_GLOB = {
     "genome": "*.bam",

@@ -15,14 +15,14 @@ import bam_inputs as fc
 
 GENOME_STATES = ("unique", "multi", "absent")
 TXOME_STATES = ("present", "absent")
-#: The five cells of the read-ID taxonomy: genome status x transcriptome presence, minus
-#: the empty (absent, absent) cell. Transcriptome presence is a primary alignment in the
-#: post-dedup BAM; RiboFlow_v2 already filtered that BAM at MAPQ >= 10, so no further
-#: threshold is applied here (the MAPQ >= 42 rule belongs to the coverage/TE analyses).
+#: five cells of the read ID taxonomy  genome status x transcriptome presence minus
+#: the empty absent absent cell  transcriptome presence is a primary alignment in the
+#: post dedup BAM  RiboFlow_v2 already filtered that BAM at MAPQ >= 10 so no further
+#: threshold here  the MAPQ >= 42 rule belongs to the coverage and TE analyses
 CELLS = tuple((g, t) for g in GENOME_STATES for t in TXOME_STATES
               if not (g == "absent" and t == "absent"))
 
-#: One taxonomy cell -> its manuscript category key (categories.KEYS, the one definition).
+#: one taxonomy cell -> its manuscript category key  categories.KEYS is the one definition
 CELL_KEY = {("unique", "present"): "sh_u", ("multi", "present"): "sh_m",
             ("unique", "absent"): "go_u", ("multi", "absent"): "go_m",
             ("absent", "present"): "to"}

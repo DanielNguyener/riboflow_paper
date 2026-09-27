@@ -20,8 +20,8 @@ from common import inputs  # noqa: E402
 COUNTER = HERE / "count_transcript_reads.py"
 MANIFEST = REPO / "config" / "cohort_manifest.tsv"
 
-#: count_transcript_reads.py column per (assay, route) pair, each normalized independently:
-#: ribo/RNA are never pooled, and neither are the two routes.
+#: count_transcript_reads.py column per assay route pair  each normalized independently
+#: ribo and RNA never pooled  neither are the two routes
 MATRICES = {
     ("ribo", "genome"): "genome_ribo_reads",
     ("ribo", "txome"): "txome_ribo_reads",
@@ -29,7 +29,7 @@ MATRICES = {
     ("rna", "txome"): "txome_rna_reads",
 }
 
-#: The shipped matrices, used by --check.
+#: shipped matrices  used by --check
 REFERENCE_COUNTS = REPO / "data" / "ribo_rna" / "counts"
 
 class BuildError(RuntimeError):
@@ -87,7 +87,7 @@ def run_sample(row, args):
                "--gtf", str(args.gtf), "--appris", str(args.appris),
                "--qc-genome", str(args.qc_genome), "--qc-txome", str(args.qc_txome),
                "--counts-output", str(target),
-               # route table is an unread by-product here; scratch it.
+               # route table is an unread by product here  scratch it
                "--route-output", str(Path(args.output) / "_route_scratch" / ("%s.tsv" % sample)),
                "--annotation-cache", str(Path(args.output) / ".cache" / "annotation.pkl")]
     for flag, path in resolve_bams(row, args.bams).items():
@@ -100,7 +100,7 @@ def run_sample(row, args):
         command += ["--regions", str(args.regions)]
 
     environment = dict(os.environ)
-    # imported modules resolve indirect BAM paths through this variable.
+    # imported modules resolve indirect BAM paths through this variable
     environment["RIBOFLOW_PAPER_BAMS"] = str(Path(args.bams).resolve())
     environment.setdefault("MPLBACKEND", "Agg")
 

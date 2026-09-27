@@ -8,19 +8,19 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
-#: PLOS permits Arial, Times or Symbol only.
+#: PLOS permits Arial Times or Symbol only
 FONT_FAMILY = "Arial"
 
-#: The print scale, all within PLOS's 8-12 point window.
+#: the print scale  all within the PLOS 8-12 point window
 FONT_LABEL = 11
 FONT_TICK = 10
 FONT_ANNOTATION = 10
 FONT_PANEL_LETTER = 12
 
-#: PLOS never wants a stroke that vanishes at print; every line width is clamped here.
+#: PLOS never wants a stroke that vanishes at print  every line width is clamped here
 MIN_LINEWIDTH = 0.5
 
-#: Page limits in inches, and the pixel limits they become at SAVE_DPI.
+#: page limits in inches and the pixel limits they become at SAVE_DPI
 PAGE_WIDTH_MAX = 7.5
 PAGE_HEIGHT_MAX = 8.75
 SAVE_DPI = 300
@@ -33,7 +33,7 @@ PEARSON_FILL, PEARSON_LINE = "#e3ab74", "#b3651a"
 
 LEGEND_PAD_PT = 6.0
 
-#: A framed key, shared by B and C, so a sample marker is not read as data.
+#: framed key shared by B and C  so a sample marker is not read as data
 KEY_FRAME = dict(frameon=True, fancybox=False, framealpha=1.0, facecolor="white",
                  edgecolor="#000000", borderpad=0.6, handletextpad=0.5, borderaxespad=0.5)
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env Rscript
-# CPM gate + assay-shared median-of-ratios normalization.
-# Reads the four count matrices, writes the scaled matrices + size factors. Base R only.
-# Mathematics: docs/methods_te_route.md.
+# CPM gate + assay shared median of ratios normalization
+# reads the four count matrices  writes the scaled matrices + size factors  base R only
+# math lives in docs/methods_te_route.md
 #
 #   Rscript code/te_route/normalization.R [--counts DIR] [--output DIR]
 
-# Arguments: --key value pairs; every default is repository-relative.
-# parse_args lives in code/common/cli_args.R.
+# arguments are --key value pairs  every default is repository relative
+# parse_args lives in code/common/cli_args.R
 here <- dirname(normalizePath(sub("^--file=", "",
                                   grep("^--file=", commandArgs(FALSE), value = TRUE))[1]))
 root <- dirname(dirname(here))
@@ -40,8 +40,8 @@ index <- rownames(raw[[1]])
 for (nm in names(raw)) {
   if (!identical(rownames(raw[[nm]]), index)) stop(nm, " has a different transcript index")
 }
-# Columns are intersected BY NAME; pairing positionally would divide one library's ribo by
-# another's rna the first time a matrix is rewritten.
+# columns intersected BY NAME  positional pairing would divide one library's ribo by
+# another's rna the first time a matrix is rewritten
 samples <- Reduce(intersect, lapply(raw, colnames))
 raw <- lapply(raw, function(m) m[, samples, drop = FALSE])
 
@@ -49,8 +49,8 @@ cat(sprintf("input: %s transcripts x %d cell lines\n",
             format(length(index), big.mark = ","), length(samples)))
 
 # ── CPM gate ───────────────────────────────────────────────────────────────────────────────
-# CPM against each matrix's OWN column sum; a line supports a transcript only when all four
-# matrices clear the threshold in that same line.
+# CPM against each matrix's OWN column sum  a line supports a transcript only when all
+# four matrices clear the threshold in that same line
 
 supported <- matrix(TRUE, nrow = length(index), ncol = length(samples))
 for (nm in names(raw)) {
@@ -69,9 +69,9 @@ if (length(gated) != N_GATED) {
 raw <- lapply(raw, function(m) m[gated, , drop = FALSE])
 
 # ── size factors ───────────────────────────────────────────────────────────────────────────
-# One factor per (assay, library), shared by both routes, estimated from the geometric mean
-# of the two routes. Restricted to rows non-zero everywhere, because a geometric-mean
-# reference is undefined the moment any entry is zero.
+# one factor per assay library pair  shared by both routes  estimated from geometric mean
+# of the two routes  restricted to rows nonzero everywhere because a geometric mean
+# reference is undefined the moment any entry is zero
 
 zero_free <- Reduce(`&`, lapply(raw, function(m) apply(m > 0, 1L, all)))
 cat(sprintf("estimation set (non-zero in all four matrices and all lines): %s\n",
@@ -82,7 +82,7 @@ if (sum(zero_free) != N_ESTIMATION) {
 
 median_of_ratios <- function(counts) {
   log_counts <- log2(counts)
-  log_ref <- rowMeans(log_counts)                       # per-feature geometric mean
+  log_ref <- rowMeans(log_counts)                       # per feature geometric mean
   2 ^ apply(log_counts - log_ref, 2L, stats::median)    # median ratio to that reference
 }
 

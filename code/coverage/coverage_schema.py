@@ -28,7 +28,7 @@ ROUTES = ("genome", "transcriptome")
 ASSAYS = ("ribo", "rna")
 
 COORDINATE_SYSTEM = "transcript_5p_to_3p"
-#: cds_start == cds_end == NO_CDS marks a transcript without a CDS.
+#: cds_start == cds_end == NO_CDS marks a transcript without a CDS
 NO_CDS = -1
 
 COVERAGE_DTYPE = np.int32
@@ -450,7 +450,7 @@ class CoverageFile:
             "created_utc": _text(self.handle.attrs["created_utc"]),
         }
 
-    # ── per-transcript tables, as arrays ──────────────────────────────────────
+    # ── per transcript tables as arrays ───────────────────────────────────────
     @property
     def transcript_ids(self):
         return list(self._ids)

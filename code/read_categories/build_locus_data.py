@@ -53,12 +53,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "coverage"))
 import psite_placement  # noqa: E402
 from intervals import merge, subtract  # noqa: E402
 
-#: The shipped QC tables: the one input that legitimately defaults into the repository.
+#: shipped qc tables  only input allowed to default into repo
 QC_GENOME_DEFAULT = "data/ribo_seq_qc/genome/tables/readlen_window_qc.csv"
 QC_TXOME_DEFAULT = "data/ribo_seq_qc/transcriptome/tables/readlen_window_qc.csv"
 
-#: Transcriptome-route uniqueness (bowtie2 emits no NH tag): the project-wide rule.
-#: Fixed width, in plotted units, of the dashed intron connector; recorded in the artifact.
+#: txome route uniqueness  bowtie2 emits no NH tag  project wide rule
+#: fixed width in plotted units of dashed intron connector  recorded in artifact
 INTRON_GAP = 90.0
 
 
@@ -159,9 +159,9 @@ def locus_ribo_reads(bam_path, chrom, start, end, lengths, offsets):
     "alignments": [(blocks, psite or None), ...]}}. The P-site is cigar_aware per
     placement; the caller collapses a read's placements to at most one count.
     """
-    primary_here = {}                                  # qname -> (score, blocks, psite)
+    primary_here = {}                                  # qname to score blocks psite
     status = {}
-    secondaries = collections.defaultdict(list)        # qname -> [(score, qlen, blocks, psite)]
+    secondaries = collections.defaultdict(list)        # qname to list of score qlen blocks psite
     bam = pysam.AlignmentFile(bam_path, "rb")
     try:
         if not bam.has_index():
@@ -306,9 +306,9 @@ def depth_over(hits, positions):
     return np.array([depth.get(int(p), 0) for p in positions], dtype=float)
 
 
-#: The Figure 5A populations each track is split into, in stacking order (nearest the
-#: baseline first). Keys match `panels/plot_gene_categories.ROUTE7_KEY` wording:
-#: SH-U, SH-M, GO-U, GO-M on the genome track; SH-U, SH-M, TO on the transcriptome track.
+#: figure 5A populations each track splits into  stacking order  nearest baseline first
+#: keys match panels/plot_gene_categories.ROUTE7_KEY wording
+#: SH-U SH-M GO-U GO-M on genome track  SH-U SH-M TO on transcriptome track
 GENOME_LAYERS = ("shared_unique", "shared_multi", "genome_only", "genome_only_multi")
 TXOME_LAYERS = ("shared_unique", "shared_multi", "txome_only")
 
@@ -413,7 +413,7 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal):
     print("[locus] genome-only uniquely mapping: %d of %d unique"
           % (len(genome_only), len(genome_unique)))
 
-    # Alternative isoform: most genome-only unique reads on non-selected sequence.
+    # alternative isoform  most genome only unique reads on non selected sequence
     scores = {}
     for tid, exons in transcripts.items():
         if tid == sel_tid:
@@ -423,7 +423,7 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal):
             continue
         n = 0
         for qname in genome_only:
-            blocks, _psite = members[qname]["alignments"][0]   # NH==1: the primary
+            blocks, _psite = members[qname]["alignments"][0]   # NH==1 so the primary
             if any(b_s < e_e and e_s < b_e
                    for b_s, b_e in blocks for e_s, e_e in extra):
                 n += 1
@@ -442,16 +442,16 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal):
     print("[locus] %s adds %d nt of exonic sequence absent from %s"
           % (alt_tid, sum(e - s for s, e in absent_blocks), sel_tid))
 
-    # Per-base vectors exactly as the panel draws them: union exonic bases, 5'->3' order.
+    # per base vectors exactly as panel draws them  union exonic bases in 5' to 3' order
     union = merge(list(sel_exons) + list(alt_exons))
     gs = exonic_bases(union, strand)
     txome_cov = depth_over(txome_hits, gs)
 
-    # The tracks split into the Figure 5A populations. Genome track: unique vs multi is the
-    # primary NH, shared vs genome-only is transcriptome presence; multimapper positions
-    # come only from top-score placements at the locus, one count per read, disagreeing
-    # placements omitted (member_positions). Transcriptome track: the NH of each read with
-    # a top-score genome placement at the locus, from the status fetch.
+    # tracks split into figure 5A populations  genome track unique vs multi is primary NH
+    # shared vs genome only is transcriptome presence  multimapper positions come only
+    # from top score placements at locus  one count per read  disagreeing placements
+    # omitted see member_positions  transcriptome track uses NH of each read with a top
+    # score genome placement at locus  from the status fetch
     genome_members = {"shared_unique": genome_unique - genome_only,
                       "shared_multi": genome_multi & present,
                       "genome_only": genome_only,
@@ -473,7 +473,7 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal):
     if not np.array_equal(sum(txome_layers.values()), txome_cov):
         die("the transcriptome layers do not sum to the transcriptome track")
     if signal == "psite":
-        # No read is counted twice within a track: one P-site count per placed read.
+        # no read counted twice within a track  one P-site count per placed read
         if float(genome_cov.sum()) > sum(genome_placed.values()):
             die("the genome track carries more P-site counts than placed reads")
         if float(txome_cov.sum()) != float(sum(len(v) for v in txome_hits.values())):
@@ -624,7 +624,7 @@ def main(argv=None):
     meta["builder"] = "code/read_categories/build_locus_data.py"
 
     os.makedirs(os.path.dirname(stem), exist_ok=True)
-    np.savez(stem + ".npz", **arrays)          # uncompressed: deterministic bytes
+    np.savez(stem + ".npz", **arrays)          # uncompressed for deterministic bytes
     with open(stem + ".json", "w") as handle:
         handle.write(json.dumps(meta, indent=2, sort_keys=True) + "\n")
     print("[locus] wrote %s.npz / .json" % stem)

@@ -9,10 +9,10 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-#: Colour-scale limit, in percentage points; +/-2 fits the measured span without clipping.
-#: Display only -- `prepare()` never sees it.
+#: colour scale limit in percentage points  +/-2 fits the measured span without clipping
+#: display only  prepare() never sees it
 VLIM = 2.0
-#: Fraction of VLIM past which in-cell text flips to white; relative so it tracks VLIM.
+#: fraction of VLIM past which in cell text flips to white  relative so it tracks VLIM
 WHITE_TEXT_FRACTION = 0.75
 
 def prepare(frame_genome, frame_txome, samples_csv):
@@ -46,7 +46,7 @@ def draw(prepared, axes_size=None, margins=None, type_scale="large", show_ylabel
     colormap.set_bad("#eeeeee")
     norm = plt.Normalize(vmin=-VLIM, vmax=VLIM)
 
-    # Shared with figS1A (`_qc_grid_common.MARGINS`); right margin = colourbar gutter.
+    # shared with figS1A via _qc_grid_common.MARGINS  right margin = colourbar gutter
     width, height = axes_size or common.AXES_SIZE
     left, bottom, right, top = margins or common.MARGINS
     fig_w, fig_h = left + width + right, bottom + height + top
@@ -67,10 +67,10 @@ def draw(prepared, axes_size=None, margins=None, type_scale="large", show_ylabel
     cax = figure.add_axes([(left + width + 0.15) / fig_w, (bottom + height * 0.15) / fig_h,
                            0.15 / fig_w, height * 0.70 / fig_h])
     bar = figure.colorbar(mappable, cax=cax, extend="both")
-    # matplotlib rasterises the colorbar's solids by default -- force vector.
+    # matplotlib rasterises the colorbar solids by default  force vector
     if bar.solids is not None:
         bar.solids.set_rasterized(False)
-    # Short on purpose; the sign convention is the caption's job.
+    # short on purpose  the sign convention is the caption job
     bar.set_label("Δ CDS periodicity (%)", fontsize=sizes["label"])
     bar.ax.tick_params(labelsize=sizes["tick"])
     return figure, axis

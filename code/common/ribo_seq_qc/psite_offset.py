@@ -45,7 +45,7 @@ def get_offset_periodicity(counts_by_pos, defOffset=12, flank=6, default=12,
     if not upstream or max(upstream.values()) == 0:
         return default
 
-    # downstream 5'-end residue histogram (P-sites land in CDS body for these)
+    # downstream 5' end residue histogram  P sites land in CDS body for these
     mass = [0, 0, 0]
     for p, c in counts_by_pos.items():
         if 0 <= p < WIN:

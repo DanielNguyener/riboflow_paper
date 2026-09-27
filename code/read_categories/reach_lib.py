@@ -17,8 +17,8 @@ import bam_inputs as fc
 
 OUTDIR = fc.output_root() / "read_categories"
 
-#: How a genome-unique read that is ABSENT from the transcriptome BAM relates to the
-#: selected transcript of its gene.
+#: how a genome unique read ABSENT from the transcriptome BAM relates to the
+#: selected transcript of its gene
 REACH_CATEGORIES = [
     "representable_not_present_in_dedup_bam",
     "splice_junction_absent",
@@ -41,12 +41,12 @@ def omitted_pc_genes(exon_gene_df, selected_genes):
     all_pc = set(pc["gene_id"].unique())
     return all_pc - selected_genes
 
-# ── direct overlap with omitted exonic sequence (Figure 4D) ─────────────────
-# The gene-level test of Figure 5A (`read_categories/gene_read_partition_lib.
-# alt_exon_overlap`) applied cohort-wide: a GO-U read counts once per library when an
-# aligned block of its primary genomic alignment overlaps exonic sequence of ANY gene
-# that is absent from that gene's selected transcript. Strand-agnostic, indifferent to
-# junctions and to whether the rest of the alignment fits the selected transcript.
+# ── direct overlap with omitted exonic sequence  figure 4D ──────────────────
+# gene level test of figure 5A  read_categories/gene_read_partition_lib.alt_exon_overlap
+# applied cohort wide  a GO-U read counts once per library when an aligned block of its
+# primary genomic alignment overlaps exonic sequence of ANY gene that is absent from
+# that gene selected transcript  strand agnostic  indifferent to junctions and to
+# whether the rest of the alignment fits the selected transcript
 
 from intervals import merge as _merge, subtract as _subtract  # noqa: E402
 
@@ -96,8 +96,8 @@ def omitted_exon_overlap_qnames(qnames, genome_blocks, omitted_by_chrom):
             continue
         starts, ends = entry
         for b_start, b_end in blocks:
-            # merged disjoint intervals sorted by start: the only candidate for a
-            # `start < b_end` overlap is the last interval starting before b_end.
+            # merged disjoint intervals sorted by start  only candidate for a
+            # start < b_end overlap is the last interval starting before b_end
             j = bisect.bisect_left(starts, b_end)
             if j > 0 and ends[j - 1] > b_start:
                 hits.add(q)

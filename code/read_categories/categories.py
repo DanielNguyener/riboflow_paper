@@ -23,24 +23,24 @@ contains only the selected transcripts; they are still different rules, kept sep
 """
 from __future__ import annotations
 
-#: Canonical keys, in the manuscript's order.
+#: canonical keys in the manuscript order
 KEYS = ("sh_u", "sh_m", "go_u", "go_m", "to")
 
-#: The abbreviations the figures print.
+#: abbreviations the figures print
 ABBR = {"sh_u": "SH-U", "sh_m": "SH-M", "go_u": "GO-U", "go_m": "GO-M", "to": "TO"}
 
-#: The captions' long names.
+#: long names for the captions
 LONG = {"sh_u": "shared genome-unique",
         "sh_m": "shared genome-multimapped",
         "go_u": "genome-only unique",
         "go_m": "genome-only multimapped",
         "to": "transcriptome-only"}
 
-#: One colour per category, shared by every panel that draws them.
+#: one colour per category  every panel that draws them shares these
 COLOR = {"sh_u": "#a6d96a", "sh_m": "#1a7d1a",
          "go_u": "#7fb9da", "go_m": "#0d57a1", "to": "#cc3d3d"}
 
-#: (abbreviation, colour) in order -- the key most panels draw.
+#: abbreviation and colour pairs in order  the key most panels draw
 KEY = tuple((ABBR[k], COLOR[k]) for k in KEYS)
 
 
@@ -54,8 +54,8 @@ def pct_col(key):
     return "pct_%s" % key
 
 
-#: Sentinel for an alignment with no AS tag: far below any real score, so an unscored
-#: alignment can never tie with a scored one.
+#: sentinel for an alignment with no AS tag  far below any real score so an unscored
+#: alignment can never tie with a scored one
 MISSING_AS = -(10 ** 9)
 
 

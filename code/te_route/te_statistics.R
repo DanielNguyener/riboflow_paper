@@ -1,12 +1,12 @@
 #!/usr/bin/env Rscript
-# Per-transcript delta TE (and its two assay halves) and per-cell-line route agreement.
-# Reads the scaled matrices and the ORF catalog, writes the two statistics tables. Base R only.
-# Mathematics: docs/methods_te_route.md.
+# per transcript delta TE and its two assay halves and per cell line route agreement
+# reads scaled matrices and ORF catalog  writes the two statistics tables  base R only
+# mathematics in docs/methods_te_route.md
 #
 #   Rscript code/te_route/te_statistics.R [--normalized DIR] [--orf-catalog FILE] [--output DIR]
 
-# Arguments: --key value pairs; every default is repository-relative.
-# parse_args lives in code/common/cli_args.R.
+# arguments are --key value pairs  every default is repository relative
+# parse_args lives in code/common/cli_args.R
 here <- dirname(normalizePath(sub("^--file=", "",
                                   grep("^--file=", commandArgs(FALSE), value = TRUE))[1]))
 root <- dirname(dirname(here))
@@ -34,8 +34,8 @@ tab <- list(genome_ribo = read_scaled("ribo_scaled_genome.csv"),
 ids <- rownames(tab[[1]])
 samples <- colnames(tab[[1]])
 
-# All four must be strictly positive. A zero is a missing measurement; a pseudocount would
-# invent a finite delta out of one, so the cell is dropped and the transcript's n falls.
+# all four must be strictly positive  zero is a missing measurement  pseudocount would
+# invent a finite delta out of one  so cell is dropped and transcript n falls
 usable <- (tab$genome_ribo > 0) & (tab$genome_rna > 0) &
           (tab$txome_ribo > 0) & (tab$txome_rna > 0)
 
@@ -51,7 +51,7 @@ cat(sprintf("%s transcripts x %d cell lines; n per transcript %d-%d (median %g)\
             format(length(ids), big.mark = ","), length(samples),
             min(n_lines), max(n_lines), stats::median(n_lines)))
 
-# ── per transcript: mean, SD, 95% t interval ───────────────────────────────────────────────
+# ── per transcript  mean SD 95% t interval ─────────────────────────────────────────────────
 
 summarise <- function(d) {
   present <- !is.na(d)
@@ -69,7 +69,7 @@ s_rna  <- summarise(d_rna)
 s_ribo <- summarise(d_ribo)
 s_te   <- summarise(d_te)
 
-# Benjamini-Hochberg across every transcript with a defined p.
+# benjamini hochberg across every transcript with a defined p
 padj <- stats::p.adjust(s_te$p, method = "BH")
 
 catalog <- utils::read.delim(opts[["orf-catalog"]],
@@ -94,8 +94,8 @@ utils::write.table(per_gene, file.path(out, "per_gene_delta.tsv"), sep = "\t",
                    quote = FALSE, row.names = FALSE, na = "NA")
 options(op)
 
-# ── per cell line: do the two routes agree on TE itself ────────────────────────────────────
-# Correlated on log2 TE over that line's usable transcripts.
+# ── per cell line  do the two routes agree on TE itself ────────────────────────────────────
+# correlated on log2 TE over that line usable transcripts
 
 rows <- lapply(samples, function(s) {
   k <- usable[, s]

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-#: Arial per journal requirements; fallbacks are metric-compatible so a machine without
-#: Arial renders at the same widths (matplotlib's DejaVu default is wider and shifts layout).
+#: Arial per journal requirements  fallbacks are metric compatible so a machine without
+#: Arial renders at the same widths  matplotlib DejaVu default is wider and shifts layout
 FONT_FAMILY = "Arial"
 FONT_FALLBACKS = ("Helvetica", "Liberation Sans", "Arimo", "TeX Gyre Heros", "Nimbus Sans",
                   "DejaVu Sans")
@@ -13,10 +13,10 @@ FONT_TITLE = 11
 FONT_LABEL = 11
 FONT_TICK = 9
 FONT_ANNOTATION = 9
-#: tick size on purpose -- an inset is a legend, not a second axis.
+#: tick size on purpose  an inset is a legend not a second axis
 FONT_INSET = 8
 
-#: The single ENLARGED type scale, for panels reproduced large (the S1 Fig heatmaps).
+#: the single ENLARGED type scale  for panels reproduced large like the S1 fig heatmaps
 FONT_LABEL_LARGE = 14
 FONT_TICK_LARGE = 12
 FONT_ANNOTATION_LARGE = 11
@@ -30,8 +30,8 @@ PEARSON_LINE = "#b3651a"
 MISSING_HATCH = "#bbbbbb"
 
 DEFAULT_FORMATS = ("pdf",)
-#: Applied to EVERY format: in a PDF it sets the resolution of rasterised artists
-#: (the scatter clouds are rasterised on purpose); vector content is unaffected.
+#: applied to EVERY format  in a PDF it sets the resolution of rasterised artists
+#: scatter clouds are rasterised on purpose  vector content is unaffected
 SAVE_DPI = 300
 PNG_DPI = SAVE_DPI
 
@@ -54,7 +54,7 @@ def apply_rcparams():
         "ytick.labelsize": FONT_TICK,
         "pdf.fonttype": 42,
         "svg.fonttype": "none",
-        # Mathtext ignores font.sans-serif -- point mathtext.* at the same family.
+        # mathtext ignores font.sans-serif  point mathtext.* at the same family
         "mathtext.fontset": "custom",
         "mathtext.rm": FONT_FAMILY,
         "mathtext.it": "%s:italic" % FONT_FAMILY,

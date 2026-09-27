@@ -10,11 +10,11 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 
-#: Grid size and margins in inches, SHARED by both Figure-2 panels so cells and pages match
-#: 1:1 at assembly. Each panel leaves the other's gutter BLANK, so both must save with
-#: `tight=False` or the crop takes the blank margins back off.
+#: grid size and margins in inches  SHARED by both figure 2 panels so cells and pages
+#: match 1 to 1 at assembly  each panel leaves the other gutter BLANK so both must save
+#: with tight=False or the crop takes the blank margins back off
 AXES_SIZE = (7.0, 7.8)
-MARGINS = (1.25, 1.75, 1.25, 0.15)          # left, bottom, right, top
+MARGINS = (1.25, 1.75, 1.25, 0.15)          # left bottom right top
 
 def _as_bool(series):
     return series.astype(str).str.lower().isin(("true", "1"))
@@ -76,8 +76,8 @@ def cell_centre(index):
     """pcolormesh cells span [i, i+1), so the centre -- for ticks and text -- is i + 0.5."""
     return np.asarray(index) + 0.5
 
-#: Type for the two grids at their two ship scales: "large" = standalone panel,
-#: "base" = journal page (PLOS 8-12 pt window).
+#: type for the two grids at their two ship scales  "large" = standalone panel
+#: "base" = journal page inside the PLOS 8-12 pt window
 def grid_type(scale="large"):
     sys.path.insert(0, str(HERE))
     import panel_style as ps

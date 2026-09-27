@@ -27,7 +27,7 @@ SIGNAL_SETS = {
         "per_sample": "region_concordance_per_sample.tsv",
         "per_transcript": "region_concordance_per_transcript.tsv",
         "with_frame": True,
-        "totals_trimmed": False,      # the P-site count is over the UNtrimmed CDS
+        "totals_trimmed": False,      # P site count is over the UNtrimmed CDS
     },
     "footprint": {
         "signals": ("genome_footprint", "txome_footprint"),
@@ -81,15 +81,15 @@ def load_sample(coverage_path, kind):
     gene_names = np.array(wrapper.gene_names)
     cds_start = wrapper.cds_start.copy()
     cds_end = wrapper.cds_end.copy()
-    # A transcript without a CDS reads as an empty window at 0, as before schema 3.
+    # transcript without a CDS reads as empty window at 0  same as before schema 3
     no_cds = cds_start == coverage_schema.NO_CDS
     cds_start[no_cds] = 0
     cds_end[no_cds] = 0
 
     genome = wrapper.signal(spec["signals"][0])
     txome = wrapper.signal(spec["signals"][1])
-    # The CDS coverage key: P-sites key a transcript on any read in the UNtrimmed CDS;
-    # footprints only on a non-zero trimmed interior. Derived here, never stored.
+    # the CDS coverage key  P sites key a transcript on any read in the UNtrimmed CDS
+    # footprints only on nonzero trimmed interior  derived here never stored
     key_trim = trim if spec["totals_trimmed"] else 0
     key_genome = coverage_schema.window_sums(
         genome, offsets, cds_start + key_trim, cds_end - key_trim) > 0
@@ -159,7 +159,7 @@ def pooled_row(data, kind):
                 total += int(covered_codons.sum())
         row["frame_agree"] = (agree / total) if total else np.nan
 
-    # the diagnostic in-CDS totals: untrimmed for P-sites, trimmed interior for footprints
+    # diagnostic in CDS totals  untrimmed for P sites  trimmed interior for footprints
     if spec["totals_trimmed"]:
         lo, hi = data["lo"], data["hi"]
     else:

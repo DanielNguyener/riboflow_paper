@@ -18,8 +18,8 @@ REPO = Path(__file__).resolve().parents[2]
 
 FIT_TOL_PT = 0.4
 FIT_MAX_ITER = 6
-#: A hit within this is accepted after the loop: ink is measured at 144 dpi, so widths
-#: quantise to 0.5 pt and an exact landing is not always reachable.
+#: hit within this is accepted after the loop  ink is measured at 144 dpi so widths
+#: quantise to 0.5 pt and an exact landing is not always reachable
 FIT_SETTLE_PT = 1.0
 
 

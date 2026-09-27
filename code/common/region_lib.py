@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# bam_inputs sits beside this file and provides `config` plus the BAM accessors
+# bam_inputs sits beside this file  provides config plus the BAM accessors
 _HERE = Path(__file__).resolve().parent
 for _entry in (str(_HERE), str(_HERE / "ribo_seq_qc")):
     if _entry not in sys.path:
@@ -19,7 +19,7 @@ import bam_inputs as fc
 DEFAULT_LEFT_SPAN = 35
 DEFAULT_RIGHT_SPAN = 10
 
-# ── region classifier (vectorised port of get_extended_boundaries) ──────────────
+# ── region classifier  vectorised port of get_extended_boundaries ───────────────
 def classify(x, start_site, stop_site, left_span, right_span):
     """Vectorised region code (0=UTR5 1=UTR5J 2=CDS 3=UTR3J 4=UTR3) for 5′-ends `x`.
 

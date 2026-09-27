@@ -45,18 +45,18 @@ import panel_style as ps  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "read_categories"))
 import categories  # noqa: E402
 
-#: The five fates in table order; index 0 is the concordant one (cluster 1 by construction).
+#: five fates in table order  index 0 is the concordant one  cluster 1 by construction
 COMPONENTS = ("shared_genome_unique", "shared_genome_multimapped", "genome_only_unique",
               "genome_only_multimapped", "transcriptome_only")
-#: Abbreviations and colours in COMPONENTS order, from the one category key.
+#: abbreviations and colours in COMPONENTS order  from the one category key
 SHORT = tuple(categories.ABBR[k] for k in categories.KEYS)
 COLOURS = tuple(categories.COLOR[k] for k in categories.KEYS)
 EDGE = "#333333"
 ABOVE_CUT = "#8c8c8c"
 CUT = "#4d4d4d"
 HEAT_CMAP = "Blues"
-FIGSIZE = (6.9, 8.9)   # tight bbox lands inside PLOS's 7.5 x 8.75 in page
-#: Genes pointed out under the heatmap: the three Figure 5A genes.
+FIGSIZE = (6.9, 8.9)   # tight bbox lands inside PLOS 7.5 x 8.75 in page
+#: genes pointed out under heatmap  the three Figure 5A genes
 LABEL_GENES = ("COMT", "GAPDH", "LRRFIP1")
 
 
@@ -139,7 +139,7 @@ def box(axis, groups, x, colours):
                       medianprops=dict(color="black", linewidth=1.3))
     for patch, median, colour in zip(bp["boxes"], bp["medians"], colours):
         patch.set(facecolor=colour, edgecolor=EDGE, linewidth=0.8)
-        if is_dark(colour):     # a black median vanishes on the dark fills
+        if is_dark(colour):     # black median vanishes on dark fills
             median.set_color("white")
 
 
@@ -215,11 +215,11 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
     x = np.arange(1, k + 1)
     labels = clusters["cluster"].to_numpy()
     colours = cluster_colours(centroids)            # indexed by cluster - 1
-    # Any height strictly between the merge that leaves k clusters and the one that leaves
-    # k - 1 cuts the tree into the k clusters of the table.
+    # any height strictly between merge that leaves k clusters and merge that leaves
+    # k - 1 cuts the tree into the k clusters of the table
     cut_h = float(Z[n - k - 1:n - k + 1, 2].mean())
 
-    # Each link's colour: the cluster of the leaves under it when below the cut.
+    # each link colour is cluster of the leaves under it when below the cut
     link_cluster = np.zeros(2 * n - 1, dtype=int)
     link_cluster[:n] = labels
     for i, (a, b, h, _) in enumerate(Z):
@@ -232,8 +232,8 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
     extra = [name for name in ("pseudogene_counts", "omitted_sequence", "reference_duplication")
              if name in validation]
     fig = plt.figure(figsize=figsize)
-    # an empty spacer row holds the fate legend between the composition and validation rows
-    # (hspace is a fraction of the mean row height, so the spacer row needs a larger one)
+    # empty spacer row holds fate legend between composition and validation rows
+    # hspace is fraction of mean row height so spacer row needs a larger one
     outer = fig.add_gridspec(4 if extra else 2, 1,
                              height_ratios=(4.0, 2.2, 0.25, 2.0) if extra else (4.0, 2.2),
                              hspace=0.44 if extra else 0.30)
@@ -242,7 +242,7 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
     ax_strip = fig.add_subplot(grid[1], sharex=ax_tree)
     ax_heat = fig.add_subplot(grid[2], sharex=ax_tree)
 
-    # scipy's dendrogram recurses once per level, so the limit must scale with the leaves
+    # scipy dendrogram recurses once per level so limit must scale with the leaves
     sys.setrecursionlimit(max(sys.getrecursionlimit(), 4 * n + 1000))
     dend = hierarchy.dendrogram(Z, ax=ax_tree, no_labels=True, link_color_func=link_colour,
                                 color_threshold=cut_h)
@@ -257,8 +257,8 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
     for side in ("top", "right"):
         ax_tree.spines[side].set_visible(False)
     sizes = centroids.set_index("cluster")["n"]
-    # cluster sizes as a boxed two-column table under the total (columns align, unlike
-    # spaces in a proportional font)
+    # cluster sizes as boxed two column table under the total  columns align unlike
+    # spaces in a proportional font
     from matplotlib.offsetbox import AnchoredOffsetbox, HPacker, TextArea, VPacker
     props = dict(fontsize=ps.FONT_ANNOTATION)
     cell = lambda c: TextArea("%d: n = %s" % (c, format(int(sizes[c]), ",")), textprops=props)  # noqa: E731
@@ -274,8 +274,8 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
     sizes_box.set_zorder(5)
     ax_tree.add_artist(sizes_box)
 
-    # Leaves sit at x = 5, 15, 25, ... in dendrogram units; the strip and heatmap share
-    # that axis so one gene is one column of both.
+    # leaves sit at x = 5 15 25 in dendrogram units  strip and heatmap share
+    # that axis so one gene is one column of both
     x_edges = np.arange(n + 1) * 10.0
     leaf_labels = labels[leaves]
     ax_strip.pcolormesh(x_edges, [0, 1], leaf_labels[np.newaxis, :] - 1,
@@ -286,12 +286,12 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
     ax_strip.set_ylabel("cluster", rotation=0, ha="right", va="center", fontsize=ps.FONT_TICK)
     boundaries = np.flatnonzero(np.diff(leaf_labels)) + 1
     for start, stop in zip(np.r_[0, boundaries], np.r_[boundaries, n]):
-        if stop - start >= n * 0.03:     # a run of leaves wide enough to hold its number
+        if stop - start >= n * 0.03:     # run of leaves wide enough to hold its number
             ax_strip.text((start + stop) * 5.0, 0.5, str(leaf_labels[start]), ha="center",
                           va="center", fontsize=ps.FONT_INSET, color="white")
 
-    # 5 x n: one row per fate, genes in leaf order; rasterized, since 12,000 columns cannot
-    # be vector cells.
+    # 5 x n  one row per fate  genes in leaf order  rasterized since 12000 columns
+    # cannot be vector cells
     mesh = ax_heat.pcolormesh(x_edges, np.arange(len(COMPONENTS) + 1), X[leaves].T,
                               cmap=HEAT_CMAP, vmin=0, vmax=1, rasterized=True)
     ax_heat.set_ylim(len(COMPONENTS), 0)
@@ -299,21 +299,21 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
     ax_heat.set_yticklabels(SHORT, fontsize=ps.FONT_TICK)
     ax_heat.set_xlim(0, n * 10.0)
     ax_heat.tick_params(axis="x", bottom=False, labelbottom=False)
-    # each cluster's run of columns boxed (the cut is contiguous in leaf order)
+    # each cluster run of columns boxed  cut is contiguous in leaf order
     from matplotlib.patches import Rectangle
     for start, stop in zip(np.r_[0, boundaries], np.r_[boundaries, n]):
         ax_heat.add_patch(Rectangle((start * 10.0, 0), (stop - start) * 10.0, len(COMPONENTS),
                                     fill=False, edgecolor="black", linewidth=0.7, zorder=5,
                                     clip_on=False))
-    # the Figure 5A genes, pointed out at their column
+    # the Figure 5A genes pointed out at their column
     position = {gene: i for i, gene in enumerate(clusters["gene"])}
     column = np.empty(n, dtype=int)
     column[leaves] = np.arange(n)
-    # Labels whose columns sit closer than their text is wide are spread apart, left to
-    # right; each leader still ends at its gene's column.
+    # labels whose columns sit closer than their text is wide get spread apart left to
+    # right  each leader still ends at its gene column
     heat_box = ax_heat.get_position()
     data_per_pt = n * 10.0 / (heat_box.width * fig.get_figwidth() * 72.0)
-    drop = -11.0 / (heat_box.height * fig.get_figheight() * 72.0)       # 11 pt, in axes fraction
+    drop = -11.0 / (heat_box.height * fig.get_figheight() * 72.0)       # 11 pt in axes fraction
     placed = []
     for gene in sorted((g for g in LABEL_GENES if g in position),
                        key=lambda g: column[position[g]]):
@@ -330,13 +330,13 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
                          fontsize=ps.FONT_INSET, annotation_clip=False,
                          arrowprops=dict(arrowstyle="-", color=EDGE, linewidth=0.7,
                                          shrinkA=0, shrinkB=1))
-    # The colour bar lives in an inset outside the heatmap: `fig.colorbar(ax=ax_heat)` would
-    # shrink ax_heat alone, and its columns would no longer sit under the tree's leaves.
+    # colour bar lives in inset outside heatmap  fig.colorbar(ax=ax_heat) would shrink
+    # ax_heat alone and its columns would drift from under the tree leaves
     bar = fig.colorbar(mesh, cax=ax_heat.inset_axes([1.012, 0.0, 0.018, 1.0]))
     bar.set_label("fraction of union", fontsize=ps.FONT_TICK)
     bar.ax.tick_params(labelsize=ps.FONT_TICK)
 
-    # composition: one axis per fate, x = cluster, y = % of the gene's union; then the
+    # composition  one axis per fate  x = cluster  y = % of gene union  then
     # centroids as stacked bars
     bottom_row = outer[1].subgridspec(1, 2, width_ratios=(len(COMPONENTS), 1.3), wspace=0.28)
     inner = bottom_row[0].subgridspec(1, len(COMPONENTS), wspace=0.2)
@@ -377,14 +377,14 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
     ax_bar.set_ylabel("centroid composition (%)", fontsize=ps.FONT_TICK)
     ax_bar.set_title("centroids", fontsize=ps.FONT_INSET, pad=3)
 
-    # The fate colours, once, under the whole composition row; anchored to the middle
-    # composition axis so it centres on the figure.
+    # fate colours once under the whole composition row  anchored to middle
+    # composition axis so it centres on the figure
     handles = [Patch(facecolor=c, edgecolor=EDGE, label=s) for s, c in zip(SHORT, COLOURS)]
     legend = ps.legend_below(axes[len(axes) // 2], handles=handles, ncol=len(handles),
                              fontsize=ps.FONT_INSET, handlelength=1.0, columnspacing=1.2,
                              x=1.15, pad_pt=ps.LEGEND_PAD_PT + 4)
 
-    # (axis, x pad, y pad) in points; E-G sit higher, clear of the panel F medians
+    # axis then x pad then y pad in points  E to G sit higher clear of panel F medians
     lettered = [(ax_tree, 70, 4), (ax_heat, 70, 4), (axes[0], 42, 4), (ax_bar, 14, 4)]
     if extra:
         drawers = {"pseudogene_counts": draw_pseudogene_bars,
@@ -395,11 +395,11 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
             axis = fig.add_subplot(slot)
             drawers[name](axis, validation[name], colours)
             lettered.append((axis, 42, 14))
-    # bold letters just outside each panel's top-left corner, clear of its y label
+    # bold letters just outside each panel top left corner clear of its y label
     for (axis, pad, lift), letter in zip(lettered, "ABCDEFG"):
         axis.annotate(letter, xy=(0, 1), xycoords="axes fraction", xytext=(-pad, lift),
                       textcoords="offset points", ha="left", va="bottom",
-                      fontsize=ps.FONT_TITLE + 1, fontweight="bold")   # 12 pt: PLOS's maximum
+                      fontsize=ps.FONT_TITLE + 1, fontweight="bold")   # 12 pt  PLOS maximum
     return fig, legend
 
 

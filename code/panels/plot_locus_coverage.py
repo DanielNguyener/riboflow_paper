@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 import categories  # noqa: E402
 from panel_style import die  # noqa: E402
 
-#: Type scale, module constants so one caller can rebind them (PLOS allows 8-12 pt).
+#: type scale  module constants so one caller can rebind them  PLOS allows 8 to 12 pt
 FONT_TITLE = 11.0
 FONT_LABEL = 9.0
 FONT_XLABEL = 10.0
@@ -28,20 +28,20 @@ FONT_MARK = 9.0
 FONT_TICK = 10.0
 FONT_MODEL = 7.5
 
-#: The coverage is stacked by the Figure 5A read populations and painted in 5A's key
-#: colours (`plot_gene_categories.ROUTE7_KEY`), so one colour means one population in
-#: both panels. Route identity is carried by the mirrored layout and the boxed marks, not
-#: by colour. Stacking order: baseline first (the values are the npz array suffixes).
+#: coverage is stacked by the Figure 5A read populations and painted in 5A key
+#: colours  plot_gene_categories.ROUTE7_KEY  so one colour means one population in
+#: both panels  route identity carried by mirrored layout and boxed marks not
+#: by colour  stacking order baseline first  the values are the npz array suffixes
 GENOME_LAYERS = tuple((suffix, categories.COLOR[k], categories.ABBR[k])
                       for suffix, k in (("shared_unique", "sh_u"), ("shared_multi", "sh_m"),
                                         ("genome_only", "go_u"), ("genome_only_multi", "go_m")))
 TXOME_LAYERS = tuple((suffix, categories.COLOR[k], categories.ABBR[k])
                      for suffix, k in (("shared_unique", "sh_u"), ("shared_multi", "sh_m"),
                                        ("txome_only", "to")))
-#: Neutral grey for the region the reference omits: a statement about the annotation, not
-#: a measurement, so it carries no signal colour.
+#: neutral grey for the region the reference omits  statement about the annotation not
+#: a measurement  so it carries no signal colour
 ABSENT_COLOUR = "#9a9a9a"
-#: Both models in black: they are structure, not signal; the labels say which is which.
+#: both models in black  they are structure not signal  the labels say which is which
 SELECTED_COLOUR = "#000000"
 ALT_COLOUR = "#000000"
 
@@ -127,8 +127,8 @@ def render_locus(ax_ribo, ax_model, arrays, meta, title=True, xlabel=True,
 
     axes = [ax_ribo, ax_model]
 
-    # Mirrored: genome above the line, transcriptome below, one shared magnitude scale; the
-    # y tick labels are absolute values. Each half is a stack of its 5A populations.
+    # mirrored  genome above the line transcriptome below one shared magnitude scale
+    # y tick labels are absolute values  each half is a stack of its 5A populations
     for sign, layers, track in ((1.0, GENOME_LAYERS, "genome_cov"),
                                 (-1.0, TXOME_LAYERS, "txome_cov")):
         base = np.zeros_like(genome_cov)
@@ -141,9 +141,9 @@ def render_locus(ax_ribo, ax_model, arrays, meta, title=True, xlabel=True,
             top = base + layer
             ax_ribo.fill_between(xs, sign * base, sign * top, step="mid", color=colour,
                                  linewidth=0, zorder=1, label=label)
-            # A one-base P-site spike is narrower than a device pixel at page width, so
-            # the fill alone can vanish: stem each layer over ITS OWN extent (never the
-            # whole envelope, which would paint an empty layer's colour everywhere).
+            # one base P-site spike is narrower than a device pixel at page width so
+            # the fill alone can vanish  stem each layer over ITS OWN extent  never the
+            # whole envelope  that would paint an empty layer colour everywhere
             covered = layer > 0
             if covered.any():
                 ax_ribo.vlines(xs[covered], sign * base[covered], sign * top[covered],
@@ -153,8 +153,8 @@ def render_locus(ax_ribo, ax_model, arrays, meta, title=True, xlabel=True,
             die("%s layers do not sum to the track" % track)
     ax_ribo.axhline(0, color="black", lw=0.6, zorder=4)
 
-    # Each half cropped to its own peak; on ONE axes units-per-pixel is shared, so both
-    # halves render at exactly the same scale.
+    # each half cropped to its own peak  on ONE axes units per pixel is shared so both
+    # halves render at exactly the same scale
     g_peak = float(genome_cov.max()) if genome_cov.size else 0.0
     t_peak = float(txome_cov.max()) if txome_cov.size else 0.0
     unit = max(g_peak, t_peak, 1.0) * 0.06
@@ -169,8 +169,8 @@ def render_locus(ax_ribo, ax_model, arrays, meta, title=True, xlabel=True,
     label_box = dict(boxstyle="round,pad=0.35", fc="white", ec="#555", lw=0.9)
     mark_top, mark_bottom = "genome", "transcriptome"
     if marks_at_axis:
-        # Unboxed, at the right edge, hugging the mirror line: genome sits just above it and
-        # transcriptome just below, so each name is read against its own half.
+        # unboxed at the right edge hugging the mirror line  genome sits just above it
+        # and transcriptome just below  each name is read against its own half
         from matplotlib.transforms import blended_transform_factory
         trans = blended_transform_factory(ax_ribo.transAxes, ax_ribo.transData)
         for dy, va, text in ((2.0, "bottom", mark_top), (-2.0, "top", mark_bottom)):
@@ -178,7 +178,7 @@ def render_locus(ax_ribo, ax_model, arrays, meta, title=True, xlabel=True,
                              textcoords="offset points", ha="right", va=va,
                              fontsize=FONT_MARK, zorder=8)
     else:
-        # Boxed, top and bottom left inside the axes.
+        # boxed  top and bottom left inside the axes
         ax_ribo.text(0.012, 0.94, mark_top, transform=ax_ribo.transAxes, ha="left",
                      va="top", fontsize=FONT_MARK, bbox=label_box, zorder=8)
         ax_ribo.text(0.012, 0.06, mark_bottom, transform=ax_ribo.transAxes, ha="left",
@@ -192,7 +192,7 @@ def render_locus(ax_ribo, ax_model, arrays, meta, title=True, xlabel=True,
         else:
             ax_ribo.set_title(heading, fontsize=FONT_TITLE, loc="left", pad=2.0)
 
-    # Isoform models; names are y-tick labels so the shared left margin makes room.
+    # isoform models  names are y tick labels so the shared left margin makes room
     models = [(meta["selected_transcript"], sel_exons, SELECTED_COLOUR,
                "selected\n(txome reference)")]
     if alt_exons:
@@ -228,12 +228,12 @@ def render_locus(ax_ribo, ax_model, arrays, meta, title=True, xlabel=True,
                             "(exons to scale, introns collapsed)",
                             fontsize=FONT_XLABEL, labelpad=2.0)
     if no_xticks:
-        # The coordinate is exon-compressed; a number on that axis is neither a genomic
-        # nor a transcript position, so ticks would assert a scale the axis does not have.
+        # coordinate is exon compressed  a number on that axis is neither a genomic
+        # nor a transcript position  ticks would assert a scale the axis does not have
         for ax in axes:
             ax.tick_params(axis="x", bottom=False, labelbottom=False)
 
-    # The shading that ties the tracks together: sequence the selected reference lacks.
+    # the shading that ties the tracks together  sequence the selected reference lacks
     for start, end in absent_blocks:
         for x0, x1 in axis.span(start, end):
             for ax in axes:
@@ -248,7 +248,7 @@ def render_locus(ax_ribo, ax_model, arrays, meta, title=True, xlabel=True,
 
 
 def draw(args, arrays, meta):
-    # Size overrides BEFORE `apply_rcparams`, which copies FONT_TICK into the rcParams.
+    # size overrides BEFORE apply_rcparams  it copies FONT_TICK into the rcParams
     if args.font_size:
         for name in ("FONT_TITLE", "FONT_LABEL", "FONT_XLABEL", "FONT_MARK",
                      "FONT_MODEL", "FONT_TICK"):
@@ -274,8 +274,8 @@ def draw(args, arrays, meta):
                  model_names=tuple(args.model_names.split(",")) if args.model_names else None,
                  no_xticks=args.no_xticks, marks_at_axis=args.marks_at_axis)
 
-    # Declared margins, not `tight_layout`: the model track's tick labels are two lines of
-    # text on a patch-only axes, which tight_layout measures badly.
+    # declared margins not tight_layout  the model track tick labels are two lines of
+    # text on a patch only axes and tight_layout measures that badly
     figure.subplots_adjust(left=0.155, right=0.985, top=0.93, bottom=0.11)
     outputs = ["%s.%s" % (args.output, suffix.strip()) for suffix in args.format.split(",")]
     existing = [o for o in outputs if os.path.exists(o)]

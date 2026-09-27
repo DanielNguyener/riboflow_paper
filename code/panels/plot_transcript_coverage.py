@@ -107,7 +107,7 @@ def load_tracks(coverage_path, gene_id=None, transcript_id=None, region="whole",
                     "%s has a CDS of %d nt, which does not survive a %d nt trim at each "
                     "end. Use --region whole or a smaller --trim."
                     % (info["transcript_id"], info["cds_len"], effective_trim))
-            # CDS-relative axis: a trimmed window runs [trim, cds_len - trim).
+            # CDS relative axis  a trimmed window runs [trim, cds_len - trim)
             axis_origin = regions["CDS"][0]
         elif region == "whole":
             start, end = 0, info["transcript_len"]
@@ -344,7 +344,7 @@ def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=
     heading = title if title is not None else "%s (%s) - %s" % (
         tracks["gene_name"], tracks["transcript_id"], tracks["sample"])
     if title_correlations and correlations:
-        # A second, smaller title line carrying what the in-axes box would have said.
+        # second smaller title line carrying what the in axes box would have said
         names = {"psite": "P-site", "footprint": "footprint"}
         stats = "; ".join("%s $\\rho$ = %.3f, $r$ = %.3f"
                           % (names[w], correlations[w]["spearman"],
@@ -358,9 +358,9 @@ def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=
     figure.tight_layout()
     figure._route_legend = None
     if route_legend:
-        # A colour key, not a data annotation, so it is drawn even with minimal labels.
-        # It shares the x label's line: vertically centred on the label (measured after
-        # tight_layout, which moves the axes), right-aligned to the axes' right edge.
+        # colour key not a data annotation  drawn even with minimal labels
+        # shares the x label line  vertically centred on the label  measured after
+        # tight_layout which moves the axes  right aligned to the axes right edge
         from matplotlib.patches import Patch
         axis = axes[-1]
         figure.canvas.draw()

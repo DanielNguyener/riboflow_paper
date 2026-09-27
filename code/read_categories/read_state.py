@@ -44,8 +44,8 @@ FLAG_REVERSE = 2
 FLAG_PRESENT = 1
 FLAG_UNIQUE = 2
 
-#: gzip-4, not -9: these are hundreds of millions of delta-encoded integers, and -9
-#: buys a few per cent for several times the write time.
+#: gzip-4 not -9  hundreds of millions of delta encoded integers  -9 buys a few
+#: per cent for several times the write time
 _COMPRESSION = dict(compression="gzip", compression_opts=4, shuffle=True)
 
 
@@ -83,7 +83,7 @@ class ReadKeys:
     def __init__(self):
         self.runs = {}
         self.run_names = []
-        self.fallback = None          # name -> int, only if parsing ever fails
+        self.fallback = None          # name to int  only if parsing ever fails
 
     def encode(self, name):
         if self.fallback is not None:
@@ -134,7 +134,7 @@ def scan_genome(genome_bam, keys, log):
     al_flags = array.array("B")
     block_start = array.array("i")
     block_end = array.array("i")
-    block_count = array.array("h")          # per primary, in scan order
+    block_count = array.array("h")          # per primary in scan order
 
     chrom_names, chrom_codes = [], {}
     started, n_records = time.time(), 0
@@ -260,8 +260,8 @@ def write_state(path, sample, genome_bam, txome_bam, columns, blocks,
     import h5py
 
     started = time.time()
-    # Read indices exist only once both BAMs have been seen: a read may appear on the
-    # transcriptome route and nowhere in the genome BAM, and it still needs an index.
+    # read indices exist only once both BAMs seen  a read may appear on transcriptome
+    # route and nowhere in genome BAM and it still needs an index
     unique_keys = np.unique(np.concatenate([columns["key"], txome["key"]]))
     n_reads = int(len(unique_keys))
     al_read = np.searchsorted(unique_keys, columns["key"]).astype(np.int32)
@@ -286,8 +286,8 @@ def write_state(path, sample, genome_bam, txome_bam, columns, blocks,
     block_offsets = np.zeros(len(sizes) + 1, dtype=np.int64)
     np.cumsum(sizes, out=block_offsets[1:])
 
-    # Alignments sorted by (chromosome, start): a gene's reads are then a binary-search
-    # slice instead of a scan.
+    # alignments sorted by chromosome then start  a gene's reads become a binary
+    # search slice instead of a scan
     order = np.lexsort((columns["start"], columns["chrom"]))
     al_read = al_read[order]
     for key in ("chrom", "start", "end", "pos5", "score", "nh", "flags"):
@@ -308,7 +308,7 @@ def write_state(path, sample, genome_bam, txome_bam, columns, blocks,
             max_span[code] = int(spans[lo:hi].max())
     del spans
 
-    # Alignments grouped by read, so a multimapper's other loci are one slice.
+    # alignments grouped by read so a multimapper's other loci are one slice
     by_read_order = np.argsort(al_read, kind="stable").astype(np.int64)
     read_offsets = np.searchsorted(al_read[by_read_order], np.arange(n_reads + 1),
                                    side="left")
@@ -366,9 +366,9 @@ def write_state(path, sample, genome_bam, txome_bam, columns, blocks,
         store("alignments/nh", columns["nh"])
         store("alignments/flags", columns["flags"])
 
-        # The packed name key of every read, in read-index order. A read index is a rank in
-        # THIS store's key array, so it means nothing in another store; the key does. Two
-        # stores built from different BAMs of the same sample are joined on this.
+        # packed name key of every read in read index order  a read index is a rank in
+        # THIS store's key array so it means nothing in another store  the key does
+        # two stores built from different BAMs of same sample join on this
         store("reads/key", unique_keys, delta=True)
 
         store("by_read/align_idx", by_read_order)
@@ -499,8 +499,8 @@ class ReadState:
         self._tx_by_tid = self._handle["txome/by_tid_idx"][:]
         self._tx_tid_offsets = self._handle["txome/by_tid_offsets"][:]
 
-        # Which alignments can place their read at a gene: the primary, or a secondary
-        # whose AS equals the primary's (both present). `gene_read_partition_lib.qualifies`.
+        # which alignments can place their read at a gene  the primary or a secondary
+        # whose AS equals the primary's when both present  gene_read_partition_lib.qualifies
         primary_score = np.full(self.n_reads, MISSING_AS, dtype=np.int64)
         has_primary = np.zeros(self.n_reads, dtype=bool)
         primary_score[self._p_read] = self._al_score[self._p_align]
@@ -526,7 +526,7 @@ class ReadState:
     def __exit__(self, *_exc):
         self.close()
 
-    # -- the gene-assignment rule -------------------------------------------
+    # -- the gene assignment rule -------------------------------------------
     def gene_side(self, chrom, start, end):
         """Read ids with a QUALIFYING alignment overlapping [start, end) on `chrom`.
 
@@ -562,11 +562,11 @@ class ReadState:
         hi = int(self._tx_tid_offsets[code + 1])
         return self._tx_read[self._tx_by_tid[lo:hi]]
 
-    # -- the two mappings the chain consumes, served lazily -----------------
-    # `classify_union` only asks for the reads it actually needs: `primary.get(q)` for the
-    # reads at the gene, `records[q]` for the multimappers among them. Views keep it that
-    # way -- building either eagerly for a whole gene would rebuild block lists for every
-    # uniquely-mapped read the tie test never looks at.
+    # -- the two mappings the chain consumes  served lazily -----------------
+    # classify_union only asks for reads it actually needs  primary.get(q) for reads
+    # at the gene  records[q] for the multimappers among them  views keep it that way
+    # building either eagerly for a whole gene would rebuild block lists for every
+    # uniquely mapped read the tie test never looks at
 
     @property
     def primary(self):

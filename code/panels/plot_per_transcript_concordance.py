@@ -57,7 +57,7 @@ def _half_box(axis, data, positions, fill, line):
         box.set_facecolor(fill)
         box.set_alpha(0.6)
 
-#: The leader from a marker to its gene name: a thin plain line, no head, no text box.
+#: leader from a marker to its gene name  thin plain line  no head  no text box
 LEADER = dict(arrowstyle="-", color="#555", lw=0.6, shrinkA=0, shrinkB=2)
 
 def draw(prepared, ylim=(0.0, 1.0), figsize=(11.0, 4.4), layout="side"):
@@ -93,8 +93,8 @@ def draw(prepared, ylim=(0.0, 1.0), figsize=(11.0, 4.4), layout="side"):
                            zorder=12)
                 diamond = dict(s=22, marker="D", edgecolors="black", linewidths=0.8,
                                zorder=13)
-                # GAPDH is a diamond in EVERY sub-panel, on or off the axis, so the
-                # discordant example reads as the same transcript in both views.
+                # GAPDH is a diamond in EVERY sub panel on or off the axis  so the
+                # discordant example reads as the same transcript in both views
                 style = diamond if key == "gapdh" else dot
                 if entry["spearman"] < low:
                     floor = low + 0.012 * (high - low)
@@ -102,7 +102,7 @@ def draw(prepared, ylim=(0.0, 1.0), figsize=(11.0, 4.4), layout="side"):
                                  clip_on=False, **diamond)
                     axis.scatter([index + 0.2], [floor], color=ps.PEARSON_LINE,
                                  clip_on=False, **diamond)
-                    # Plain text on a thin leader, up-right into the empty band; no box.
+                    # plain text on a thin leader  up right into the empty band  no box
                     axis.annotate(key.upper(), xy=(index + 0.2, floor), xytext=(16, 18),
                                   textcoords="offset points", ha="left", va="bottom",
                                   fontsize=ps.FONT_TICK, zorder=14,
@@ -113,7 +113,7 @@ def draw(prepared, ylim=(0.0, 1.0), figsize=(11.0, 4.4), layout="side"):
                     axis.scatter([index + 0.2], [entry["pearson"]],
                                  color=ps.PEARSON_LINE, **style)
                     near_top = entry["spearman"] > high - 0.08 * (high - low)
-                    # Down-right when the dot sits near the top; otherwise up-right.
+                    # down right when the dot sits near the top  otherwise up right
                     xytext = (16, -22) if near_top else (16, 14)
                     va = "top" if near_top else "bottom"
                     axis.annotate(key.upper(), xy=(index + 0.2, entry["pearson"]),
@@ -127,7 +127,7 @@ def draw(prepared, ylim=(0.0, 1.0), figsize=(11.0, 4.4), layout="side"):
         axis.set_xlim(0.4, len(order) + 0.6)
         axis.grid(axis="y", alpha=0.15)
         if layout == "stacked":
-            # Sub-panel name inside the axes, bottom left; a title would cost a line each.
+            # sub panel name inside the axes bottom left  a title would cost a line each
             axis.text(0.01, 0.04, name, transform=axis.transAxes, ha="left", va="bottom",
                       fontsize=ps.FONT_TITLE, zorder=14,
                       bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#555", lw=0.6))

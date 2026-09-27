@@ -11,10 +11,10 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 METRICS = (("spearman_all", "Spearman $\\rho$"), ("pearson_all", "Pearson $r$"))
-#: The same two metrics with one-glyph tick labels, for a narrow slot beside panel C.
+#: same two metrics with one glyph tick labels  fits a narrow slot beside panel C
 SHORT_LABELS = {"spearman_all": "$\\rho$", "pearson_all": "$r$"}
 REQUIRED = ("sample", "spearman_all", "pearson_all")
-#: The box is drawn over the dots, so its face has to let them through.
+#: box draws over the dots  its face has to let them through
 BOX_FACE_ALPHA = 0.35
 DOT_ALPHA = 0.55
 
@@ -43,7 +43,7 @@ def draw(prepared, ylim=None, figsize=(5.2, 4.4), seed=0, short_labels=False,
     import panel_style as ps
 
     ps.apply_rcparams()
-    # (fill, line) per metric: box face = tint, box strokes and dots = dark shade.
+    # fill and line per metric  box face = tint  box strokes and dots = dark shade
     colours = {"spearman_all": (ps.SPEARMAN_FILL, ps.SPEARMAN_LINE),
                "pearson_all": (ps.PEARSON_FILL, ps.PEARSON_LINE)}
 
@@ -58,9 +58,9 @@ def draw(prepared, ylim=None, figsize=(5.2, 4.4), seed=0, short_labels=False,
 
     for axis, (name, frame) in zip(axes, prepared["frames"].items()):
         series = [frame[column].dropna().values for column, _label in METRICS]
-        # Box and dots only (a violin over n=24 overstates the density). Whiskers/caps come
-        # back two per box, hence the pairwise slice. The box sits ON TOP of the dots, so
-        # translucency goes on the FACE COLOUR, not artist `alpha` (which would fade strokes).
+        # box and dots only  a violin over n=24 overstates the density  whiskers and caps
+        # come back two per box hence the pairwise slice  box sits ON TOP of the dots so
+        # translucency goes on the FACE COLOUR not artist alpha  alpha would fade strokes
         box = axis.boxplot(series, positions=positions, widths=0.42, showfliers=False,
                            showcaps=False, patch_artist=True, zorder=12)
         for k, (column, _label) in enumerate(METRICS):
@@ -73,7 +73,7 @@ def draw(prepared, ylim=None, figsize=(5.2, 4.4), seed=0, short_labels=False,
 
         for position, (column, _label) in zip(positions, METRICS):
             values = frame[column].values
-            # UNDER the box, faint. `facecolor=`, not `color=`, or the black edge is lost.
+            # UNDER the box  faint  facecolor= not color= or the black edge is lost
             if points:
                 axis.scatter(rng.normal(position, 0.06, len(values)), values, s=18,
                              facecolor=colours[column][1], edgecolors="black",

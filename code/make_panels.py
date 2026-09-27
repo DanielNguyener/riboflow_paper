@@ -27,8 +27,8 @@ def load_manifest(path=MANIFEST):
     if document.get("schema_version") != expected:
         raise SystemExit("%s has schema_version %r, expected %r"
                          % (path, document.get("schema_version"), expected))
-    # Figure keys are labels, not integers: main-text figures are digits, supporting
-    # figures are `S<n>`. YAML reads a bare digit as int, so normalise once here.
+    # figure keys are labels not integers  main text figures are digits  supporting
+    # figures are S<n>  YAML reads a bare digit as int so normalise once here
     document["figures"] = {str(k): v for k, v in document["figures"].items()}
     for panel in document["panels"]:
         if panel.get("figure") is not None:
@@ -108,7 +108,7 @@ def fit_and_run(entry, formats, force):
     if pdf.exists() and not force:
         return 1, "%s exists; pass --force (fitted panels are re-rendered several times)" % pdf
     def build(width_in, height_in):
-        # --force on every iteration: the loop overwrites its own previous render.
+        # --force on every iteration  loop overwrites its own previous render
         return build_command(entry, formats, True, stem, (width_in, height_in))
 
     clip = figure_io.fit_panel(entry["id"], build, str(pdf), fit["width_pt"],
@@ -131,10 +131,10 @@ def _failure_excerpt(output):
         shown = lines[:6] + ["    ... %d lines omitted ..." % (len(lines) - 24)] + lines[-18:]
     return "\n".join("    " + line for line in shown)
 
-# ── tables derived from the shipped ones, not shipped themselves ──────────────
-# Figure 3's statistics and Figure 6's clustering are deterministic functions of
-# shipped tables, so the repository ships the inputs and derives these with base R
-# on first use. The derived copies land under results/ and are reused when present.
+# ── tables derived from the shipped ones  not shipped themselves ──────────────
+# figure 3 statistics and figure 6 clustering are deterministic functions of
+# shipped tables  repository ships the inputs and derives these with base R
+# on first use  derived copies land under results/ and are reused when present
 
 def _rscript():
     import shutil
@@ -171,7 +171,7 @@ def _derive_cluster_tables():
     out.mkdir(parents=True, exist_ok=True)
     counts = pd.read_csv(REPO / "data" / "clustering" / "HeLa.post_dedup.gene_counts.tsv",
                          sep="\t")
-    # build_gene_counts.MIN_UNION: status ok and at least 100 union reads
+    # build_gene_counts.MIN_UNION  status ok and at least 100 union reads
     kept = counts[(counts["status"].astype(str) == "ok") & (counts["n_union"] >= 100)]
     filtered = out / "HeLa.post_dedup.gene_counts_filtered.tsv"
     kept.to_csv(filtered, sep="\t", index=False, lineterminator="\n")
@@ -180,7 +180,7 @@ def _derive_cluster_tables():
                      "--stem", "HeLa.post_dedup", "--k", "4"])
 
 
-#: derived table -> the derivation that produces it (and its siblings).
+#: derived table -> the derivation that makes it and its siblings
 DERIVATIONS = {
     "results/te_route/tables/per_gene_delta.tsv": _derive_te_tables,
     "results/te_route/tables/route_correlation.tsv": _derive_te_tables,

@@ -1,26 +1,26 @@
 #!/usr/bin/env Rscript
-# Ward (ward.D2) hierarchical clustering of the genes by read-fate composition.
+# ward.D2 hierarchical clustering of the genes by read fate composition
 #
 #   Rscript code/clustering/ward_cluster.R --input <stem>.gene_counts_filtered.tsv \
 #       --output results/clustering --stem <stem> [--k 4] [--k-min 2] [--k-max 8] \
 #       [--seed 1] [--silhouette-sample 4000]
 #
-# Each gene is its five fate counts divided by n_union (a composition), the distance is
-# Euclidean between those shares, the tree is stats::hclust(method = "ward.D2"). For every
-# k in k-min..k-max the cut's within-SS, between/total SS, average silhouette (on a seeded
-# subsample: the full distance matrix at ~12,000 genes is ~1 GB for nothing) and the merge
-# height that turns k clusters into k - 1 are recorded. The cut at --k is then relabelled so
-# that cluster 1 has the most concordant centroid (highest shared/unique share) and written
-# per gene with the composition in %, plus one centroid row per cluster (member mean).
+# each gene is its five fate counts divided by n_union  a composition  distance is
+# Euclidean between those shares  tree is stats::hclust(method = "ward.D2")  for every
+# k in k-min..k-max the cut records within SS  between/total SS  average silhouette on a
+# seeded subsample  full distance matrix at ~12000 genes is ~1 GB for nothing  and the
+# merge height that turns k clusters into k - 1  the cut at --k is then relabelled so
+# cluster 1 has the most concordant centroid  highest shared/unique share  and written
+# per gene with the composition in %  plus one centroid row per cluster  member mean
 #
-# Writes, under --output, all named by the stem:
-#   <stem>.tree_merge.tsv        its merge matrix and heights (what the panel draws)
-#   <stem>.clusters_k<K>.tsv     per gene: cluster and the five shares in %
-#   <stem>.cluster_centroids.tsv per cluster: n and the centroid composition in %
+# writes under --output  all named by the stem
+#   <stem>.tree_merge.tsv        its merge matrix and heights  what the panel draws
+#   <stem>.clusters_k<K>.tsv     per gene  cluster and the five shares in %
+#   <stem>.cluster_centroids.tsv per cluster  n and the centroid composition in %
 #
-# Base R only; `here` is derived from Rscript's --file= so it runs from any directory.
+# base R only  here is derived from Rscript --file= so it runs from any directory
 
-options(digits = 15)   # so the heights round-trip through the TSV unchanged
+options(digits = 15)   # so the heights round trip through the TSV unchanged
 
 # ── arguments ──────────────────────────────────────────────────────────────────────────
 here <- dirname(normalizePath(sub("^--file=", "",
@@ -30,8 +30,8 @@ source(file.path(root, "code", "common", "cli_args.R"))
 log_line <- function(fmt, ...) cat(sprintf("[clustering/ward] %s\n", sprintf(fmt, ...)))
 
 # ── the five fates ─────────────────────────────────────────────────────────────────────
-#: Column order is load-bearing: index 1 is the concordant fate, which is how clusters
-#: get relabelled (cluster 1 = most concordant). Same order as the count table.
+#: column order is load bearing  index 1 is the concordant fate  that is how clusters
+#: get relabelled  cluster 1 = most concordant  same order as the count table
 COMPONENTS <- c("shared_genome_unique", "shared_genome_multimapped",
                 "genome_only_unique", "genome_only_multimapped", "transcriptome_only")
 ID_COLS <- c("gene", "gene_id", "transcript_id")
@@ -52,7 +52,7 @@ write_tsv <- function(frame, path) {
   invisible(path)
 }
 
-# Average silhouette on a seeded subsample, Euclidean in X (the geometry Ward minimises).
+# average silhouette on a seeded subsample  Euclidean in X  the geometry ward minimises
 silhouette_mean <- function(X, cluster, n_sample, seed) {
   set.seed(seed)
   idx <- if (nrow(X) > n_sample) sample.int(nrow(X), n_sample) else seq_len(nrow(X))
@@ -109,7 +109,7 @@ for (k in k_range) {
   sizes <- as.integer(table(factor(cluster, levels = seq_len(k))))
   withinss <- sum((X - centres[cluster, , drop = FALSE])^2)
   sil <- silhouette_mean(X, cluster, sil_n, seed)
-  # heights are increasing; the (n - k + 1)-th merge turns the k-cluster cut into k - 1
+  # heights are increasing  merge number n - k + 1 turns the k cluster cut into k - 1
   height <- tree$height[nrow(X) - k + 1]
   rows[[length(rows) + 1]] <- data.frame(
     k = k, tot_withinss = withinss, between_over_total = 1 - withinss / totss,
@@ -121,7 +121,7 @@ for (k in k_range) {
   if (k == chosen) chosen_cut <- list(cluster = cluster, centres = centres, sizes = sizes)
 }
 
-# the chosen cut: cluster 1 = the most concordant centroid, 2 the next, ...
+# the chosen cut  cluster 1 = the most concordant centroid  2 the next and so on
 centres_P <- chosen_cut$centres / rowSums(chosen_cut$centres)
 colnames(centres_P) <- COMPONENTS
 ord <- order(-centres_P[, 1])

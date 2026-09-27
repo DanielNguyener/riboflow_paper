@@ -28,14 +28,14 @@ import categories  # noqa: E402
 import panel_style as ps  # noqa: E402
 from panel_style import die  # noqa: E402
 
-#: The shared plot box, from the page top, in points.
+#: shared plot box  from page top  in points
 AXES_HEIGHT_PT = 240.0
 AXES_TOP_OFFSET_PT = 22.0
 
-#: (abbreviation, colour) for the five categories, from the one key.
+#: abbreviation and colour for the five categories  from the one key
 UNION_KEY = categories.KEY
 
-#: (taxonomy column, abbreviation, colour), in the manuscript's category order.
+#: taxonomy column abbreviation colour  in manuscript category order
 SEGMENTS = tuple(zip(("both_genome_unique", "both_genome_multi", "genome_only_unique",
                       "genome_only_multi", "txome_only"),
                      (categories.ABBR[k] for k in categories.KEYS),
@@ -46,7 +46,7 @@ TAXONOMY_REQUIRED = (
     "n_genome_unique", "n_genome_multi", "n_genome_absent",
     "n_txome_present", "n_txome_absent")
 
-#: Panels C and D: the master's flag, its required columns, and the share.
+#: panels C and D  the master flag  its required columns  the share
 SHARE_PANELS = {
     "C": {"master": "tie_master",
           "required": ("sample", "pct_cross_pp_pc", "pct_cross_pc_pp"),
@@ -193,7 +193,7 @@ def draw_side_panel(values, labels, colour, title, xlabel, figsize):
     axis.set_xlabel(xlabel, fontsize=ps.FONT_LABEL)
     figure.tight_layout()
     bottom, top = axes_fractions(figsize[1])
-    figure.subplots_adjust(bottom=bottom, top=top)   # the box A, B, C and D all draw in
+    figure.subplots_adjust(bottom=bottom, top=top)   # the box A B C and D all draw in
     return figure, axis
 
 
@@ -219,7 +219,7 @@ def draw_union(prepared, figsize):
     axis.set_yticks(list(y))
     axis.set_yticklabels([""] * len(y))
     axis.set_ylim(-0.6, len(y) - 0.4)
-    #: 100 % of the bar, plus just enough room for the widest count drawn at 100.5.
+    #: 100 % of the bar plus just enough room for widest count drawn at 100.5
     axis.set_xlim(0, 109)
     axis.set_xticks([0, 20, 40, 60, 80, 100])
     axis.set_xlabel("Read IDs in union of read alignments (%)", fontsize=ps.FONT_LABEL)
@@ -230,7 +230,7 @@ def draw_union(prepared, figsize):
     return figure, axis, []
 
 
-# ── the four page-size renders ────────────────────────────────────────────────
+# ── the four page size renders ────────────────────────────────────────────────
 
 def render_panel(letter, width_pt, height_in, inputs, font_pt, output, formats=("pdf",),
                  force=False):
@@ -254,7 +254,7 @@ def render_panel(letter, width_pt, height_in, inputs, font_pt, output, formats=(
         axis.set_yticklabels(prepared["labels"])
         for artist in list(axis.texts):          # per-bar values: a table, not a panel
             artist.remove()
-        # Largest gap is 1.286 M; a final tick at 1.5 keeps every bar short of it.
+        # largest gap is 1.286 M  final tick at 1.5 keeps every bar short of it
         axis.set_xlim(0, 1.55)
         axis.set_xticks([0.0, 0.5, 1.0, 1.5])
         axis.set_xlabel("Genome −\ntranscriptome\n(millions)", fontsize=font_pt)
@@ -293,7 +293,7 @@ def render_panel(letter, width_pt, height_in, inputs, font_pt, output, formats=(
     else:
         die("unknown cohort panel %s" % letter)
 
-    # tight=False, as the row alignment depends on the shared box surviving to the file.
+    # tight=False  row alignment depends on shared box surviving to the file
     return ps.save(figure, output, formats, force=force,
                    extra_artists=extras or None, tight=False)
 

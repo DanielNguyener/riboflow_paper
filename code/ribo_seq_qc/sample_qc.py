@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "common"))
-import bam_inputs as fc          # the one uniqueness policy: fc.is_unique_{genome,txome}_read
+import bam_inputs as fc          # the one uniqueness policy  fc.is_unique_{genome,txome}_read
 from psite_offset import ribotish_get_offset, get_offset_periodicity
 
 import qc_core
@@ -27,7 +27,7 @@ import pyranges as pr
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use("Agg")   # backend for qc_core's lazy pyplot imports (--plots)
+matplotlib.use("Agg")   # backend for qc_core's lazy pyplot imports under --plots
 
 p = argparse.ArgumentParser(description="Per-sample read-length selection.")
 p.add_argument("--sample",           required=True)
@@ -45,14 +45,14 @@ p.add_argument("--plots", action="store_true",
                     "are already in the tables this step writes.")
 args = p.parse_args()
 
-#: Offset frame from downstream 3-nt phasing (robust to bimodal start peaks); see psite_offset.py.
+#: offset frame from downstream 3 nt phasing  robust to bimodal start peaks  see psite_offset.py
 _OFFSET_FN = get_offset_periodicity
 
 SAMPLE      = args.sample
 BAM         = args.bam
 TX          = args.route == "transcriptome"
 OUT         = args.out or (config.tx_out_dir() if TX else config.out_dir())
-F0_THRESH   = 50.0   # min frame0 % after the P-site shift to keep a length
+F0_THRESH   = 50.0   # min frame0 % after P-site shift to keep a length
 TAG         = " (transcriptome)" if TX else ""
 
 MIN_LEN, MAX_LEN = config.MIN_LEN, config.MAX_LEN
@@ -81,7 +81,7 @@ def _cds_bounds_from_refname(ref):
     if not m:
         return None, None
     start1, end1 = int(m.group(1)), int(m.group(2))
-    cds_len_nostop = (end1 - start1 + 1) - 3  # drop the stop codon (CDS:end includes it)
+    cds_len_nostop = (end1 - start1 + 1) - 3  # drop the stop codon  CDS:end includes it
     if cds_len_nostop <= 0:
         return None, None
     return start1 - 1, cds_len_nostop
@@ -90,7 +90,7 @@ print("Reading BAM...", flush=True)
 rec = {"Chromosome": [], "pos5": [], "Strand": [], "length": []}
 bam = pysam.AlignmentFile(BAM, "rb")
 if TX:
-    # Reference names embed "|CDS:start-end|"; bowtie2 --norc, so the 5' end is reference_start.
+    # reference names embed "|CDS:start-end|"  bowtie2 --norc so the 5' end is reference_start
     tx_refs = list(bam.references)
     ref_cds0 = {ref: _cds_start0_from_refname(ref) for ref in tx_refs}
     print(f"  {len(ref_cds0):,} references; "
@@ -123,7 +123,7 @@ if total_reads == 0:
     print("  No reads — aborting.", flush=True)
     sys.exit(1)
 
-# CDS cores tested on raw 5' ends, no P-site shift.
+# CDS cores tested on raw 5' ends  no P-site shift
 print("Phase 1: CDS length distribution + 85 % expansion...", flush=True)
 if TX:
     cds_length_counts = qc_core.cds_length_hist_transcriptome(
@@ -140,8 +140,8 @@ phase1_lengths, lo, hi, captured = qc_core.select_read_lengths(cds_length_counts
 print(f"  Peak window: {lo}-{hi} nt | captured {captured / n_cds * 100:.1f}% of CDS reads "
       f"| lengths: {phase1_lengths}", flush=True)
 
-# rel_pos of each 5' end to its CDS start: from the reference name (transcriptome) or by
-# joining to start-codon windows that extend upstream, where the P-site signal is (genome).
+# rel_pos of each 5' end to its CDS start  from the reference name on transcriptome or by
+# joining to start codon windows that extend upstream where the P-site signal is on genome
 if TX:
     print("Computing rel_pos from transcript CDS starts...", flush=True)
     reads_df["rel_pos"] = (reads_df["pos5"] - reads_df["Chromosome"].map(ref_cds0)).astype(float)
@@ -195,7 +195,7 @@ print(f"  {reads_df['rel_pos'].notna().sum():,} reads mapped to CDS starts", flu
 
 pre_counts = qc_core.metagene_counts(reads_df, PRE_WIN_UP, PRE_WIN_DN)
 
-# ── 7. Per-length P-site offset and frame % ──────────────────────────────────
+# ── per length P-site offset and frame % ──────────────────────────────────
 print("Phase 2: P-site detection and frame %...", flush=True)
 phase2 = qc_core.detect_offsets(
     reads_df, phase1_lengths, pre_counts, _OFFSET_FN,
@@ -214,11 +214,11 @@ if args.plots:
                            f"{SAMPLE}{TAG} - 5' end metagene (P-site shifted, first 10 codons)  "
                            f"[threshold={F0_THRESH:.0f}%]")
 
-# ── P-site frame counts across the whole CDS, from the same in-memory reads ──────────
+# ── P-site frame counts across whole CDS from the same in memory reads ──────────
 print(f"\n=== [cds_frame{TAG}] sample={SAMPLE} ===", flush=True)
 
-# The inputs, derived from qc_df with the exact expressions the former step 03 used on
-# the re-read CSV (ints and bools survive the round trip identically).
+# inputs derived from qc_df with the exact expressions former step 03 used on the
+# reread CSV  ints and bools survive the round trip identically
 phase1_mask   = fc._as_bool(qc_df["in_phase1"])
 periodic_mask = fc._as_bool(qc_df["periodic"])
 
@@ -231,7 +231,7 @@ psite_offsets    = dict(zip(phase1_rows["read_length"].astype(int),
 print(f"  Phase1 lengths:   {sorted(frame_lengths)}")
 print(f"  Periodic lengths: {sorted(periodic_lengths)}")
 
-# The same read subset, in the same BAM order, that 03's own pass loaded.
+# same read subset in same BAM order that 03's own pass loaded
 sub = reads_df[reads_df["length"].isin(frame_lengths)].reset_index(drop=True)
 offsets_s = sub["length"].map(psite_offsets)
 n_loaded = len(sub)
@@ -243,7 +243,7 @@ if TX:
         {r: b[0] for r, b in ref_bounds.items() if b[0] is not None})
     cds_len_nostop = sub["Chromosome"].map(
         {r: b[1] for r, b in ref_bounds.items() if b[0] is not None})
-    # bowtie2 --norc: all reads forward on the transcript, 5' end = reference_start
+    # bowtie2 --norc  all reads forward on the transcript  5' end = reference_start
     rel = sub["pos5"] + offsets_s - cds_start0
     keep = cds_start0.notna() & (rel >= 0) & (rel < cds_len_nostop)
     frame_reads = pd.DataFrame({
@@ -283,7 +283,7 @@ else:
             jdf  = joined.df.copy()
             plus = jdf["Strand"] == "+"
 
-            # subtract Phase: using +Phase mislabels in-frame P-sites in phase-1/2 exons.
+            # subtract Phase  using +Phase mislabels in frame P-sites in phase 1 and 2 exons
             jdf["frame"] = np.where(
                 plus,
                 (jdf["Start"] - jdf["Start_b"] - jdf["Phase"]) % 3,

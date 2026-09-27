@@ -25,10 +25,10 @@ DEFAULT_MANIFEST = REPO / "config" / "cohort_manifest.tsv"
 
 EXAMPLE_SAMPLE = "HeLa"
 EXAMPLE_GSM = "GSM2100602"
-#: The genes Figure 5A partitions (gene IDs resolve through the annotation cache).
-PARTITION_GENES = ("ENSG00000093010", "ENSG00000111640", "ENSG00000124831")   # COMT, GAPDH, LRRFIP1
+#: genes figure 5A partitions  gene IDs resolve through the annotation cache
+PARTITION_GENES = ("ENSG00000093010", "ENSG00000111640", "ENSG00000124831")   # COMT GAPDH LRRFIP1
 LOCUS_GENE = "LRRFIP1"
-#: Figure 6: the Ward tree of HeLa's gene read-fate compositions is cut at this k.
+#: figure 6  ward tree of HeLa gene read fate compositions is cut at this k
 CLUSTER_K = 4
 PSEUDOGENE_GTF = "clustering/gencode.v34.2wayconspseudos.gtf.gz"
 
@@ -308,15 +308,15 @@ STAGES = [
 STAGE_STAGING = {
     "qc": ("ribo_seq_qc/genome/tables/_staging",
            "ribo_seq_qc/transcriptome/tables/_staging"),
-    # the staged ribo counts are ribo_pass's hand-off to te_counts, so te_counts owns
-    # their pruning: they must survive until it has consumed them.
+    # staged ribo counts are the ribo_pass hand off to te_counts  te_counts owns
+    # their pruning  they must survive until it has consumed them
     "te_counts": ("ribo_rna/_route_scratch", "ribo_rna/_staging_ribo_counts"),
     "ribo_pass": ("read_categories/_staging_taxonomy",
                   "read_categories/_staging_tie_biotype",
                   "read_categories/_staging_reach"),
 }
 
-#: Shipped under data/ but built by no stage: third-party inputs, recorded with their source.
+#: shipped under data/ but built by no stage  third party inputs recorded with source
 EXTERNAL_INPUTS = {
     "te_route/housekeeping/Housekeeping_GenesHuman.csv": "HRT Atlas v1.0",
     "te_route/housekeeping/Housekeeping_TranscriptsHuman.csv": "HRT Atlas v1.0",

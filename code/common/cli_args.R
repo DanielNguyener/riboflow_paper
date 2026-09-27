@@ -1,5 +1,5 @@
-# Shared --key value argument parsing for the base-R analysis scripts.
-# Sourced with each script's own `here`; base R only.
+# shared --key value argument parsing for the base R analysis scripts
+# sourced with each script own here  base R only
 
 parse_args <- function(defaults) {
   raw <- commandArgs(TRUE)

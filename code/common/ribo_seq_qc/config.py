@@ -7,7 +7,7 @@ import sys
 _CODE_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.dirname(os.path.dirname(_CODE_DIR))
 _REPO = os.path.dirname(_REPO)
-if os.path.dirname(_CODE_DIR) not in sys.path:      # `inputs` lives one directory up
+if os.path.dirname(_CODE_DIR) not in sys.path:      # inputs lives one directory up
     sys.path.insert(0, os.path.dirname(_CODE_DIR))
 
 class AnnotationError(RuntimeError):
@@ -58,7 +58,7 @@ def tables_dir():
 def staging_dir():
     return os.path.join(tables_dir(), "_staging")
 
-# One fingerprinted bundle file, written atomically; never five files reused on existence.
+# one fingerprinted bundle file written atomically  never five files reused on existence
 
 BUNDLE_PAYLOADS = ("appris_cds", "appris_meta", "appris_utr",
                    "appris_gene_body", "all_gene_bodies")
@@ -93,7 +93,7 @@ MIN_THREE_UTR = 30
 
 MIN_LEN, MAX_LEN = 20, 45
 
-# Uniqueness policy lives in `code/common/bam_inputs.py` (NH == 1 / MAPQ >= 42).
+# uniqueness policy lives in code/common/bam_inputs.py  NH == 1 and MAPQ >= 42
 
 FRAME_COLORS = {0: "#F8766D", 1: "#00BA38", 2: "#619CFF"}
 
@@ -155,7 +155,7 @@ def build_annotation_cache(gtf=None, appris=None):
     meta_df = pd.DataFrame(meta_rows).drop_duplicates("transcript_id")
     appris_ids = set(meta_df["transcript_id"])
 
-    # gene: all gene types (no filter) — separates intronic from intergenic.
+    # gene means all gene types no filter  separates intronic from intergenic
     _FEAT = {"CDS", "UTR", "gene"}
     cds_rows  = []
     utr_rows  = []

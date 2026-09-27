@@ -259,7 +259,7 @@ def duplication(exons, where, strand_aware=True):
         groups[(chrom, strand if strand_aware else ".")].append(tid)
     dup_nt, partners = {}, defaultdict(set)
     for key, tids in groups.items():
-        # sweep: coverage count over sorted boundaries
+        # sweep  coverage count over sorted boundaries
         events = []
         for tid in tids:
             for s, e in exons[tid]:
@@ -268,7 +268,7 @@ def duplication(exons, where, strand_aware=True):
         events.sort(key=lambda x: (x[0], x[1]))
         active = set()
         last = None
-        # per-entry duplicated length: accumulate segments where >= 2 active
+        # per entry duplicated length  accumulate segments where >= 2 active
         for pos, delta, tid in events:
             if last is not None and pos > last and len(active) >= 2:
                 length = pos - last
