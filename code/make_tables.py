@@ -259,13 +259,13 @@ def stage_clustering(samples, args):
             return code
     return 0
 
-def _taxonomy_driver(analysis, samples, args):
-    """One cohort driver, told which analysis to run.
+def stage_read_categories(samples, args):
+    """The three Figure 4 masters, from one scan of each library's two BAMs.
 
     Capped at 2 workers regardless of `--workers`: each subprocess peaks near 5 GB.
     """
     selection = ["--samples", ",".join(samples)] if samples else []
-    return sh([sys.executable, CODE / "read_categories" / "library_scan.py", analysis,
+    return sh([sys.executable, CODE / "read_categories" / "library_scan.py",
                "--workers", str(min(args.workers, 2))] + selection)
 
 STAGES = [
@@ -298,13 +298,10 @@ STAGES = [
     ("locus",        stage_locus,        ("annotation", "qc"),     True,
      ("read_categories/locus_LRRFIP1.npz",
       "read_categories/locus_LRRFIP1.json")),
-    ("taxonomy",     functools.partial(_taxonomy_driver, "taxonomy"), ("annotation",), True,
-     ("read_categories/taxonomy_all.tsv",)),
-    ("reach",        functools.partial(_taxonomy_driver, "reach"),
-     ("taxonomy",), True,
-     ("read_categories/genome_anchored_reach_all.tsv",)),
-    ("multimap_biotype", functools.partial(_taxonomy_driver, "tie_biotype"), ("annotation",), True,
-     ("read_categories/multimap_tie_biotype_all.tsv",)),
+    ("read_categories", stage_read_categories, ("annotation",), True,
+     ("read_categories/taxonomy_all.tsv",
+      "read_categories/multimap_tie_biotype_all.tsv",
+      "read_categories/genome_anchored_reach_all.tsv",)),
     ("clustering",   stage_clustering,   ("annotation",),          True,
      ("clustering/HeLa.post_dedup.gene_counts.tsv",
       "clustering/HeLa.post_dedup.clusters_k4.tsv",
@@ -319,9 +316,9 @@ STAGE_STAGING = {
     "qc": ("ribo_seq_qc/genome/tables/_staging",
            "ribo_seq_qc/transcriptome/tables/_staging"),
     "te_counts": ("ribo_rna/_route_scratch",),
-    "taxonomy": ("read_categories/_staging_taxonomy",),
-    "reach": ("read_categories/_staging_reach",),
-    "multimap_biotype": ("read_categories/_staging_tie_biotype",),
+    "read_categories": ("read_categories/_staging_taxonomy",
+                        "read_categories/_staging_tie_biotype",
+                        "read_categories/_staging_reach"),
 }
 
 #: Shipped under data/ but built by no stage: third-party inputs, recorded with their source.

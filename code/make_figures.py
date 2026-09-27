@@ -19,7 +19,7 @@ import inputs  # noqa: E402
 #: The `make_tables.py` stages each figure's inputs come from.
 STAGES = {"S1": ["qc"], "2": ["coverage", "concordance"],
           "3": ["te_counts", "te_normalize", "te_stats"],
-          "4": ["taxonomy", "reach", "multimap_biotype"],
+          "4": ["read_categories"],
           "5": ["gene_partition", "locus"], "6": ["clustering"]}
 
 

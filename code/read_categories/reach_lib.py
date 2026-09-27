@@ -7,7 +7,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pysam
 
 _HERE = Path(__file__).resolve().parent
 _COMMON = _HERE.parent / "common"
@@ -15,7 +14,6 @@ for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc")):
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
 import bam_inputs as fc
-import taxonomy_lib as tl
 
 OUTDIR = fc.output_root() / "read_categories"
 
@@ -32,23 +30,6 @@ REACH_CATEGORIES = [
     "intergenic",
     "other_unclassified",
 ]
-
-def read_genome_blocks(bam_path, qnames):
-    """qname -> (chrom, strand, blocks) for the given qname set only."""
-    out = {}
-    bam = pysam.AlignmentFile(str(bam_path), "rb")
-    for r in bam.fetch(until_eof=True):
-        if r.is_unmapped or r.is_secondary or r.is_supplementary:
-            continue
-        if r.query_name not in qnames:
-            continue
-        blocks = r.get_blocks()
-        if not blocks:
-            continue
-        strand = "-" if r.is_reverse else "+"
-        out[r.query_name] = (r.reference_name, strand, blocks)
-    bam.close()
-    return out
 
 def gene_to_transcript_map(table):
     """gene_id -> transcript_id (1:1 — one selected APPRIS transcript per gene)."""

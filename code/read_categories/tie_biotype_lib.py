@@ -17,44 +17,12 @@ for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc"),
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
 import reference_lib as cl
-import taxonomy_lib as tl
 fc = cl.fc
 
 OUTDIR = fc.output_root() / "read_categories"
 PC = "protein_coding"
 PP = "processed_pseudogene"
 from categories import MISSING_AS as _MISSING_AS  # noqa: E402
-
-def read_genome_multi_records_flagged(bam_path, target_qnames):
-    """qname -> [(chrom, pos5, AS, is_secondary)] for every reported genome locus of each
-    NH>1-primary read in `target_qnames`. Full BAM pass; keeps the primary/secondary flag
-    and per-record AS needed for the tie test."""
-    import pysam
-    out = defaultdict(list)
-    primary_multi = set()
-    bam = pysam.AlignmentFile(str(bam_path), "rb")
-    for r in bam.fetch(until_eof=True):
-        if r.is_unmapped or r.is_supplementary:
-            continue
-        q = r.query_name
-        if q not in target_qnames:
-            continue
-        try:
-            nh = r.get_tag("NH")
-        except KeyError:
-            nh = None
-        if not r.is_secondary and nh is not None and nh > 1:
-            primary_multi.add(q)
-        if nh is None or nh <= 1:
-            continue
-        blocks = r.get_blocks()
-        if not blocks:
-            continue
-        pos5 = blocks[0][0] if not r.is_reverse else blocks[-1][1] - 1
-        AS = int(r.get_tag("AS")) if r.has_tag("AS") else _MISSING_AS
-        out[q].append((r.reference_name, pos5, AS, bool(r.is_secondary)))
-    bam.close()
-    return {q: recs for q, recs in out.items() if q in primary_multi}
 
 #: Columns `classify_loci_frame` consumes. `qname` is an opaque key: the per-gene callers pass
 #: read-id strings, but a bulk caller may pass integer read indices instead so that millions of

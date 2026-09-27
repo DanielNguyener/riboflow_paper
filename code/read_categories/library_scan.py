@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
 """The per-library category tables of Figure 4, over the whole cohort.
 
-    python code/read_categories/library_scan.py taxonomy     # 4A/4B: the five categories
-    python code/read_categories/library_scan.py tie_biotype  # 4C: pseudogene ties
-    python code/read_categories/library_scan.py reach        # 4D: omitted-exon overlap
+    python code/read_categories/library_scan.py                 # every library, 2 workers
+    python code/read_categories/library_scan.py --sample HeLa   # one library, this process
 
-Each analysis scans the two post-dedup BAMs per library (transcriptome presence = any
-primary; see categories.py), stages one TSV per library, and concatenates them into its
-master table. `--sample X` runs one library in this process; the cohort driver spawns one
-such worker per library.
+One worker reads a library's two post-dedup BAMs once each (transcriptome presence is any
+primary alignment; see categories.py) and computes all three Figure 4 tables from that
+single scan:
+
+    taxonomy_all.tsv                 the five category counts per library (4A, 4B)
+    multimap_tie_biotype_all.tsv     protein-coding-pseudogene ties (4C)
+    genome_anchored_reach_all.tsv    omitted alternative-exon overlap (4D)
+
+Each worker stages one row per table; the driver runs the workers and concatenates the
+staged rows into the three master tables.
 """
 from __future__ import annotations
 
 import argparse
 import subprocess
 import sys
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
+import pysam
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -26,6 +33,7 @@ import reach_lib as rl  # noqa: E402
 import reference_lib as cl  # noqa: E402
 import taxonomy_lib as tl  # noqa: E402
 import tie_biotype_lib as tie  # noqa: E402
+from categories import MISSING_AS  # noqa: E402
 fc = tl.fc
 
 DEFAULT_WORKERS = 2
@@ -33,7 +41,7 @@ DEFAULT_WORKERS = 2
 def _out(*parts):
     return fc.output_root().joinpath("read_categories", *parts)
 
-ANALYSES = {
+TABLES = {
     "taxonomy": {
         "staging": _out("_staging_taxonomy"),
         "master": _out("taxonomy_all.tsv"),
@@ -48,8 +56,69 @@ ANALYSES = {
     },
 }
 
-TAXONOMY_TSV = ANALYSES["taxonomy"]["master"]
 CATS = ["cross_pc_pp", "cross_pp_pc", "same_pc_pc", "same_pp_pp"]
+
+
+# ── the one scan: both BAMs read once, everything the three tables need ───────
+
+def scan(sample, log=print):
+    """Read the two BAMs once and return the shared per-read state.
+
+    The transcriptome pass collects the presence set. The genome pass then collects, in
+    one traversal: the primary and unique read-id sets (taxonomy), every genome locus of
+    the multimapping presence-set reads (the tie test), and the primary blocks of the
+    unique reads outside the presence set (the reach test).
+    """
+    log(f"[{sample}] transcriptome pass (presence set)...")
+    t_all = set()
+    bam = pysam.AlignmentFile(str(fc.txome_bam(sample)), "rb")
+    for r in bam.fetch(until_eof=True):
+        if r.is_unmapped or r.is_secondary or r.is_supplementary:
+            continue
+        t_all.add(r.query_name)
+    bam.close()
+
+    log(f"[{sample}] n_txome_present={len(t_all):,}; genome pass...")
+    g_all, g_uniq = set(), set()
+    tie_records = defaultdict(list)
+    primary_multi = set()
+    gUtA_blocks = {}
+    bam = pysam.AlignmentFile(str(fc.genome_bam(sample)), "rb")
+    for r in bam.fetch(until_eof=True):
+        if r.is_unmapped or r.is_supplementary:
+            continue
+        q = r.query_name
+
+        if not r.is_secondary:
+            g_all.add(q)
+            if fc.is_unique_genome_read(r):
+                g_uniq.add(q)
+                if q not in t_all:
+                    blocks = r.get_blocks()
+                    if blocks:
+                        strand = "-" if r.is_reverse else "+"
+                        gUtA_blocks[q] = (r.reference_name, strand, blocks)
+
+        if q in t_all:
+            try:
+                nh = r.get_tag("NH")
+            except KeyError:
+                nh = None
+            if not r.is_secondary and nh is not None and nh > 1:
+                primary_multi.add(q)
+            if nh is None or nh <= 1:
+                continue
+            blocks = r.get_blocks()
+            if not blocks:
+                continue
+            pos5 = blocks[0][0] if not r.is_reverse else blocks[-1][1] - 1
+            score = int(r.get_tag("AS")) if r.has_tag("AS") else MISSING_AS
+            tie_records[q].append((r.reference_name, pos5, score, bool(r.is_secondary)))
+    bam.close()
+
+    tie_recs = {q: recs for q, recs in tie_records.items() if q in primary_multi}
+    return {"t_all": t_all, "g_all": g_all, "g_uniq": g_uniq,
+            "tie_records": tie_recs, "gUtA_blocks": gUtA_blocks}
 
 
 # ── taxonomy: one row of the five categories per library (4A, 4B) ─────────────
@@ -67,37 +136,50 @@ def build_row(sample, counts, n_universe):
         row[f"n_txome_{t}"] = sum(counts[(g, t)] for g in tl.GENOME_STATES if (g, t) in counts)
     return row
 
-def taxonomy_sample(sample, log=print):
-    counts, n_universe = tl.classify_sample(sample)
+
+def taxonomy_row(sample, state, log=print):
+    g_all, g_uniq, t_all = state["g_all"], state["g_uniq"], state["t_all"]
+    log(f"  [{sample}] genome mapped={len(g_all):,} unique={len(g_uniq):,} | "
+        f"txome mapped={len(t_all):,}")
+
+    inter = len(g_all & t_all)
+    smaller = min(len(g_all), len(t_all))
+    frac = inter / smaller if smaller else 0.0
+    assert frac > 0.05, (
+        f"[{sample}] QNAME-namespace mismatch: genome n txome intersection {inter:,} "
+        f"= {frac:.1%} of min({len(g_all):,},{len(t_all):,}) — suffix/dedup bug suspected")
+    if frac < 0.60:
+        log(f"  [{sample}] WARNING: low qname overlap ({frac:.1%} of smaller route) — "
+            f"asymmetric read recovery; expect a large `absent` fraction")
+
+    counts = {cell: 0 for cell in tl.CELLS}
+    for q in g_all:
+        gs = "unique" if q in g_uniq else "multi"
+        counts[(gs, "present" if q in t_all else "absent")] += 1
+    counts[("absent", "present")] = len(t_all - g_all)
+
+    n_universe = len(g_all | t_all)
+    assert sum(counts.values()) == n_universe, \
+        f"[{sample}] cell sum {sum(counts.values()):,} != n_universe {n_universe:,}"
+
     row = build_row(sample, counts, n_universe)
-    _stage("taxonomy", sample, row)
     log(f"[{sample}] n_universe={n_universe:,}  " + "  ".join(
         "%s=%.2f%%" % (tl.cell_key(g, t), row["pct_" + tl.cell_key(g, t)])
         for g, t in tl.CELLS))
-    return row
+    return row, counts
 
 
 # ── tie_biotype: protein-coding-pseudogene ties per library (4C) ──────────────
 
-def tie_sample(sample, log=print):
+def tie_row(sample, state, tax_counts, log=print):
+    recs = state["tie_records"]
+    expected = tax_counts[("multi", "present")]
+    assert len(recs) == expected, (
+        f"[{sample}] tie population {len(recs)} disagrees with the taxonomy gM_tP count "
+        f"{expected}")
+
     exon_pr = cl.load_exon_gene_pr()
     gene_pr = cl.gene_body_pr()
-
-    log(f"[{sample}] reading txome BAM (present qname set)...")
-    t_all = tie.tl.txome_present_qnames(fc.txome_bam(sample))
-    log(f"[{sample}] n_txome_present={len(t_all):,}; enumerating genome multimapper loci...")
-    recs = tie.read_genome_multi_records_flagged(fc.genome_bam(sample), t_all)
-    n_reads = len(recs)
-
-    if TAXONOMY_TSV.exists():
-        tr = pd.read_csv(TAXONOMY_TSV, sep="\t")
-        tr = tr[tr["sample"] == sample]
-        if len(tr):
-            exp = int(tr.iloc[0]["n_gM_tP"])
-            log(f"[{sample}] taxonomy check dark-green reads {n_reads} vs {exp} -> "
-                f"{'OK' if n_reads == exp else 'MISMATCH'}")
-            assert n_reads == exp, f"[{sample}] dark-green population disagrees with taxonomy_all.tsv"
-
     counts, n_reads = tie.categorize(recs, exon_pr, gene_pr)
     row = {"sample": sample, "n_reads": n_reads, **{c: counts[c] for c in CATS},
            "n_qualifying": counts["n_qualifying"]}
@@ -109,31 +191,22 @@ def tie_sample(sample, log=print):
         f"({row['pct_n_qualifying']:.1f}%): "
         f"cross_pc_pp {counts['cross_pc_pp']:,}, cross_pp_pc {counts['cross_pp_pc']:,}, "
         f"same_pc_pc {counts['same_pc_pc']:,}, same_pp_pp {counts['same_pp_pp']:,}")
-
-    _stage("tie_biotype", sample, row)
     return row
 
 
 # ── reach: omitted alternative-exon overlap per library (4D) ──────────────────
 
-def reach_sample(sample, log=print):
-    tax_row = pd.read_csv(TAXONOMY_TSV, sep="\t").set_index("sample").loc[sample]
-
-    n_genome_unique = int(tax_row["n_genome_unique"])
-    n_gUtP = int(tax_row["n_gU_tP"])
-    n_gUtA = int(tax_row["n_gU_tA"])
-    assert n_gUtP + n_gUtA == n_genome_unique, "gU partition mismatch vs taxonomy_all.tsv"
+def reach_row(sample, state, tax_counts, log=print):
+    n_gUtP = tax_counts[("unique", "present")]
+    n_gUtA = tax_counts[("unique", "absent")]
+    n_genome_unique = n_gUtP + n_gUtA
     log(f"[{sample}] N_G={n_genome_unique} gU_tP={n_gUtP} gU_tA={n_gUtA}")
 
-    log(f"[{sample}] recomputing gU_tA qname set...")
-    genome_all, genome_uniq = rl.tl.genome_status_sets(fc.genome_bam(sample))
-    txome_all = rl.tl.txome_present_qnames(fc.txome_bam(sample))
-    gUtA_qnames = genome_uniq - txome_all
+    gUtA_qnames = state["g_uniq"] - state["t_all"]
+    genome_blocks = state["gUtA_blocks"]
     assert len(gUtA_qnames) == n_gUtA, (
-        f"recomputed gU_tA ({len(gUtA_qnames)}) != taxonomy_all.tsv ({n_gUtA})")
-
-    log(f"[{sample}] reading genome blocks for {len(gUtA_qnames)} gU_tA reads...")
-    genome_blocks = rl.read_genome_blocks(fc.genome_bam(sample), gUtA_qnames)
+        f"[{sample}] gU_tA set ({len(gUtA_qnames)}) disagrees with the taxonomy count "
+        f"({n_gUtA})")
 
     transcript_payload = cl.build_transcript_table()
     table = transcript_payload["table"]
@@ -168,14 +241,8 @@ def reach_sample(sample, log=print):
         100.0 * len(overlap_qnames) / n_gUtA if n_gUtA else float("nan"))
     log(f"[{sample}] omitted-exon overlap {len(overlap_qnames)} / {n_gUtA} "
         f"({row['pct_omitted_exon_overlap']:.2f}%)")
-
-    _stage("reach", sample, row)
     return row
 
-def _all_gene_body_pr():
-    import pyranges as pr
-    df = fc.config.load_all_gene_bodies()
-    return pr.PyRanges(df.reset_index(drop=True))
 
 def _all_gene_body_pr():
     import pyranges as pr
@@ -183,21 +250,29 @@ def _all_gene_body_pr():
     return pr.PyRanges(df.reset_index(drop=True))
 
 
-WORKERS = {"taxonomy": taxonomy_sample, "tie_biotype": tie_sample, "reach": reach_sample}
-
+# ── the per-library worker ─────────────────────────────────────────────────────
 
 def _stage(analysis, sample, row):
-    staging = ANALYSES[analysis]["staging"]
+    staging = TABLES[analysis]["staging"]
     staging.mkdir(parents=True, exist_ok=True)
     dest = staging / f"{sample}.tsv"
     pd.DataFrame([row]).to_csv(dest, sep="\t", index=False)
     print(f"[{sample}] wrote {dest}", flush=True)
 
 
+def run_one(sample, log=print):
+    """One library: scan both BAMs once, stage the three rows."""
+    state = scan(sample, log)
+    tax, tax_counts = taxonomy_row(sample, state, log)
+    _stage("taxonomy", sample, tax)
+    _stage("tie_biotype", sample, tie_row(sample, state, tax_counts, log))
+    _stage("reach", sample, reach_row(sample, state, tax_counts, log))
+
+
 # ── the cohort driver ──────────────────────────────────────────────────────────
 
-def run_sample(analysis, sample):
-    command = [sys.executable, str(HERE / "library_scan.py"), analysis, "--sample", sample]
+def run_sample(sample):
+    command = [sys.executable, str(HERE / "library_scan.py"), "--sample", sample]
     try:
         subprocess.run(command, check=True)
     except subprocess.CalledProcessError as exc:
@@ -206,11 +281,10 @@ def run_sample(analysis, sample):
         return sample
     return None
 
+
 def aggregate(analysis, samples):
     """Concatenate the per-sample staging TSVs into the analysis's master table."""
-    import pandas as pd
-
-    spec = ANALYSES[analysis]
+    spec = TABLES[analysis]
     staging, master = spec["staging"], spec["master"]
     frames = [pd.read_csv(staging / ("%s.tsv" % s), sep="\t")
               for s in samples if (staging / ("%s.tsv" % s)).exists()]
@@ -221,23 +295,12 @@ def aggregate(analysis, samples):
     master.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(master, sep="\t", index=False, lineterminator="\n")
     print("\nwrote %s (%d samples)" % (master, table["sample"].nunique()))
-    _summarise(analysis, table)
     return master
 
-def _summarise(analysis, table):
-    """A short console summary. Console only -- nothing downstream parses this."""
-    if analysis == "taxonomy":
-        cells = ["pct_" + tl.cell_key(g, t) for g, t in tl.CELLS]
-        if all(c in table.columns for c in cells):
-            median = table[cells].median()
-            print("core-cell medians: " + "  ".join(
-                "%s=%.2f%%" % (c.replace("pct_", ""), median[c]) for c in cells))
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("analysis", choices=sorted(ANALYSES),
-                        help="which read-taxonomy analysis to run over the cohort")
     parser.add_argument("--sample", default=None,
                         help="run ONE library in this process (the worker mode)")
     parser.add_argument("--samples", default=None, help="comma-separated subset")
@@ -245,7 +308,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.sample:
-        WORKERS[args.analysis](args.sample)
+        run_one(args.sample)
         return 0
 
     samples = fc.discover_samples()
@@ -255,26 +318,23 @@ def main(argv=None):
     if not samples:
         parser.error("no samples discovered")
 
-    spec = ANALYSES[args.analysis]
-    spec["staging"].mkdir(parents=True, exist_ok=True)
-
-    print("[%s] %d sample(s), %d worker(s)"
-          % (args.analysis, len(samples), args.workers), flush=True)
+    print("[read_categories] %d sample(s), %d worker(s)"
+          % (len(samples), args.workers), flush=True)
     failures = []
     with ThreadPoolExecutor(max_workers=min(args.workers, len(samples))) as pool:
-        futures = {pool.submit(run_sample, args.analysis, s): s
-                   for s in samples}
+        futures = {pool.submit(run_sample, s): s for s in samples}
         for future in as_completed(futures):
             failed = future.result()
             if failed:
                 failures.append(failed)
 
-    aggregate(args.analysis, samples)
+    for analysis in ("taxonomy", "tie_biotype", "reach"):
+        aggregate(analysis, samples)
     if failures:
         print("FAILURES (%d): %s" % (len(failures), failures), file=sys.stderr)
         return 1
     return 0
 
+
 if __name__ == "__main__":
     sys.exit(main())
-

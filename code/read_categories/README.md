@@ -8,7 +8,7 @@ and unique or multimapping in the genome). All scripts here are run by
 | script | what it does |
 |---|---|
 | `categories.py` | Defines the five categories once: keys, names, colors and the shared alignment rules. Everything else imports it. |
-| `library_scan.py` | Figure 4. Scans each library's two BAMs and writes one table per analysis: taxonomy (the five counts, panels 4A and 4B), tie_biotype (pseudogene ties, 4C) and reach (omitted alternative-exon overlap, 4D). |
+| `library_scan.py` | Figure 4. Reads each library's two BAMs once and writes all three tables from that one scan: taxonomy (the five counts, panels 4A and 4B), tie_biotype (pseudogene ties, 4C) and reach (omitted alternative-exon overlap, 4D). |
 | `taxonomy_lib.py` | Which reads are in which BAM, and whether they map uniquely. |
 | `tie_biotype_lib.py` | The pseudogene-tie test: a multimapper whose best placements sit on a protein-coding gene and a processed pseudogene. |
 | `reach_lib.py` | Where genome-only unique reads fall relative to the selected transcript. |
