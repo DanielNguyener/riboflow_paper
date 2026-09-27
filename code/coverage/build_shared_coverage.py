@@ -49,13 +49,19 @@ def _cds_pyranges(cds_table):
     return pr.PyRanges(cds_table[["Chromosome", "Start", "End", "Strand",
                                   "transcript_id", "cds_cum_start"]])
 
-def read_genome_psites(bam_path, offsets):
-    """Stream the genome BAM -> per-read (chrom, psite, strand) for unique primaries
-    with a read length in `offsets`; placement is CIGAR-aware (never inside an intron)."""
+def read_genome_signals(bam_path, offsets):
+    """Stream the genome BAM once for BOTH signals.
+
+    Unique primaries with a read length in `offsets`. P-sites are CIGAR-aware (never
+    inside an intron) and undefined placements are dropped from the P-site signal only;
+    footprints are the aligned blocks (`get_blocks()` splits on N, introns excluded).
+    """
     import pysam
     import psite_placement
 
-    chroms, positions, strands = [], [], []
+    p_chroms, p_positions, p_strands = [], [], []
+    f_chroms, f_starts, f_ends, f_strands, f_read_ids = [], [], [], [], []
+    index = 0
     bam = pysam.AlignmentFile(str(bam_path), "rb")
     try:
         for read in bam.fetch(until_eof=True):
@@ -64,41 +70,29 @@ def read_genome_psites(bam_path, offsets):
             offset = offsets.get(read.query_length)
             if offset is None:
                 continue
-            position = psite_placement.place(read, offset)
-            if position is None:
-                continue
-            chroms.append(read.reference_name)
-            positions.append(position)
-            strands.append("-" if read.is_reverse else "+")
-    finally:
-        bam.close()
-    return chroms, np.asarray(positions, dtype=np.int64), strands
-
-def read_genome_blocks(bam_path, lengths):
-    """Stream the genome BAM -> aligned blocks; `get_blocks()` splits on N (introns excluded)."""
-    import pysam
-
-    chroms, starts, ends, strands, read_ids = [], [], [], [], []
-    index = 0
-    bam = pysam.AlignmentFile(str(bam_path), "rb")
-    try:
-        for read in bam.fetch(until_eof=True):
-            if not bam_inputs.is_unique_genome_read(read):
-                continue
-            if read.query_length not in lengths:
-                continue
             strand = "-" if read.is_reverse else "+"
+
+            position = psite_placement.place(read, offset)
+            if position is not None:
+                p_chroms.append(read.reference_name)
+                p_positions.append(position)
+                p_strands.append(strand)
+
             for block_start, block_end in read.get_blocks():
-                chroms.append(read.reference_name)
-                starts.append(block_start)
-                ends.append(block_end)
-                strands.append(strand)
-                read_ids.append(index)
+                f_chroms.append(read.reference_name)
+                f_starts.append(block_start)
+                f_ends.append(block_end)
+                f_strands.append(strand)
+                f_read_ids.append(index)
             index += 1
     finally:
         bam.close()
-    return (chroms, np.asarray(starts, dtype=np.int64), np.asarray(ends, dtype=np.int64),
-            strands, np.asarray(read_ids, dtype=np.int64), index)
+    psites = (p_chroms, np.asarray(p_positions, dtype=np.int64), p_strands)
+    blocks = (f_chroms, np.asarray(f_starts, dtype=np.int64),
+              np.asarray(f_ends, dtype=np.int64), f_strands,
+              np.asarray(f_read_ids, dtype=np.int64), index)
+    return psites, blocks
+
 
 def _stage1_psite_assignment(chroms, positions, strands, cds_pr, cds_total_by_id, tx_index_of_id):
     """The P-site rule: FIRST CDS-exon overlap, clipped to [0, cds_total)."""
@@ -452,8 +446,8 @@ def build(config):
         assay=config.assay)
 
     try:
-        log("genome P-sites: streaming the BAM")
-        chroms, positions, strands = read_genome_psites(
+        log("genome: streaming the BAM once for both signals")
+        (chroms, positions, strands), genome_blocks = read_genome_signals(
             config.genome_bam, genome_offsets)
         log("  %d reads placed; projecting" % len(chroms))
         indices, stats = project_genome_psites(
@@ -476,8 +470,9 @@ def build(config):
         writer.write_signal("txome_psite", values)
         del values
 
-        log("genome footprints: streaming the BAM")
-        blocks = read_genome_blocks(config.genome_bam, set(genome_offsets))
+        # already read, in the same pass as the genome P-sites
+        blocks = genome_blocks
+        del genome_blocks
         log("  %d reads, %d aligned blocks; projecting" % (blocks[5], len(blocks[0])))
         starts, ends, stats = project_genome_footprints(
             blocks, exon_pr, cds_pr, index_of_id, coverage_offset)

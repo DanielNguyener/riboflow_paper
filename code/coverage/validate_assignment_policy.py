@@ -89,16 +89,14 @@ def measure(sample, genome_bam, gtf, appris, regions, qc_genome, annotation_cach
     offsets = psite_placement.load_offsets(qc_genome, sample)
     log("offsets: %s" % offsets)
 
-    log("P-sites: streaming the genome BAM")
-    chroms, positions, strands = bsc.read_genome_psites(genome_bam, offsets)
+    log("streaming the genome BAM once for both signals")
+    (chroms, positions, strands), blocks = bsc.read_genome_signals(genome_bam, offsets)
     psite_counts = psite_exposure(chroms, positions, strands, cds_pr)
     _indices, psite_stats = bsc.project_genome_psites(
         chroms, positions, strands, exon_pr, cds_pr, cds_total_by_id,
         index_of_id, coverage_offset)
     del chroms, positions, strands
 
-    log("footprints: streaming the genome BAM")
-    blocks = bsc.read_genome_blocks(genome_bam, set(offsets))
     footprint_counts = footprint_exposure(blocks, cds_pr)
     _starts, _ends, footprint_stats = bsc.project_genome_footprints(
         blocks, exon_pr, cds_pr, index_of_id, coverage_offset)
