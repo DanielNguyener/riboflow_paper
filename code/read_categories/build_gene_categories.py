@@ -35,7 +35,7 @@ CODE = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(CODE, "common"))
 import inputs as paths  # noqa: E402
 
-DEFAULT_OUTPUT = os.path.join(paths.REPO, "results", "alignment_fate", "gene_partition_route7")
+DEFAULT_OUTPUT = os.path.join(paths.REPO, "results", "read_categories", "gene_partition_route7")
 
 #: The validated counts (gene-partition segment semantics audit). Refusing to write anything else
 #: is the point: a short bar is the one failure a stacked figure cannot show you.

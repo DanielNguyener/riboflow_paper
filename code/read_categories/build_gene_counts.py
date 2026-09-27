@@ -90,7 +90,7 @@ METRIC_COLUMNS = tuple(name for name, _segments in ROUTE5_FOLD)
 
 #: The shipped Figure 5A counts. Reproducible only from the post-dedup BAMs they were
 #: built from, so the comparison is reported, not enforced.
-EXPECT_TABLE = REPO / "data" / "alignment_fate" / "gene_partition_route7.tsv"
+EXPECT_TABLE = REPO / "data" / "read_categories" / "gene_partition_route7.tsv"
 CHECK_GENES = ("COMT", "GAPDH", "LRRFIP1")
 
 COLUMNS = ["gene", "gene_id", "transcript_id", "status", "n_union"] + list(METRIC_COLUMNS)
@@ -102,7 +102,7 @@ COLUMNS = ["gene", "gene_id", "transcript_id", "status", "n_union"] + list(METRI
 # ── the chain, imported by path ──────────────────────────────────────────────
 
 def load_partition_lib():
-    """`alignment_fate.gene_read_partition_lib` -- the ten-category chain."""
+    """`gene_read_partition_lib` -- the ten-category chain."""
     return inputs.import_from(REPO / "code" / "read_categories", "gene_read_partition_lib",
                               extra=(REPO / "code" / "common",
                                      REPO / "code" / "common" / "ribo_seq_qc"))
@@ -348,7 +348,7 @@ def main(argv=None):
     parser.add_argument("--verify", type=int, default=0,
                         help="genes to cross-check against compute_partition (slow: it "
                              "re-reads both BAMs once)")
-    parser.add_argument("--expect", help="default: data/alignment_fate/gene_partition_route7.tsv")
+    parser.add_argument("--expect", help="default: data/read_categories/gene_partition_route7.tsv")
     args = parser.parse_args(argv)
 
     sys.path.insert(0, str(HERE))

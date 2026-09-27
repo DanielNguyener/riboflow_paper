@@ -597,7 +597,7 @@ def main(argv=None):
                         help="repo-relative or absolute; the genome route's QC table")
     parser.add_argument("--qc-txome", default=QC_TXOME_DEFAULT,
                         help="the transcriptome route's QC table")
-    parser.add_argument("--output", help="output stem; default results/alignment_fate/locus_<GENE>")
+    parser.add_argument("--output", help="output stem; default results/read_categories/locus_<GENE>")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 
@@ -607,7 +607,7 @@ def main(argv=None):
     for qc in (qc_genome, qc_txome):
         if not os.path.exists(qc):
             die("QC table missing: %s" % qc)
-    stem = args.output or os.path.join(paths.REPO, "results", "alignment_fate",
+    stem = args.output or os.path.join(paths.REPO, "results", "read_categories",
                                        "locus_%s" % args.gene)
     if os.path.exists(stem + ".npz") and not args.force:
         die("%s.npz exists; pass --force" % stem)
@@ -621,7 +621,7 @@ def main(argv=None):
                                    "sha256": paths.sha256_of(qc_genome)}
     meta["inputs"]["qc_txome"] = {"file": os.path.relpath(qc_txome, str(paths.REPO)),
                                   "sha256": paths.sha256_of(qc_txome)}
-    meta["builder"] = "code/alignment_fate/build_locus_data.py"
+    meta["builder"] = "code/read_categories/build_locus_data.py"
 
     os.makedirs(os.path.dirname(stem), exist_ok=True)
     np.savez(stem + ".npz", **arrays)          # uncompressed: deterministic bytes

@@ -196,7 +196,7 @@ panels:
     generator: code/panels/plot_cohort_panels.py
     args: {panel: A, width_pt: 140.0, height_in: 4.75, font_pt: 8.0}
     inputs:
-      taxonomy:    data/read_taxonomy/taxonomy/taxonomy_all.tsv
+      taxonomy:    data/read_categories/taxonomy_all.tsv
       samples_csv: supporting_information/S1_Table/samples.csv
     output: results/panels/fig04A_plos_route_read_counts
 
@@ -207,7 +207,7 @@ panels:
     generator: code/panels/plot_cohort_panels.py
     args: {panel: B, width_pt: 142.0, height_in: 5.20, font_pt: 8.0}   # taller: union key
     inputs:
-      taxonomy:    data/read_taxonomy/taxonomy/taxonomy_all.tsv
+      taxonomy:    data/read_categories/taxonomy_all.tsv
       samples_csv: supporting_information/S1_Table/samples.csv
     output: results/panels/fig04B_plos_read_id_union
 
@@ -218,8 +218,8 @@ panels:
     generator: code/panels/plot_cohort_panels.py
     args: {panel: C, width_pt: 103.0, height_in: 4.75, font_pt: 8.0}
     inputs:
-      tie_master: data/read_taxonomy/multimap_biotype/multimap_tie_biotype_all.tsv
-      taxonomy:   data/read_taxonomy/taxonomy/taxonomy_all.tsv
+      tie_master: data/read_categories/multimap_tie_biotype_all.tsv
+      taxonomy:   data/read_categories/taxonomy_all.tsv
     output: results/panels/fig04C_plos_multimap_tie_biotype
 
   - id: fig04D_plos
@@ -229,8 +229,8 @@ panels:
     generator: code/panels/plot_cohort_panels.py
     args: {panel: D, width_pt: 103.0, height_in: 4.75, font_pt: 8.0}
     inputs:
-      reach_master: data/read_taxonomy/reach/genome_anchored_reach_all.tsv
-      taxonomy:     data/read_taxonomy/taxonomy/taxonomy_all.tsv
+      reach_master: data/read_categories/genome_anchored_reach_all.tsv
+      taxonomy:     data/read_categories/taxonomy_all.tsv
     output: results/panels/fig04D_plos_nonselected_isoform_reach
 
   - id: fig05A
@@ -248,8 +248,8 @@ panels:
       compact: true
     fit: {width_pt: 532.0, height_in: 2.05}
     inputs:
-      derived_table: data/alignment_fate/gene_partition_route7.tsv
-      derived_meta:  data/alignment_fate/gene_partition_route7.json
+      derived_table: data/read_categories/gene_partition_route7.tsv
+      derived_meta:  data/read_categories/gene_partition_route7.json
     output: results/panels/fig05A_gene_read_partition
 
   - id: fig05B
@@ -271,8 +271,8 @@ panels:
       compact: true
     fit: {width_pt: 532.0, height_in: 2.05}
     inputs:
-      derived_npz:  data/alignment_fate/locus_LRRFIP1.npz
-      derived_meta: data/alignment_fate/locus_LRRFIP1.json
+      derived_npz:  data/read_categories/locus_LRRFIP1.npz
+      derived_meta: data/read_categories/locus_LRRFIP1.json
     output: results/panels/fig05B_LRRFIP1_locus_coverage
 
   # ── Figure 6 ────────────────────────────────────────────────────────────────

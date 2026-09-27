@@ -206,7 +206,7 @@ def stage_gene_partition(samples, args):
                "--genome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_genome_bam"),
                "--transcriptome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_txome_bam"),
                "--gene-id", ",".join(PARTITION_GENES),
-               "--output", args.out / "alignment_fate" / "gene_partition_route7", "--force"]
+               "--output", args.out / "read_categories" / "gene_partition_route7", "--force"]
     if coverage.exists():
         command += ["--coverage", coverage]
     return sh(command)
@@ -218,7 +218,7 @@ def stage_locus(samples, args):
                "--gene", LOCUS_GENE, "--sample", EXAMPLE_SAMPLE, "--gsm", EXAMPLE_GSM,
                "--bams", args.bams, "--gtf", args.gtf, "--appris", args.appris,
                "--qc-genome", qc_genome, "--qc-txome", qc_txome,
-               "--output", args.out / "alignment_fate" / ("locus_%s" % LOCUS_GENE),
+               "--output", args.out / "read_categories" / ("locus_%s" % LOCUS_GENE),
                "--force"])
 
 def stage_clustering(samples, args):
@@ -294,18 +294,18 @@ STAGES = [
      ("te_route/tables/per_gene_delta.tsv",
       "te_route/tables/route_correlation.tsv")),
     ("gene_partition", stage_gene_partition, ("annotation",),     True,
-     ("alignment_fate/gene_partition_route7.tsv",
-      "alignment_fate/gene_partition_route7.json")),
+     ("read_categories/gene_partition_route7.tsv",
+      "read_categories/gene_partition_route7.json")),
     ("locus",        stage_locus,        ("annotation", "qc"),     True,
-     ("alignment_fate/locus_LRRFIP1.npz",
-      "alignment_fate/locus_LRRFIP1.json")),
+     ("read_categories/locus_LRRFIP1.npz",
+      "read_categories/locus_LRRFIP1.json")),
     ("taxonomy",     functools.partial(_taxonomy_driver, "taxonomy"), ("annotation",), True,
-     ("read_taxonomy/taxonomy/taxonomy_all.tsv",)),
+     ("read_categories/taxonomy_all.tsv",)),
     ("reach",        functools.partial(_taxonomy_driver, "reach"),
      ("taxonomy",), True,
-     ("read_taxonomy/reach/genome_anchored_reach_all.tsv",)),
+     ("read_categories/genome_anchored_reach_all.tsv",)),
     ("multimap_biotype", functools.partial(_taxonomy_driver, "tie_biotype"), ("annotation",), True,
-     ("read_taxonomy/multimap_biotype/multimap_tie_biotype_all.tsv",)),
+     ("read_categories/multimap_tie_biotype_all.tsv",)),
     ("clustering",   stage_clustering,   ("annotation",),          True,
      ("clustering/HeLa.post_dedup.gene_counts.tsv",
       "clustering/HeLa.post_dedup.clusters_k4.tsv",
@@ -320,9 +320,9 @@ STAGE_STAGING = {
     "qc": ("ribo_seq_qc/genome/tables/_staging",
            "ribo_seq_qc/transcriptome/tables/_staging"),
     "te_counts": ("ribo_rna/_route_scratch",),
-    "taxonomy": ("read_taxonomy/taxonomy/_staging",),
-    "reach": ("read_taxonomy/reach/_staging",),
-    "multimap_biotype": ("read_taxonomy/multimap_biotype/_staging_tie",),
+    "taxonomy": ("read_categories/_staging_taxonomy",),
+    "reach": ("read_categories/_staging_reach",),
+    "multimap_biotype": ("read_categories/_staging_tie_biotype",),
 }
 
 #: Shipped under data/ but built by no stage: third-party inputs, recorded with their source.

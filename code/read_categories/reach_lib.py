@@ -17,7 +17,7 @@ for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc")):
 import bam_inputs as fc
 import taxonomy_lib as tl
 
-OUTDIR = fc.output_root() / "read_taxonomy" / "reach"
+OUTDIR = fc.output_root() / "read_categories"
 
 #: How a genome-unique read that is ABSENT from the transcriptome BAM relates to the
 #: selected transcript of its gene.
@@ -61,7 +61,7 @@ def omitted_pc_genes(exon_gene_df, selected_genes):
     return all_pc - selected_genes
 
 # ── direct overlap with omitted exonic sequence (Figure 4D) ─────────────────
-# The gene-level test of Figure 5A (`alignment_fate/gene_read_partition_lib.
+# The gene-level test of Figure 5A (`read_categories/gene_read_partition_lib.
 # alt_exon_overlap`) applied cohort-wide: a gU_tA read counts once per library when an
 # aligned block of its primary genomic alignment overlaps exonic sequence of ANY gene
 # that is absent from that gene's selected transcript. Strand-agnostic, indifferent to

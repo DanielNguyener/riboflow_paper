@@ -20,7 +20,7 @@ for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc")):
         sys.path.insert(0, _entry)
 import bam_inputs as fc
 
-CACHE_DIR = fc.output_root() / ".cache" / "read_taxonomy"
+CACHE_DIR = fc.output_root() / ".cache" / "read_categories"
 EXON_GENE_CACHE = CACHE_DIR / "exon_gene_table.pkl"
 TRANSCRIPT_TABLE_CACHE = CACHE_DIR / "transcript_coord_table.pkl"
 
@@ -184,7 +184,7 @@ def gene_body_pr(rebuild=False):
             gene_type=("gene_type", "first"),
         ).reset_index()
 
-    cache = fc.output_root() / ".cache" / "read_taxonomy" / "gene_body.pkl"
+    cache = fc.output_root() / ".cache" / "read_categories" / "gene_body.pkl"
     if rebuild and cache.exists():
         cache.unlink()
     frame = fc.config.cached_frame(

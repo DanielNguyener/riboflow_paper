@@ -31,20 +31,20 @@ fc = tl.fc
 DEFAULT_WORKERS = 2
 
 def _out(*parts):
-    return fc.output_root().joinpath("read_taxonomy", *parts)
+    return fc.output_root().joinpath("read_categories", *parts)
 
 ANALYSES = {
     "taxonomy": {
-        "staging": _out("taxonomy", "_staging"),
-        "master": _out("taxonomy", "taxonomy_all.tsv"),
+        "staging": _out("_staging_taxonomy"),
+        "master": _out("taxonomy_all.tsv"),
     },
     "reach": {
-        "staging": _out("reach", "_staging"),
-        "master": _out("reach", "genome_anchored_reach_all.tsv"),
+        "staging": _out("_staging_reach"),
+        "master": _out("genome_anchored_reach_all.tsv"),
     },
     "tie_biotype": {
-        "staging": _out("multimap_biotype", "_staging_tie"),
-        "master": _out("multimap_biotype", "multimap_tie_biotype_all.tsv"),
+        "staging": _out("_staging_tie_biotype"),
+        "master": _out("multimap_tie_biotype_all.tsv"),
     },
 }
 

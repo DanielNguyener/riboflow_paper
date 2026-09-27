@@ -20,7 +20,7 @@ import reference_lib as cl
 import taxonomy_lib as tl
 fc = cl.fc
 
-OUTDIR = fc.output_root() / "read_taxonomy" / "multimap_biotype"
+OUTDIR = fc.output_root() / "read_categories"
 PC = "protein_coding"
 PP = "processed_pseudogene"
 from categories import MISSING_AS as _MISSING_AS  # noqa: E402
