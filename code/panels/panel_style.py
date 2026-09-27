@@ -81,6 +81,12 @@ def resolve_font(family=FONT_FAMILY):
         "change FONT_FAMILY in code/panels/panel_style.py."
         % ", ".join([family] + list(FONT_FALLBACKS)))
 
+def add_output_args(parser):
+    """the output triple every panel generator takes"""
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--format", dest="formats", default="pdf")
+    parser.add_argument("--force", action="store_true")
+
 def resolve_formats(spec):
     """'pdf,svg,png' -> ('pdf', 'svg', 'png'), validated."""
     if not spec:
@@ -129,7 +135,7 @@ def legend_below(axis, handles=None, labels=None, pad_pt=LEGEND_PAD_PT, **kwargs
     return axis.legend(handles, labels, **kwargs)
 
 def save(figure, output, formats=DEFAULT_FORMATS, force=False, extra_artists=None,
-         tight=True):
+         tight=True, report=False):
     """Write one figure in each requested format; does not overwrite unless `force` is set.
 
     `tight=False` exports at exactly `figsize` (no crop) so co-placed panels scale equally.
@@ -154,6 +160,9 @@ def save(figure, output, formats=DEFAULT_FORMATS, force=False, extra_artists=Non
         kwargs["dpi"] = PNG_DPI if fmt == "png" else SAVE_DPI
         figure.savefig(destination, **kwargs)
         written.append(destination)
+    if report:
+        for destination in written:
+            print("[panel] wrote %s" % destination)
     return written
 
 def require_columns(frame, columns, source):
@@ -164,6 +173,16 @@ def require_columns(frame, columns, source):
             "%s is missing %d required column(s): %s\nPresent: %s"
             % (source, len(missing), ", ".join(missing), ", ".join(map(str, frame.columns))))
     return frame
+
+def load_route_tables(psite_path, footprint_path, required):
+    """P-site first then footprint, schema checked  pooled concordance can adopt later"""
+    import pandas as pd
+    frames = {}
+    for name, path in (("P-site", psite_path), ("footprint", footprint_path)):
+        frame = pd.read_csv(path, sep="\t")
+        require_columns(frame, required, str(path))
+        frames[name] = frame
+    return frames
 
 def gsm_map(samples_csv):
     """{cell_line: ribo_GSM} from the sample table, keyed both spaced and underscored."""

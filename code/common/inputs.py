@@ -17,6 +17,14 @@ def die(message):
     raise SystemExit("error: %s" % message)
 
 
+def require_existing(pairs):
+    """Fail before any compute starts, naming every missing input at once."""
+    missing = ["  %-22s %s" % (flag, path) for flag, path in pairs
+               if path is None or not Path(path).exists()]
+    if missing:
+        raise SystemExit("these required inputs do not exist:\n" + "\n".join(missing))
+
+
 def make_log(prefix):
     """`log("...")` -> `[prefix] ...` on stdout, flushed."""
     def log(message):

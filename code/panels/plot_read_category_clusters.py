@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Figure 6: genes clustered by how their reads split between the two alignment routes.
 
-    python code/panels/plot_read_fate_clusters.py \\
+    python code/panels/plot_read_category_clusters.py \\
         --clusters results/clustering/HeLa.post_dedup.clusters_k4.tsv \\
         --centroids results/clustering/HeLa.post_dedup.cluster_centroids.tsv \\
         --tree results/clustering/HeLa.post_dedup.tree_merge.tsv \\
@@ -10,7 +10,7 @@
         --reference-duplication data/clustering/HeLa.post_dedup.reference_duplication_entries.tsv \\
         --output results/panels/fig06_read_fate_clusters
 
-Every table comes from `code/clustering/` (the `clustering` stage of make_tables.py): the
+Every table comes from `code/read_categories/` (the `clustering` stage of make_tables.py): the
 Ward tree (`ward_cluster.R`, R's merge matrix and heights), its cut at k with each gene's
 composition in %, the centroid of each cluster, and the three per-gene validation tables.
 Seven panels, lettered here because the whole page is one panel to the assembler:
@@ -143,16 +143,26 @@ def box(axis, groups, x, colours):
             median.set_color("white")
 
 
-def _cluster_axis(axis, clusters):
+def _cluster_axis(axis, clusters, despine=True):
     x = list(range(1, len(clusters) + 1))
     axis.set_xticks(x)
     axis.set_xticklabels([str(c) for c in clusters])
     axis.set_xlim(0.4, len(clusters) + 0.6)
     axis.set_xlabel("cluster", fontsize=ps.FONT_TICK)
     axis.tick_params(labelsize=ps.FONT_TICK)
-    for spine in ("top", "right"):
-        axis.spines[spine].set_visible(False)
+    if despine:
+        for spine in ("top", "right"):
+            axis.spines[spine].set_visible(False)
     return x
+
+
+def _pct_box_tail(axis, x, groups, ylabel):
+    for xi, g in zip(x, groups):
+        axis.text(xi, 103, "%.0f%%" % np.median(g), ha="center", va="bottom",
+                  fontsize=ps.FONT_INSET)
+    axis.set_ylim(-3, 112)
+    axis.set_yticks([0, 20, 40, 60, 80, 100])
+    axis.set_ylabel(ylabel, fontsize=ps.FONT_TICK)
 
 
 def draw_pseudogene_bars(axis, table, colours):
@@ -176,12 +186,7 @@ def draw_omitted_box(axis, table, colours):
     groups = [100.0 * table.loc[table["cluster"] == c, "omitted_exon_fraction"]
               .dropna().to_numpy(float) for c in clusters]
     box(axis, groups, x, colours)
-    for xi, g in zip(x, groups):
-        axis.text(xi, 103, "%.0f%%" % np.median(g), ha="center", va="bottom",
-                  fontsize=ps.FONT_INSET)
-    axis.set_ylim(-3, 112)
-    axis.set_yticks([0, 20, 40, 60, 80, 100])
-    axis.set_ylabel("exonic sequence absent\nfrom transcriptome (%)", fontsize=ps.FONT_TICK)
+    _pct_box_tail(axis, x, groups, "exonic sequence absent\nfrom transcriptome (%)")
 
 
 def draw_duplication_box(axis, table, colours):
@@ -196,12 +201,7 @@ def draw_duplication_box(axis, table, colours):
                          medianprops={"color": EDGE, "linewidth": 1.0})
     for patch, colour in zip(drawn["boxes"], colours):
         patch.set(facecolor=colour, edgecolor=EDGE, linewidth=0.6)
-    for xi, g in zip(x, groups):
-        axis.text(xi, 103, "%.0f%%" % np.median(g), ha="center", va="bottom",
-                  fontsize=ps.FONT_INSET)
-    axis.set_ylim(-3, 112)
-    axis.set_yticks([0, 20, 40, 60, 80, 100])
-    axis.set_ylabel("duplicated transcriptome\nexonic sequence (%)", fontsize=ps.FONT_TICK)
+    _pct_box_tail(axis, x, groups, "duplicated transcriptome\nexonic sequence (%)")
 
 
 # ── the figure ───────────────────────────────────────────────────────────────────────────
@@ -347,9 +347,7 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
         pct = clusters["pct_" + component].to_numpy(float)
         box(ax, [pct[labels == c] for c in x], x, colours)
         ax.set_title(short, fontsize=ps.FONT_TICK, pad=3)
-        _cluster_axis(ax, list(x))
-        for side in ("top", "right"):
-            ax.spines[side].set_visible(True)
+        _cluster_axis(ax, list(x), despine=False)
         if j:
             ax.tick_params(axis="y", labelleft=False)
         else:
@@ -369,9 +367,7 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
                 ax_bar.text(x[i], shares[i, :j].sum() + shares[i, j] / 2, "%.0f" % shares[i, j],
                             ha="center", va="center", fontsize=ps.FONT_INSET,
                             color="white" if is_dark(COLOURS[j]) else "black")
-    _cluster_axis(ax_bar, list(x))
-    for side in ("top", "right"):
-        ax_bar.spines[side].set_visible(True)
+    _cluster_axis(ax_bar, list(x), despine=False)
     ax_bar.set_ylim(0, 100)
     ax_bar.set_yticks([0, 25, 50, 75, 100])
     ax_bar.set_ylabel("centroid composition (%)", fontsize=ps.FONT_TICK)
@@ -406,18 +402,13 @@ def draw(k, clusters, centroids, X, Z, validation, figsize=FIGSIZE):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--clusters", required=True, type=Path, help="<stem>.clusters_k<K>.tsv")
-    parser.add_argument("--centroids", required=True, type=Path, help="<stem>.cluster_centroids.tsv")
-    parser.add_argument("--tree", required=True, type=Path, help="<stem>.tree_merge.tsv")
-    parser.add_argument("--pseudogene-counts", type=Path,
-                        help="<stem>.pseudogene_counts_genes.tsv: panel E")
-    parser.add_argument("--omitted-sequence", type=Path,
-                        help="<stem>.omitted_sequence_genes.tsv: panel F")
-    parser.add_argument("--reference-duplication", type=Path,
-                        help="<stem>.reference_duplication_entries.tsv: panel G")
-    parser.add_argument("--output", required=True, type=Path, help="stem, no extension")
-    parser.add_argument("--format", dest="formats", default="pdf")
-    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--clusters", required=True, type=Path)
+    parser.add_argument("--centroids", required=True, type=Path)
+    parser.add_argument("--tree", required=True, type=Path)
+    parser.add_argument("--pseudogene-counts", type=Path)
+    parser.add_argument("--omitted-sequence", type=Path)
+    parser.add_argument("--reference-duplication", type=Path)
+    ps.add_output_args(parser)
     args = parser.parse_args(argv)
 
     k, clusters, centroids, X, Z, validation = load(args)
@@ -426,8 +417,7 @@ def main(argv=None):
     ps.apply_rcparams()
     ps.resolve_font()
     fig, _legend = draw(k, clusters, centroids, X, Z, validation)
-    for path in ps.save(fig, args.output, ps.resolve_formats(args.formats), args.force):
-        print("[panel] wrote %s" % path)
+    ps.save(fig, args.output, ps.resolve_formats(args.formats), args.force, report=True)
     return 0
 
 

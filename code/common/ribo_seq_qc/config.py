@@ -95,7 +95,6 @@ MIN_LEN, MAX_LEN = 20, 45
 
 # uniqueness policy lives in code/common/bam_inputs.py  NH == 1 and MAPQ >= 42
 
-FRAME_COLORS = {0: "#F8766D", 1: "#00BA38", 2: "#619CFF"}
 
 BAM_SUFFIXES = (".post_dedup.bam", ".bam")
 

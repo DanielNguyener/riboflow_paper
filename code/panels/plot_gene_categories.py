@@ -140,33 +140,24 @@ def load_compact(table, meta_path, genes=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--derived-table", required=True, help="gene_partition_route7.tsv")
-    parser.add_argument("--derived-meta", required=True, help="gene_partition_route7.json")
-    parser.add_argument("--genes", default=None,
-                        help="comma-separated gene names, in drawing order")
-    parser.add_argument("--title", help="default: the GSM recorded in the JSON")
-    parser.add_argument("--xlabel")
+    parser.add_argument("--derived-table", required=True)
+    parser.add_argument("--derived-meta", required=True)
     parser.add_argument("--figsize", nargs=2, type=float)
-    parser.add_argument("--font-size", type=float)
-    parser.add_argument("--title-size", type=float)
-    parser.add_argument("--bar-height", type=float)
-    parser.add_argument("--compact", action="store_true")
-    parser.add_argument("--output", required=True, type=Path, help="stem, no extension")
+    parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 
-    genes = [g.strip() for g in args.genes.split(",") if g.strip()] if args.genes else None
-    prepared, meta = load_compact(args.derived_table, args.derived_meta, genes)
+    prepared, meta = load_compact(args.derived_table, args.derived_meta, list(GENE_ORDER))
     if tuple(e["gene_name"] for e in prepared["entries"]) != GENE_ORDER:
         die("gene order %r != %r" % ([e["gene_name"] for e in prepared["entries"]],
                                             GENE_ORDER))
 
     import panel_style as ps
 
-    if args.font_size:
-        ps.FONT_TITLE = ps.FONT_LABEL = args.font_size
-        ps.FONT_TICK = ps.FONT_ANNOTATION = ps.FONT_INSET = args.font_size
+    # published styling  the values the manifest used to pass as fig05A args
+    ps.FONT_TITLE = ps.FONT_LABEL = 8.0
+    ps.FONT_TICK = ps.FONT_ANNOTATION = ps.FONT_INSET = 8.0
 
     for entry in prepared["entries"]:
         print("[panel] %-8s union %5d  %s"
@@ -174,10 +165,10 @@ def main(argv=None):
                  "  ".join("%s=%d" % (k.replace("r7_", ""), entry["counts"][k])
                            for k, _l, _c, _t, _h in ROUTE7_SEGMENTS)))
     figure, axis, extra = draw(
-        prepared, title=args.title if args.title is not None else meta["gsm"],
+        prepared, title=meta["gsm"],
         figsize=tuple(args.figsize) if args.figsize else None,
-        xlabel=args.xlabel, compact=args.compact, title_size=args.title_size,
-        bar_height=args.bar_height)
+        xlabel="Gene-associated read-ID union (%)", compact=True, title_size=8.0,
+        bar_height=0.86)
     # full width panel has room for a tick every 10 %
     axis.set_xticks(range(0, 101, 10))
     ps.save(figure, args.output, ps.resolve_formats(args.formats), force=args.force,

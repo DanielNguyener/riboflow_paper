@@ -581,8 +581,7 @@ def open_coverage(path) -> CoverageFile:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--validate", type=Path, required=True,
-                        help="a .shared_coverage.h5 to validate")
+    parser.add_argument("--validate", type=Path, required=True)
     args = parser.parse_args(argv)
     problems = validate_file(args.validate)
     if problems:

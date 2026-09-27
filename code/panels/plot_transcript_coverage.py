@@ -13,10 +13,6 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 COVERAGE_DIR = REPO / "code" / "coverage"
 
-SIGNAL_CHOICES = ("psite", "footprint", "both")
-NORMALIZE_CHOICES = ("none", "per-million", "max")
-OVERLAY_CHOICES = ("auto", "canonical", "none")
-
 BUILD_HINT = """\
 Build one with:
 
@@ -82,38 +78,28 @@ def check_coverage_file(path, expect_sample=None, require_regions=True):
                          % (path, "\n".join("  - %s" % c for c in complaints), BUILD_HINT))
     return identity
 
-def load_tracks(coverage_path, gene_id=None, transcript_id=None, region="whole",
-                trim=None, normalize="none", overlay="auto"):
-    """Everything a plot needs for one transcript, and nothing about how to draw it."""
+def load_tracks(coverage_path, gene_id):
+    """Everything a plot needs for one transcript, and nothing about how to draw it.
+
+    The published framing is fixed: the CDS window at the file's own trim, the raw
+    counts, the canonical region overlay when the file carries regions.
+    """
     coverage_schema, _metrics = _import_coverage_modules()
 
     with coverage_schema.open_coverage(coverage_path) as coverage:
-        if gene_id:
-            index = coverage.resolve_gene(gene_id, transcript_id=transcript_id)
-        elif transcript_id:
-            index = coverage.index_of_transcript(transcript_id)
-        else:
-            raise SystemExit("give --gene-id and/or --transcript-id")
+        index = coverage.resolve_gene(gene_id)
 
         info = coverage.transcript_info(index)
         regions = coverage.regions_of(index)
-        file_trim = coverage.trim
-        effective_trim = file_trim if trim is None else trim
+        effective_trim = coverage.trim
 
-        if region == "cds":
-            start, end = coverage.slice_region(index, "CDS", trim=effective_trim)
-            if end <= start:
-                raise SystemExit(
-                    "%s has a CDS of %d nt, which does not survive a %d nt trim at each "
-                    "end. Use --region whole or a smaller --trim."
-                    % (info["transcript_id"], info["cds_len"], effective_trim))
-            # CDS relative axis  a trimmed window runs [trim, cds_len - trim)
-            axis_origin = regions["CDS"][0]
-        elif region == "whole":
-            start, end = 0, info["transcript_len"]
-            axis_origin = 0
-        else:
-            raise SystemExit("unknown --region %r" % region)
+        start, end = coverage.slice_region(index, "CDS", trim=effective_trim)
+        if end <= start:
+            raise SystemExit(
+                "%s has a CDS of %d nt, which does not survive a %d nt trim at each "
+                "end." % (info["transcript_id"], info["cds_len"], effective_trim))
+        # CDS relative axis  a trimmed window runs [trim, cds_len - trim)
+        axis_origin = regions["CDS"][0]
 
         tracks = {}
         for key, signal in (("g_ps", "genome_psite"), ("t_ps", "txome_psite"),
@@ -128,20 +114,6 @@ def load_tracks(coverage_path, gene_id=None, transcript_id=None, region="whole",
                 counts[signal], int(tracks[key].sum()))
         sample = coverage.sample
 
-    scale = 1.0
-    if normalize == "per-million":
-        total = sum(int(t.sum()) for t in tracks.values())
-        scale = 1e6 / total if total else 1.0
-    plotted = {}
-    for key, values in tracks.items():
-        if normalize == "max":
-            peak = int(values.max()) if values.size else 0
-            plotted[key] = values / peak if peak else values.astype(float)
-        elif normalize == "per-million":
-            plotted[key] = values * scale
-        else:
-            plotted[key] = values
-
     return {
         "sample": sample,
         "transcript_id": info["transcript_id"],
@@ -149,36 +121,20 @@ def load_tracks(coverage_path, gene_id=None, transcript_id=None, region="whole",
         "gene_name": info["gene_name"],
         "transcript_len": info["transcript_len"],
         "cds_len": info["cds_len"],
-        "region": region,
+        "region": "cds",
         "trim": effective_trim,
-        "file_trim": file_trim,
         "x_start": start - axis_origin,
         "x_end": end - axis_origin,
         "axis_origin": axis_origin,
         "slice": [start, end],
         "x": np.arange(start - axis_origin, end - axis_origin),
         "raw": tracks,
-        "values": plotted,
+        "values": tracks,
         "states": states,
         "regions": regions,
-        "overlay": resolve_overlay(overlay, regions),
-        "normalize": normalize,
+        "overlay": "canonical" if regions else "none",
         "requested_gene_id": gene_id,
-        "requested_transcript_id": transcript_id,
     }
-
-def resolve_overlay(requested, regions):
-    """Which region overlay to draw; explicit `canonical` without regions is an error."""
-    if requested == "none":
-        return "none"
-    if requested == "auto":
-        return "canonical" if regions else "none"
-    if requested == "canonical":
-        if not regions:
-            raise SystemExit("--regions canonical was asked for, but this file carries "
-                             "no CDS bounds for this transcript.")
-        return "canonical"
-    raise SystemExit("unknown --regions %r" % requested)
 
 def overlay_intervals(tracks):
     """[(display label, start, end)] on the plotted axis, for the chosen overlay."""
@@ -245,38 +201,7 @@ def _draw_track(axis, x, genome, txome, style, states, ylabel, mirrored):
                   bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="#999", lw=0.8),
                   zorder=8)
 
-REGION_SHADING = {
-    "UTR5": ("#dfe6ee", "UTR5"),
-    "CDS": ("#ffffff", "CDS"),
-    "UTR3": ("#dfe6ee", "UTR3"),
-}
-
-def _draw_region_overlay(axes, tracks, style):
-    """Shade each region across every axes and label it once, along the top."""
-    intervals = overlay_intervals(tracks)
-    if not intervals:
-        return
-    span = max(end for _l, _s, end in intervals) - min(s for _l, s, _e in intervals)
-    for label, start, end in intervals:
-        if end <= start:
-            continue
-        colour, text = REGION_SHADING.get(label, ("#eeeeee", label))
-        for axis in axes:
-            if colour != "#ffffff":
-                axis.axvspan(start, end, facecolor=colour, edgecolor="none",
-                             alpha=0.55, zorder=0)
-            axis.axvline(start, color="#7a7a7a", ls="--", lw=0.8, zorder=5)
-        if span and (end - start) / span >= 0.04:
-            axes[0].annotate(text, xy=((start + end) / 2.0, 1.0),
-                             xycoords=("data", "axes fraction"), xytext=(0, 2),
-                             textcoords="offset points", ha="center", va="bottom",
-                             fontsize=style["tick"], color="#444")
-    axes[0].annotate("regions: %s" % tracks["overlay"], xy=(1.0, 1.0),
-                     xycoords="axes fraction", xytext=(0, 12),
-                     textcoords="offset points", ha="right", va="bottom",
-                     fontsize=style["annotation"], color="#888")
-
-def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=None,
+def plot_coverage(tracks, correlations=None, figsize=None, title=None,
                   labels="full", title_correlations=False, route_legend=False):
     """Draw one transcript's coverage. Returns (figure, axes).
 
@@ -290,7 +215,7 @@ def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=
     ps.apply_rcparams()
     style = {"label": ps.FONT_LABEL, "title": ps.FONT_TITLE, "tick": ps.FONT_TICK,
              "annotation": ps.FONT_ANNOTATION}
-    wanted = ["psite", "footprint"] if signal == "both" else [signal]
+    wanted = ["psite", "footprint"]
     figsize = figsize or (10.0, 2.0 * len(wanted) + 0.8)
     figure, axes = plt.subplots(len(wanted), 1, figsize=figsize, sharex=True, squeeze=False)
     axes = [a[0] for a in axes]
@@ -315,18 +240,15 @@ def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=
                       bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="#555", lw=0.9),
                       zorder=9)
 
-    if tracks["region"] == "whole":
-        _draw_region_overlay(axes, tracks, style)
-    else:
-        for boundary, text in ((tracks["x_start"], "start +%d nt" % tracks["trim"]),
-                               (tracks["x_end"], "stop −%d nt" % tracks["trim"])):
-            for axis in axes:
-                axis.axvline(boundary, color="#555", ls="--", lw=1.0, zorder=5)
-            if labels == "minimal":
-                continue
-            axes[0].annotate(text, xy=(boundary, 1.0), xycoords=("data", "axes fraction"),
-                             xytext=(0, 2), textcoords="offset points", ha="center",
-                             va="bottom", fontsize=style["tick"], color="#555")
+    for boundary, text in ((tracks["x_start"], "start +%d nt" % tracks["trim"]),
+                           (tracks["x_end"], "stop −%d nt" % tracks["trim"])):
+        for axis in axes:
+            axis.axvline(boundary, color="#555", ls="--", lw=1.0, zorder=5)
+        if labels == "minimal":
+            continue
+        axes[0].annotate(text, xy=(boundary, 1.0), xycoords=("data", "axes fraction"),
+                         xytext=(0, 2), textcoords="offset points", ha="center",
+                         va="bottom", fontsize=style["tick"], color="#555")
 
     label_box = dict(boxstyle="round,pad=0.35", fc="white", ec="#555", lw=0.9)
     if labels == "full":
@@ -337,10 +259,7 @@ def plot_coverage(tracks, signal="both", correlations=None, figsize=None, title=
                      ha="left", va="bottom", fontsize=style["title"],
                      bbox=dict(label_box), zorder=9)
 
-    unit = {"none": "", "per-million": ", per million",
-            "max": ", scaled to max"}[tracks["normalize"]]
-    axes[-1].set_xlabel(("CDS position" if tracks["region"] == "cds"
-                         else "transcript position") + unit, fontsize=style["label"])
+    axes[-1].set_xlabel("CDS position", fontsize=style["label"])
     heading = title if title is not None else "%s (%s) - %s" % (
         tracks["gene_name"], tracks["transcript_id"], tracks["sample"])
     if title_correlations and correlations:
@@ -380,53 +299,30 @@ def render(argv=None):
     """Draw the panel and RETURN the render record (the tests assert on it directly)."""
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--coverage-h5", required=True, type=Path, dest="coverage",
-                        help="a shared-coordinate coverage HDF5 -- the only data input")
-    parser.add_argument("--expect-sample",
-                        help="fail unless the file declares this sample")
-    parser.add_argument("--gene-id", help="versioned or unversioned")
-    parser.add_argument("--transcript-id", help="versioned or unversioned")
-    parser.add_argument("--region", default="whole", choices=("whole", "cds"),
-                        help="which window to plot")
-    parser.add_argument("--trim", type=int, default=None,
-                        help="override the file's own paper_cds_trim")
-    parser.add_argument("--annotate-correlation", action="store_true")
+    parser.add_argument("--coverage-h5", required=True, type=Path, dest="coverage")
+    parser.add_argument("--gene-id", required=True)
     parser.add_argument("--title")
-    parser.add_argument("--labels", choices=("full", "minimal"), default="full",
-                        help="minimal: no route names, correlation box or boundary "
-                             "captions inside the axes (the numbers stay in the record)")
-    parser.add_argument("--title-correlations", action="store_true",
-                        help="add a second title line with each track's rho and r "
-                             "(needs --annotate-correlation)")
-    parser.add_argument("--route-legend", action="store_true",
-                        help="add an unframed genome/transcriptome colour key on the "
-                             "x-label line, flush right (drawn even with --labels minimal)")
-    parser.add_argument("--record-json", type=Path,
-                        help="also write the render record (resolved transcript, window, "
-                             "correlations) to this JSON file")
+    parser.add_argument("--labels", choices=("full", "minimal"), default="full")
+    parser.add_argument("--title-correlations", action="store_true")
+    parser.add_argument("--record-json", type=Path)
     parser.add_argument("--figsize", nargs=2, type=float, metavar=("W", "H"))
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 
-    if not args.gene_id and not args.transcript_id:
-        raise SystemExit("give --gene-id and/or --transcript-id")
-
     sys.path.insert(0, str(HERE))
     import panel_style as ps
 
-    identity = check_coverage_file(args.coverage, args.expect_sample)
+    identity = check_coverage_file(args.coverage)
     print("[panel] %s: sample %s, assay %s, routes %s, P-site %s, schema v%d"
           % (args.coverage.name, identity["sample"], identity["assay"],
              "+".join(identity["routes"]), identity["psite_placement"],
              identity["schema_version"]))
 
-    tracks = load_tracks(args.coverage, args.gene_id, args.transcript_id,
-                         args.region, args.trim, "none", "auto")
+    tracks = load_tracks(args.coverage, args.gene_id)
     print("[panel] resolved %s -> %s (%s)"
-          % (args.gene_id or args.transcript_id, tracks["transcript_id"],
-             tracks["gene_name"]))
+          % (args.gene_id, tracks["transcript_id"], tracks["gene_name"]))
     if tracks["overlay"] != "none":
         print("[panel] region overlay (%s): %s"
               % (tracks["overlay"],
@@ -439,11 +335,11 @@ def render(argv=None):
         if state != "covered":
             print("[panel]   %s: %s" % (key, state))
 
-    correlations = annotate_correlations(tracks) if args.annotate_correlation else None
-    figure, _axes = plot_coverage(tracks, "both", correlations,
+    correlations = annotate_correlations(tracks)
+    figure, _axes = plot_coverage(tracks, correlations,
                                   tuple(args.figsize) if args.figsize else None,
                                   args.title, args.labels, args.title_correlations,
-                                  args.route_legend)
+                                  route_legend=True)
     written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
                       extra_artists=[figure._route_legend] if figure._route_legend else None)
     record = {
@@ -451,7 +347,7 @@ def render(argv=None):
         "coverage_file": args.coverage.name,
         "coverage_identity": identity,
         "sample": tracks["sample"],
-        "requested": {"gene_id": args.gene_id, "transcript_id": args.transcript_id},
+        "requested": {"gene_id": args.gene_id, "transcript_id": None},
         "resolved": {"transcript_id": tracks["transcript_id"],
                      "gene_id": tracks["gene_id"], "gene_name": tracks["gene_name"]},
         "region": tracks["region"], "trim": tracks["trim"],
@@ -463,7 +359,7 @@ def render(argv=None):
         "coverage_states": tracks["states"],
         "correlations": correlations,
         "labels": args.labels,
-        "route_legend": args.route_legend,
+        "route_legend": True,
         "outputs": [str(p) for p in written],
     }
     if args.record_json:

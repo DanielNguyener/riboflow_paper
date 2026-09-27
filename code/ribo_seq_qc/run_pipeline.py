@@ -20,8 +20,8 @@ MAX_WORKERS = 10
 
 SAMPLE_SCRIPT = "sample_qc.py"   # one program  one BAM traversal  both staging CSVs
 
-DEFAULT_BAM_GLOB = {
-    "genome": "*.bam",
+BAM_GLOB = {
+    "genome": "*/genome/alignment_ribo/merged/*.post_dedup.bam",
     "transcriptome": "*/transcriptome/alignment_ribo/merged/*.transcriptome.post_dedup.bam",
 }
 TX_SUFFIX = ".transcriptome.post_dedup.bam"
@@ -50,13 +50,9 @@ def out_dir(route):
 def staging_path(sample, suffix, route):
     return os.path.join(out_dir(route), "tables", "_staging", "%s_%s.csv" % (sample, suffix))
 
-def run_sample(sample, bam, skip_existing, route, plots=False):
+def run_sample(sample, bam, route):
     """Run the per-sample QC program -> list of failed samples."""
     print("\n%s\nSAMPLE: %s\n  BAM: %s\n%s" % ("=" * 70, sample, bam, "=" * 70), flush=True)
-    if skip_existing and all(os.path.exists(staging_path(sample, suffix, route))
-                             for suffix in MASTER_TABLES.values()):
-        print("  [%s] [skip-existing] both tables already staged" % sample, flush=True)
-        return []
     command = [
         sys.executable, os.path.join(HERE, SAMPLE_SCRIPT),
         "--sample", sample,
@@ -66,8 +62,6 @@ def run_sample(sample, bam, skip_existing, route, plots=False):
     ]
     if route == "genome":
         command += ["--appris", config.appris_path(), "--gtf", config.gtf_path()]
-    if plots:
-        command.append("--plots")
     print("\n$ %s" % " ".join(command), flush=True)
     try:
         subprocess.run(command, check=True)
@@ -104,26 +98,12 @@ def aggregate(samples_done, route):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--bam-dir", required=True, help="Folder containing the BAM files.")
-    parser.add_argument("--route", choices=["genome", "transcriptome"], default="genome",
-                        help="Which alignments to QC; each route has its own output root "
-                             "(config.out_dir() / config.tx_out_dir()).")
-    parser.add_argument("--bam-glob", default=None,
-                        help='Glob relative to --bam-dir. Default "*.bam" (flat folder) on '
-                             'the genome route; for a nested layout pass e.g. '
-                             '"*/genome/alignment_ribo/merged/*.post_dedup.bam". Default '
-                             '"%s" on the transcriptome route.' % DEFAULT_BAM_GLOB["transcriptome"])
-    parser.add_argument("--samples", default=None,
-                        help="Comma-separated subset of sample names to process.")
-    parser.add_argument("--plots", action="store_true",
-                        help="also write the per-sample metagene PDFs. Off by "
-                             "default: they are diagnostics, and the window and offsets "
-                             "they illustrate are in the QC table.")
-    parser.add_argument("--skip-existing", action="store_true",
-                        help="Skip a sample if both its staging outputs already exist.")
+    parser.add_argument("--bam-dir", required=True)
+    parser.add_argument("--route", choices=["genome", "transcriptome"], default="genome")
+    parser.add_argument("--samples", default=None)
     args = parser.parse_args()
 
-    bam_glob = args.bam_glob or DEFAULT_BAM_GLOB[args.route]
+    bam_glob = BAM_GLOB[args.route]
     samples = discover_samples(args.bam_dir, bam_glob)
     if not samples:
         parser.error("no BAMs matching %r found in %s" % (bam_glob, args.bam_dir))
@@ -148,15 +128,13 @@ def main():
         print("\nRunning %d sample(s) in parallel (workers=%d)..." % (len(samples), n_workers),
               flush=True)
         with ThreadPoolExecutor(max_workers=n_workers) as pool:
-            futures = {pool.submit(run_sample, s, b, args.skip_existing, args.route,
-                                   args.plots): s
+            futures = {pool.submit(run_sample, s, b, args.route): s
                        for s, b in samples}
             for future in as_completed(futures):
                 failures += future.result()
     else:
         for sample, bam in samples:
-            failures += run_sample(sample, bam, args.skip_existing, args.route,
-                                   args.plots)
+            failures += run_sample(sample, bam, args.route)
 
     aggregate([s for s, _ in samples], args.route)
 

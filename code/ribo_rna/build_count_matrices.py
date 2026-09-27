@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Raw CDS counts for the cohort: runs `count_transcript_reads.py` per sample and pivots the
 four count columns into the transcripts x samples matrices `code/te_route/normalization.R`
-consumes; `--check` compares with data/ribo_rna/counts/. Run with `python` (3.9)."""
+consumes; every run is checked against data/ribo_rna/counts/. Run with `python` (3.9)."""
 from __future__ import annotations
 
 import argparse
@@ -29,7 +29,7 @@ MATRICES = {
     ("rna", "txome"): "txome_rna_reads",
 }
 
-#: shipped matrices  used by --check
+#: shipped matrices the run is checked against
 REFERENCE_COUNTS = REPO / "data" / "ribo_rna" / "counts"
 
 class BuildError(RuntimeError):
@@ -62,17 +62,11 @@ def resolve_bams(row, bams_root):
 
 def require_inputs(manifest, args):
     """Fail before any BAM is opened, naming every missing input at once."""
-    missing = []
-    for path, label in ((args.gtf, "--gtf"), (args.appris, "--appris"),
-                        (args.qc_genome, "--qc-genome"), (args.qc_txome, "--qc-txome")):
-        if not Path(path).exists():
-            missing.append("  %-18s %s" % (label, path))
+    pairs = [("--gtf", args.gtf), ("--appris", args.appris),
+             ("--qc-genome", args.qc_genome), ("--qc-txome", args.qc_txome)]
     for _, row in manifest.iterrows():
-        for flag, path in resolve_bams(row, args.bams).items():
-            if not path.exists():
-                missing.append("  %-18s %s" % (flag, path))
-    if missing:
-        raise BuildError("these inputs do not exist:\n" + "\n".join(missing))
+        pairs += list(resolve_bams(row, args.bams).items())
+    inputs.require_existing(pairs)
 
 # ── running the counter ──────────────────────────────────────────────────────
 
@@ -96,8 +90,6 @@ def run_sample(row, args):
     if staged_ribo.exists():
         log("%s: reusing the shared ribo pass's staged counts" % sample)
         command += ["--ribo-counts", str(staged_ribo)]
-    if args.regions:
-        command += ["--regions", str(args.regions)]
 
     environment = dict(os.environ)
     # imported modules resolve indirect BAM paths through this variable
@@ -189,44 +181,28 @@ def check_against_reference(samples, output):
 def _build_parser():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--bams", required=True, type=Path,
-                        help="RiboFlow output tree; the manifest's paths are relative to it")
-    parser.add_argument("--gtf", required=True, type=Path, help="GENCODE v34 GTF")
-    parser.add_argument("--appris", required=True, type=Path,
-                        help="APPRIS transcript-lengths table matching the transcriptome BAMs")
-    parser.add_argument("--qc-genome", type=Path, required=True,
-                        help="the genome route's readlen_window_qc.csv")
-    parser.add_argument("--qc-txome", type=Path, required=True,
-                        help="the transcriptome route's readlen_window_qc.csv")
-    parser.add_argument("--regions", type=Path, help="optional actual-regions BED")
+    parser.add_argument("--bams", required=True, type=Path)
+    parser.add_argument("--gtf", required=True, type=Path)
+    parser.add_argument("--appris", required=True, type=Path)
+    parser.add_argument("--qc-genome", type=Path, required=True)
+    parser.add_argument("--qc-txome", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, default=MANIFEST)
     parser.add_argument("--output", type=Path, default=REPO / "results" / "ribo_rna")
-    parser.add_argument("--samples", default=None,
-                        help="comma-separated subset; default is every manifest sample")
-    parser.add_argument("--workers", type=int, default=2,
-                        help="concurrent samples; each holds one sample's annotation and "
-                             "four open BAMs, so 2 is the tested setting")
     return parser
 
 def main(argv=None):
     args = _build_parser().parse_args(argv)
 
     manifest = load_manifest(args.manifest)
-    if args.samples:
-        wanted = [s.strip() for s in args.samples.split(",") if s.strip()]
-        unknown = [s for s in wanted if s not in set(manifest["sample_id"])]
-        if unknown:
-            raise BuildError("not in %s: %s" % (args.manifest, ", ".join(unknown)))
-        manifest = manifest[manifest["sample_id"].isin(wanted)]
     samples = list(manifest["sample_id"])
     if not samples:
         raise BuildError("no samples selected")
 
     require_inputs(manifest, args)
-    log("counting %d sample(s) with %d worker(s): %s"
-        % (len(samples), args.workers, ", ".join(samples)))
+    # each worker holds one sample's annotation and four open BAMs so 2 is the tested setting
+    log("counting %d sample(s): %s" % (len(samples), ", ".join(samples)))
     rows = [row for _, row in manifest.iterrows()]
-    with ThreadPoolExecutor(max_workers=max(1, min(args.workers, len(rows)))) as pool:
+    with ThreadPoolExecutor(max_workers=min(2, len(rows))) as pool:
         failed = [s for s in pool.map(lambda r: run_sample(r, args), rows) if s]
     if failed:
         raise BuildError("these samples failed: %s" % ", ".join(failed))

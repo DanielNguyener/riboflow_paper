@@ -93,8 +93,6 @@ def build_one(row, args):
         command += ["--qc-genome", str(args.qc_genome), "--qc-txome", str(args.qc_txome)]
     if args.counts_staging:
         command += ["--counts-staging", str(args.counts_staging)]
-    if args.regions:
-        command += ["--regions", str(args.regions)]
 
     started = time.time()
     completed = subprocess.run(command, capture_output=True, text=True)
@@ -144,28 +142,17 @@ def _build_parser():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--manifest", type=Path,
                         default=Path("config/cohort_manifest.tsv"))
-    parser.add_argument("--bams", type=Path, help="root for relative manifest paths")
-    parser.add_argument("--samples", help="comma-separated sample_id list")
-    parser.add_argument("--all", action="store_true",
-                        help="process every row -- must be given explicitly")
+    parser.add_argument("--bams", type=Path)
+    parser.add_argument("--samples")
+    parser.add_argument("--all", action="store_true")
     parser.add_argument("--gtf", type=Path)
     parser.add_argument("--appris", type=Path)
-    parser.add_argument("--regions", type=Path)
     parser.add_argument("--qc-genome", type=Path)
     parser.add_argument("--qc-txome", type=Path)
-    parser.add_argument("--only", default="coverage",
-                        help="comma-separated subset of coverage,counts,categories -- "
-                             "the products of the shared ribo pass")
-    parser.add_argument("--counts-staging", type=Path, default=None,
-                        dest="counts_staging",
-                        help="directory for the staged per-sample ribo count TSVs; "
-                             "required with counts")
+    parser.add_argument("--only", default="coverage")
+    parser.add_argument("--counts-staging", type=Path, default=None, dest="counts_staging")
     parser.add_argument("--output", type=Path, default=Path("results/coverage"))
-    parser.add_argument("--workers", type=int, default=1,
-                        help="concurrent samples. A build peaks near 5 GB resident.")
-    parser.add_argument("--skip-existing", action="store_true")
-    parser.add_argument("--validate", action="store_true",
-                        help="check every BAM and index, then exit")
+    parser.add_argument("--validate", action="store_true")
     return parser
 
 def main(argv=None):
@@ -221,56 +208,28 @@ def main(argv=None):
         return 1
 
     args.output.mkdir(parents=True, exist_ok=True)
-    if args.skip_existing:
-        def _all_products_exist(sample):
-            if ("coverage" in products
-                    and not (args.output / ("%s.shared_coverage.h5" % sample)).exists()):
-                return False
-            if ("counts" in products
-                    and not (Path(args.counts_staging) / ("%s.tsv" % sample)).exists()):
-                return False
-            if "categories" in products:
-                tables = _library_scan().TABLES
-                if any(not (tables[a]["staging"] / ("%s.tsv" % sample)).exists()
-                       for a in tables):
-                    return False
-            return True
-
-        before = len(selected)
-        selected = [r for r in selected if not _all_products_exist(r["sample_id"])]
-        if before != len(selected):
-            log("skipping %d sample(s) already built" % (before - len(selected)))
-
     args.annotation_cache = (args.output.parent / ".cache" / "annotation"
                              / "coverage_annotation.pkl")
     sys.path.insert(0, str(HERE))
     import annotation_cache as ac
     import build_shared_coverage as bsc
     _bundle, reused = ac.load_or_build(args.annotation_cache, args.gtf, args.appris,
-                                       args.regions, bsc.LEFT_SPAN, bsc.RIGHT_SPAN)
+                                       None, bsc.LEFT_SPAN, bsc.RIGHT_SPAN)
     del _bundle
     log("annotation cache %s: %s" % ("reused" if reused else "built", args.annotation_cache))
 
-    log("building %d sample(s) with %d worker(s)" % (len(selected), args.workers))
+    # one build peaks near 5 GB resident so the worker count stays at 2
+    log("building %d sample(s) with 2 workers" % len(selected))
     started = time.time()
     results = []
-    if args.workers <= 1:
-        for row in selected:
-            log("  %s ..." % row["sample_id"])
-            outcome = build_one(row, args)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = {pool.submit(build_one, row, args): row for row in selected}
+        for future in concurrent.futures.as_completed(futures):
+            outcome = future.result()
             results.append(outcome)
-            log("  %s %s in %.1f min" % (row["sample_id"],
+            log("  %s %s in %.1f min" % (outcome["sample"],
                                          "OK" if outcome["ok"] else "FAILED",
                                          outcome["seconds"] / 60.0))
-    else:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
-            futures = {pool.submit(build_one, row, args): row for row in selected}
-            for future in concurrent.futures.as_completed(futures):
-                outcome = future.result()
-                results.append(outcome)
-                log("  %s %s in %.1f min" % (outcome["sample"],
-                                             "OK" if outcome["ok"] else "FAILED",
-                                             outcome["seconds"] / 60.0))
 
     failed = [r for r in results if not r["ok"]]
     checksums = None

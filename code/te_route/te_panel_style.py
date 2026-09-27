@@ -31,7 +31,6 @@ BORDER_PT = 2.0
 SPEARMAN_FILL, SPEARMAN_LINE = "#8fb4d6", "#2c5f8a"
 PEARSON_FILL, PEARSON_LINE = "#e3ab74", "#b3651a"
 
-LEGEND_PAD_PT = 6.0
 
 #: framed key shared by B and C  so a sample marker is not read as data
 KEY_FRAME = dict(frameon=True, fancybox=False, framealpha=1.0, facecolor="white",
@@ -76,22 +75,6 @@ def resolve_formats(spec):
     return formats
 
 
-def below_axis_anchor(axis, pad_pt=LEGEND_PAD_PT):
-    """Axes-fraction y clearing everything already drawn under `axis`.
-
-    Measured, not chosen: a constant that clears the labels at one box size collides at another.
-    """
-    figure = axis.figure
-    figure.canvas.draw()
-    renderer = figure.canvas.get_renderer()
-    candidates = list(axis.get_xticklabels(which="both"))
-    candidates += [axis.xaxis.get_offset_text(), axis.xaxis.label]
-    lowest = axis.get_window_extent(renderer).y0
-    for artist in candidates:
-        if artist.get_visible() and artist.get_text():
-            lowest = min(lowest, artist.get_window_extent(renderer).y0)
-    pad_px = pad_pt * figure.dpi / 72.0
-    return float(axis.transAxes.inverted().transform((0.0, lowest - pad_px))[1])
 
 
 def _save_tiff(figure, destination, tight):

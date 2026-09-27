@@ -9,6 +9,9 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import _qc_grid_common as common  # noqa: E402
+import panel_style as ps  # noqa: E402
 #: colour scale limit in percentage points  +/-2 fits the measured span without clipping
 #: display only  prepare() never sees it
 VLIM = 2.0
@@ -16,9 +19,6 @@ VLIM = 2.0
 WHITE_TEXT_FRACTION = 0.75
 
 def prepare(frame_genome, frame_txome, samples_csv):
-    sys.path.insert(0, str(HERE))
-    import _qc_grid_common as common
-
     samples, lengths, genome, txome = common.load_pair(
         frame_genome, frame_txome, "pct_frame0")
     difference = genome - txome
@@ -33,9 +33,6 @@ def prepare(frame_genome, frame_txome, samples_csv):
 def draw(prepared, axes_size=None, margins=None, type_scale="large", show_ylabels=True):
     import matplotlib.pyplot as plt
     from matplotlib.colors import LinearSegmentedColormap
-    sys.path.insert(0, str(HERE))
-    import _qc_grid_common as common
-    import panel_style as ps
 
     ps.apply_rcparams()
     sizes = common.grid_type(type_scale)
@@ -47,11 +44,8 @@ def draw(prepared, axes_size=None, margins=None, type_scale="large", show_ylabel
     norm = plt.Normalize(vmin=-VLIM, vmax=VLIM)
 
     # shared with figS1A via _qc_grid_common.MARGINS  right margin = colourbar gutter
-    width, height = axes_size or common.AXES_SIZE
-    left, bottom, right, top = margins or common.MARGINS
-    fig_w, fig_h = left + width + right, bottom + height + top
-    figure, axis = plt.subplots(figsize=(fig_w, fig_h))
-    axis.set_position([left / fig_w, bottom / fig_h, width / fig_w, height / fig_h])
+    figure, axis, (left, bottom, width, height, fig_w, fig_h) = \
+        common.grid_figure(axes_size, margins)
     common.draw_grid(axis, difference, colormap, norm)
     white_above = WHITE_TEXT_FRACTION * VLIM
     for i in range(difference.shape[0]):
@@ -81,21 +75,10 @@ def main(argv=None):
     parser.add_argument("--frame-genome", required=True, type=Path)
     parser.add_argument("--frame-txome", required=True, type=Path)
     parser.add_argument("--samples-csv", required=True, type=Path)
-    parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--format", dest="formats", default="pdf")
-    parser.add_argument("--force", action="store_true")
-    parser.add_argument("--axes-size", nargs=2, type=float, metavar=("W", "H"),
-                        help="grid size in inches (default: _qc_grid_common.AXES_SIZE)")
-    parser.add_argument("--margins", nargs=4, type=float, metavar=("L", "B", "R", "T"),
-                        help="margins in inches (default: _qc_grid_common.MARGINS)")
-    parser.add_argument("--type-scale", choices=("large", "base"), default="large",
-                        help="large: standalone panel type; base: journal-page type (8-12 pt)")
-    parser.add_argument("--hide-ylabels", action="store_true",
-                        help="drop the GSM row labels (when placed beside panel A, which has them)")
+    ps.add_output_args(parser)
+    common.add_grid_args(parser)
+    parser.add_argument("--hide-ylabels", action="store_true")
     args = parser.parse_args(argv)
-
-    sys.path.insert(0, str(HERE))
-    import panel_style as ps
 
     prepared = prepare(args.frame_genome, args.frame_txome, args.samples_csv)
     print("[panel] %d shared cells; median %+.2f, mean|Δ| %.2f, max|Δ| %.2f"
@@ -105,10 +88,8 @@ def main(argv=None):
     figure, _axis = draw(prepared, tuple(args.axes_size) if args.axes_size else None,
                          tuple(args.margins) if args.margins else None,
                          args.type_scale, not args.hide_ylabels)
-    written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
-                      tight=False)
-    for path in written:
-        print("[panel] wrote %s" % path)
+    ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
+            tight=False, report=True)
     return 0
 
 if __name__ == "__main__":

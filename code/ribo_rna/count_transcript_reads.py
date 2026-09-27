@@ -143,41 +143,27 @@ def _build_parser():
     parser.add_argument("--ribo-txome-bam", required=True, type=Path)
     parser.add_argument("--rna-genome-bam", required=True, type=Path)
     parser.add_argument("--rna-txome-bam", required=True, type=Path)
-    parser.add_argument("--gtf", required=True, type=Path,
-                        help="GENCODE GTF -- the source of the canonical CDS")
-    parser.add_argument("--appris", required=True, type=Path,
-                        help="APPRIS transcript-lengths table (the reference headers)")
-    parser.add_argument("--regions", type=Path,
-                        help="optional actual-regions BED, as for the coverage build")
-    parser.add_argument("--annotation-cache", type=Path,
-                        help="the shared coordinate bundle; rebuilt if absent or stale")
-    parser.add_argument("--qc-genome", required=True, type=Path,
-                        help="genome readlen_window_qc.csv (the selected read lengths)")
-    parser.add_argument("--qc-txome", required=True, type=Path,
-                        help="transcriptome readlen_window_qc.csv")
-    parser.add_argument("--route-output", type=Path,
-                        help="route-comparison TSV (default results/ribo_rna/"
-                             "_staging_cds/<sample>.tsv)")
-    parser.add_argument("--counts-output", type=Path,
-                        help="per-transcript count TSV; omit to skip writing it")
-    parser.add_argument("--ribo-counts", type=Path,
-                        help="staged ribo count TSV from the shared ribo pass; when "
-                             "given, the two ribo BAMs are not streamed and no route "
-                             "table is written")
+    parser.add_argument("--gtf", required=True, type=Path)
+    parser.add_argument("--appris", required=True, type=Path)
+    parser.add_argument("--regions", type=Path)
+    parser.add_argument("--annotation-cache", type=Path)
+    parser.add_argument("--qc-genome", required=True, type=Path)
+    parser.add_argument("--qc-txome", required=True, type=Path)
+    parser.add_argument("--route-output", type=Path)
+    parser.add_argument("--counts-output", type=Path)
+    parser.add_argument("--ribo-counts", type=Path)
     return parser
 
 def main(argv=None):
     args = _build_parser().parse_args(argv)
-    missing = ["  %-20s %s" % (flag, getattr(args, attr))
-               for flag, attr in (("--ribo-genome-bam", "ribo_genome_bam"),
-                                  ("--ribo-txome-bam", "ribo_txome_bam"),
-                                  ("--rna-genome-bam", "rna_genome_bam"),
-                                  ("--rna-txome-bam", "rna_txome_bam"),
-                                  ("--gtf", "gtf"), ("--appris", "appris"),
-                                  ("--qc-genome", "qc_genome"), ("--qc-txome", "qc_txome"))
-               if not getattr(args, attr).exists()]
-    if missing:
-        raise SystemExit("these required inputs do not exist:\n" + "\n".join(missing))
+    inputs.require_existing(
+        [(flag, getattr(args, attr))
+         for flag, attr in (("--ribo-genome-bam", "ribo_genome_bam"),
+                            ("--ribo-txome-bam", "ribo_txome_bam"),
+                            ("--rna-genome-bam", "rna_genome_bam"),
+                            ("--rna-txome-bam", "rna_txome_bam"),
+                            ("--gtf", "gtf"), ("--appris", "appris"),
+                            ("--qc-genome", "qc_genome"), ("--qc-txome", "qc_txome"))])
     if args.ribo_counts and not args.ribo_counts.exists():
         raise SystemExit("--ribo-counts %s does not exist" % args.ribo_counts)
     frame, route_frame, _report = count_sample(

@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 # ward.D2 hierarchical clustering of the genes by read fate composition
 #
-#   Rscript code/clustering/ward_cluster.R --input <stem>.gene_counts_filtered.tsv \
+#   Rscript code/read_categories/ward_cluster.R --input <stem>.gene_counts_filtered.tsv \
 #       --output results/clustering --stem <stem> [--k 4] [--k-min 2] [--k-max 8] \
 #       [--seed 1] [--silhouette-sample 4000]
 #

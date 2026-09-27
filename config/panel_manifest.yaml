@@ -90,9 +90,6 @@ panels:
     generator: code/panels/plot_transcript_coverage.py
     args:
       gene_id: ENSG00000093010          # COMT; resolves to ENST00000361682.11
-      region: cds                       # published framing; default view is whole-transcript
-      annotate_correlation: true
-      route_legend: true
     inputs:
       coverage_h5: results/coverage/HeLa.shared_coverage.h5
     output: results/panels/fig02A_HeLa_COMT_coverage
@@ -104,9 +101,6 @@ panels:
     generator: code/panels/plot_transcript_coverage.py
     args:
       gene_id: ENSG00000111640          # GAPDH; resolves to ENST00000396861.5
-      region: cds
-      annotate_correlation: true
-      route_legend: true
     inputs:
       coverage_h5: results/coverage/HeLa.shared_coverage.h5
     output: results/panels/fig02B_HeLa_GAPDH_coverage
@@ -127,8 +121,6 @@ panels:
     panel: D
     title: Pooled per-cell-line concordance
     generator: code/panels/plot_pooled_concordance.py
-    args:
-      ylim: [0.0, 1.005]
     inputs:
       psite:     data/coverage/concordance/region_concordance_per_sample.tsv
       footprint: data/coverage/concordance/region_coverage_per_sample.tsv
@@ -194,7 +186,7 @@ panels:
     panel: A
     title: Distinct mapped read IDs per route, page size
     generator: code/panels/plot_cohort_panels.py
-    args: {panel: A, width_pt: 140.0, height_in: 4.75, font_pt: 8.0}
+    args: {panel: A, width_pt: 140.0, height_in: 4.75}
     inputs:
       taxonomy:    data/read_categories/taxonomy_all.tsv
       samples_csv: supporting_information/S1_Table/samples.csv
@@ -205,7 +197,7 @@ panels:
     panel: B
     title: Read-ID union composition, page size
     generator: code/panels/plot_cohort_panels.py
-    args: {panel: B, width_pt: 142.0, height_in: 5.20, font_pt: 8.0}   # taller: union key
+    args: {panel: B, width_pt: 142.0, height_in: 5.20}   # taller: union key
     inputs:
       taxonomy:    data/read_categories/taxonomy_all.tsv
       samples_csv: supporting_information/S1_Table/samples.csv
@@ -216,7 +208,7 @@ panels:
     panel: C
     title: Protein-coding to pseudogene tie share, page size
     generator: code/panels/plot_cohort_panels.py
-    args: {panel: C, width_pt: 103.0, height_in: 4.75, font_pt: 8.0}
+    args: {panel: C, width_pt: 103.0, height_in: 4.75}
     inputs:
       tie_master: data/read_categories/multimap_tie_biotype_all.tsv
       taxonomy:   data/read_categories/taxonomy_all.tsv
@@ -227,7 +219,7 @@ panels:
     panel: D
     title: Omitted alternative-exon overlap, page size
     generator: code/panels/plot_cohort_panels.py
-    args: {panel: D, width_pt: 103.0, height_in: 4.75, font_pt: 8.0}
+    args: {panel: D, width_pt: 103.0, height_in: 4.75}
     inputs:
       reach_master: data/read_categories/genome_anchored_reach_all.tsv
       taxonomy:     data/read_categories/taxonomy_all.tsv
@@ -238,14 +230,6 @@ panels:
     panel: A
     title: Route-explicit seven-segment read-ID partition at COMT, GAPDH and LRRFIP1
     generator: code/panels/plot_gene_categories.py
-    args:
-      genes: [COMT, GAPDH, LRRFIP1]
-      title: GSM2100602
-      title_size: 8.0
-      font_size: 8.0
-      bar_height: 0.86
-      xlabel: "Gene-associated read-ID union (%)"
-      compact: true
     fit: {width_pt: 532.0, height_in: 2.05}
     inputs:
       derived_table: data/read_categories/gene_partition_route7.tsv
@@ -258,17 +242,6 @@ panels:
     title: LRRFIP1 locus, exon-compressed, mirrored P-site coverage stacked by the panel-A
       read populations (same key colours), and isoform models
     generator: code/panels/plot_locus_coverage.py
-    args:
-      title: "LRRFIP1 — GSM2100602"
-      title_outside: true
-      title_size: 8.0
-      font_size: 8.0
-      ylabel: "P-site count"
-      xlabel: "LRRFIP1 transcript models (5′→3′; introns compressed)"
-      model_names: "Selected reference,Alternative isoform"
-      marks_at_axis: true
-      no_xticks: true
-      compact: true
     fit: {width_pt: 532.0, height_in: 2.05}
     inputs:
       derived_npz:  data/read_categories/locus_LRRFIP1.npz

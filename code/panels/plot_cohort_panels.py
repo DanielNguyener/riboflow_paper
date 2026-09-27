@@ -308,7 +308,6 @@ def main(argv=None):
     parser.add_argument("--reach-master", help="omitted alternative-exon master (D)")
     parser.add_argument("--width-pt", type=float, required=True, help="page width")
     parser.add_argument("--height-in", type=float, required=True, help="page height")
-    parser.add_argument("--font-pt", type=float, default=8.0)
     parser.add_argument("--output", required=True, help="path stem, no extension")
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
@@ -316,7 +315,7 @@ def main(argv=None):
 
     inputs = {"taxonomy": args.taxonomy, "samples_csv": args.samples_csv,
               "tie_master": args.tie_master, "reach_master": args.reach_master}
-    written = render_panel(args.panel, args.width_pt, args.height_in, inputs, args.font_pt,
+    written = render_panel(args.panel, args.width_pt, args.height_in, inputs, 8.0,
                            args.output, ps.resolve_formats(args.formats), args.force)
     for path in written:
         print("wrote %s" % path)

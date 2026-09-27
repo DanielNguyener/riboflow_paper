@@ -1,7 +1,7 @@
 # Cohort sample manifest - schema `riboflow_paper/cohort-manifest/1`
 
 `config/cohort_manifest.tsv` lists every sample in the cohort, its identifiers, and where its
-four alignment classes and their indexes live. One row per sample.
+four alignment classes and their indexes live.
 
 Which stage reads which BAM
 

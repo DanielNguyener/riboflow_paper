@@ -248,13 +248,11 @@ def render_locus(ax_ribo, ax_model, arrays, meta, title=True, xlabel=True,
 
 
 def draw(args, arrays, meta):
+    # published styling  the values the manifest used to pass as fig05B args
     # size overrides BEFORE apply_rcparams  it copies FONT_TICK into the rcParams
-    if args.font_size:
-        for name in ("FONT_TITLE", "FONT_LABEL", "FONT_XLABEL", "FONT_MARK",
-                     "FONT_MODEL", "FONT_TICK"):
-            globals()[name] = args.font_size
-    if args.title_size:
-        globals()["FONT_TITLE"] = args.title_size
+    for name in ("FONT_TITLE", "FONT_LABEL", "FONT_XLABEL", "FONT_MARK",
+                 "FONT_MODEL", "FONT_TICK"):
+        globals()[name] = 8.0
 
     apply_rcparams()
     import matplotlib.pyplot as plt
@@ -263,21 +261,18 @@ def draw(args, arrays, meta):
         2, 1, figsize=(args.figsize[0], args.figsize[1]), sharex=True,
         gridspec_kw={"height_ratios": [3.2, 1.0], "hspace": 0.18})
 
-    heading = ("%s  %s   %s   spliced locus, introns not to scale"
-               % (meta["gene"], meta["locus"]["label"], meta["sample"]))
-    if args.title is not None:
-        heading = args.title or False
     render_locus(axes[0], axes[-1], arrays, meta,
-                 title=heading, model_labels=not args.compact,
-                 title_inside=args.compact and not args.title_outside,
-                 ylabel=args.ylabel, xlabel=args.xlabel or True,
-                 model_names=tuple(args.model_names.split(",")) if args.model_names else None,
-                 no_xticks=args.no_xticks, marks_at_axis=args.marks_at_axis)
+                 title="LRRFIP1 \u2014 GSM2100602", model_labels=False,
+                 title_inside=False,
+                 ylabel="P-site count",
+                 xlabel="LRRFIP1 transcript models (5\u2032\u21923\u2032; introns compressed)",
+                 model_names=("Selected reference", "Alternative isoform"),
+                 no_xticks=True, marks_at_axis=True)
 
     # declared margins not tight_layout  the model track tick labels are two lines of
     # text on a patch only axes and tight_layout measures that badly
     figure.subplots_adjust(left=0.155, right=0.985, top=0.93, bottom=0.11)
-    outputs = ["%s.%s" % (args.output, suffix.strip()) for suffix in args.format.split(",")]
+    outputs = ["%s.%s" % (args.output, suffix.strip()) for suffix in args.formats.split(",")]
     existing = [o for o in outputs if os.path.exists(o)]
     if existing and not args.force:
         die("refusing to overwrite %s; pass --force" % ", ".join(existing))
@@ -289,23 +284,11 @@ def draw(args, arrays, meta):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--derived-npz", required=True, help="locus_<GENE>.npz")
-    parser.add_argument("--derived-meta", required=True, help="locus_<GENE>.json")
-    parser.add_argument("--ylabel")
-    parser.add_argument("--xlabel")
-    parser.add_argument("--model-names", help="model-track names, comma-separated, selected first")
-    parser.add_argument("--marks-at-axis", action="store_true",
-                        help="unboxed route marks at the right edge, hugging the mirror "
-                             "line: the top mark just above it, the bottom mark just below")
-    parser.add_argument("--title-outside", action="store_true")
-    parser.add_argument("--no-xticks", action="store_true")
-    parser.add_argument("--font-size", type=float)
-    parser.add_argument("--title-size", type=float)
-    parser.add_argument("--title", help="replace the default heading; empty string draws none")
-    parser.add_argument("--compact", action="store_true")
+    parser.add_argument("--derived-npz", required=True)
+    parser.add_argument("--derived-meta", required=True)
     parser.add_argument("--figsize", nargs=2, type=float, default=(13.0, 7.0))
-    parser.add_argument("--output", required=True, help="path stem, no extension")
-    parser.add_argument("--format", default="pdf")
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 

@@ -10,6 +10,9 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import panel_style as ps  # noqa: E402
+
 REQUIRED = ("sample", "transcript_id", "spearman", "pearson")
 
 def prepare(psite_path, footprint_path, samples_csv=None, highlight=None):
@@ -17,14 +20,7 @@ def prepare(psite_path, footprint_path, samples_csv=None, highlight=None):
 
     Ordering (ascending median P-site Spearman) is applied once and shared by both sub-panels.
     """
-    sys.path.insert(0, str(HERE))
-    import panel_style as ps
-
-    frames = {}
-    for name, path in (("P-site", psite_path), ("footprint", footprint_path)):
-        frame = pd.read_csv(path, sep="\t")
-        ps.require_columns(frame, REQUIRED, str(path))
-        frames[name] = frame
+    frames = ps.load_route_tables(psite_path, footprint_path, REQUIRED)
 
     order = (frames["P-site"].groupby("sample")["spearman"].median()
              .sort_values().index.tolist())
@@ -65,7 +61,6 @@ def draw(prepared, ylim=(0.0, 1.0), figsize=(11.0, 4.4), layout="side"):
     GSM labels appear once (the form that fits beside panel D)."""
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
-    import panel_style as ps
 
     ps.apply_rcparams()
     order = prepared["order"]
@@ -159,19 +154,11 @@ def main(argv=None):
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--psite", required=True, type=Path)
     parser.add_argument("--footprint", required=True, type=Path)
-    parser.add_argument("--samples-csv", type=Path,
-                        help="the sample table; supplies the GSM axis labels")
+    parser.add_argument("--samples-csv", type=Path)
     parser.add_argument("--figsize", nargs=2, type=float, default=(11.0, 4.4))
-    parser.add_argument("--layout", choices=("side", "stacked"), default="side",
-                        help="side: P-site | footprint; stacked: P-site over footprint, "
-                             "one shared x axis")
-    parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--format", dest="formats", default="pdf")
-    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--layout", choices=("side", "stacked"), default="side")
+    ps.add_output_args(parser)
     args = parser.parse_args(argv)
-
-    sys.path.insert(0, str(HERE))
-    import panel_style as ps
 
     highlight = {"sample": "HeLa", "gapdh": "ENST00000396861.5",
                  "comt": "ENST00000361682.11"}
@@ -183,9 +170,7 @@ def main(argv=None):
           % ", ".join(prepared["order"][:4] + ["..."] + prepared["order"][-2:]))
 
     figure, _axes = draw(prepared, (0.0, 1.0), tuple(args.figsize), args.layout)
-    written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force)
-    for path in written:
-        print("[panel] wrote %s" % path)
+    ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force, report=True)
     return 0
 
 if __name__ == "__main__":

@@ -24,9 +24,6 @@ SAMPLES_CSV = REPO / "supporting_information" / "S1_Table" / "samples.csv"
 DEFAULT_MANIFEST = REPO / "config" / "cohort_manifest.tsv"
 
 EXAMPLE_SAMPLE = "HeLa"
-EXAMPLE_GSM = "GSM2100602"
-#: genes figure 5A partitions  gene IDs resolve through the annotation cache
-PARTITION_GENES = ("ENSG00000093010", "ENSG00000111640", "ENSG00000124831")   # COMT GAPDH LRRFIP1
 LOCUS_GENE = "LRRFIP1"
 #: figure 6  ward tree of HeLa gene read fate compositions is cut at this k
 CLUSTER_K = 4
@@ -42,9 +39,9 @@ BAM_TEMPLATES = {
 
 log = inputs.make_log("make_tables")
 
-def prepare_environment(args, create_dirs=True):
-    """Point the drivers at the output root. `create_dirs=False` for read-only modes."""
-    out = Path(args.output).resolve()
+def prepare_environment(args):
+    """Point the drivers at the output root."""
+    out = (REPO / "results").resolve()
     os.environ["RIBOFLOW_PAPER_BAMS"] = str(args.bams)
     os.environ["RIBOFLOW_PAPER_OUT"] = str(out)
     os.environ["RIBOFLOW_PAPER_QC_OUT"] = str(out / "ribo_seq_qc" / "genome")
@@ -55,11 +52,10 @@ def prepare_environment(args, create_dirs=True):
         os.environ["RIBOFLOW_PAPER_APPRIS"] = str(Path(args.appris).resolve())
     os.environ.setdefault("MPLBACKEND", "Agg")
 
-    if create_dirs:
-        for directory in (out / "ribo_seq_qc" / "genome",
-                          out / "ribo_seq_qc" / "transcriptome",
-                          out / "annotation"):
-            directory.mkdir(parents=True, exist_ok=True)
+    for directory in (out / "ribo_seq_qc" / "genome",
+                      out / "ribo_seq_qc" / "transcriptome",
+                      out / "annotation"):
+        directory.mkdir(parents=True, exist_ok=True)
 
     shared = [str(CODE / "common"), str(CODE / "common" / "ribo_seq_qc")]
     existing = os.environ.get("PYTHONPATH", "")
@@ -95,7 +91,7 @@ def sh(cmd, cwd=None):
     log("    -> exit %d in %.1f min" % (result.returncode, (time.time() - started) / 60))
     return result.returncode
 
-def stage_annotation(samples, args):
+def stage_annotation(args):
     """Build the shared annotation caches once; a missing GTF/APPRIS fails here, clearly."""
     import config
     try:
@@ -114,23 +110,20 @@ def stage_annotation(samples, args):
     log("  annotation cache ready at %s" % config.cache_dir())
     return 0
 
-def stage_qc(samples, args):
+def stage_qc(args):
     qc = CODE / "ribo_seq_qc"
-    selection = ["--samples", ",".join(samples)] if samples else []
     code = sh([sys.executable, qc / "run_pipeline.py",
-               "--bam-dir", args.bams,
-               "--bam-glob", "*/genome/alignment_ribo/merged/*.post_dedup.bam"] + selection)
+               "--bam-dir", args.bams])
     code |= sh([sys.executable, qc / "run_pipeline.py", "--route", "transcriptome",
-                "--bam-dir", args.bams] + selection)
+                "--bam-dir", args.bams])
     return code
 
-def stage_orf_catalog(samples, args):
-    reference = samples[0] if samples else EXAMPLE_SAMPLE
+def stage_orf_catalog(args):
     return sh([sys.executable, CODE / "common" / "build_orf_catalog.py",
-               "--txome-bam", args.bam_for(reference, "ribo_txome_bam"),
+               "--txome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_txome_bam"),
                "--out-dir", args.out / "annotation"])
 
-def stage_ribo_pass(samples, args):
+def stage_ribo_pass(args):
     """One pass over each ribo BAM -> the coverage HDF5 (a durable product, never
     deleted), the staged ribo count columns for te_counts, and the three Figure 4
     category masters.
@@ -138,8 +131,8 @@ def stage_ribo_pass(samples, args):
     Capped at 2 workers regardless of `--workers`: the category sets peak near 5 GB per
     sample, plus ~1 GB of coverage arrays.
     """
-    command = [sys.executable, CODE / "coverage" / "build_cohort_coverage.py",
-               "--manifest", args.manifest, "--bams", args.bams,
+    return sh([sys.executable, CODE / "coverage" / "build_cohort_coverage.py",
+               "--manifest", DEFAULT_MANIFEST, "--bams", args.bams,
                "--gtf", args.gtf, "--appris", args.appris,
                "--qc-genome",
                args.out / "ribo_seq_qc" / "genome" / "tables" / "readlen_window_qc.csv",
@@ -148,22 +141,13 @@ def stage_ribo_pass(samples, args):
                "--output", args.out / "coverage",
                "--only", "coverage,counts,categories",
                "--counts-staging", args.out / "ribo_rna" / "_staging_ribo_counts",
-               "--workers", str(min(args.workers, 2))]
-    command += ["--samples", ",".join(samples)] if samples else ["--all"]
-    if args.regions:
-        command += ["--regions", args.regions]
-    if args.skip_existing:
-        command.append("--skip-existing")
-    return sh(command)
+               "--workers", "2", "--all"])
 
-def stage_concordance(samples, args):
+def stage_concordance(args):
     """The four concordance tables, computed from the HDF5 cohort. No BAM is opened."""
-    command = [sys.executable, CODE / "coverage" / "compute_coverage_concordance.py",
+    return sh([sys.executable, CODE / "coverage" / "compute_coverage_concordance.py",
                "--coverage", args.out / "coverage",
-               "--output", args.out / "coverage" / "concordance"]
-    if samples:
-        command += ["--samples", ",".join(samples)]
-    return sh(command)
+               "--output", args.out / "coverage" / "concordance"])
 
 def _rscript():
     import shutil
@@ -178,57 +162,47 @@ def _qc_tables(args):
     return (qc / "genome" / "tables" / "readlen_window_qc.csv",
             qc / "transcriptome" / "tables" / "readlen_window_qc.csv")
 
-def stage_te_counts(samples, args):
+def stage_te_counts(args):
     """Four transcripts x samples CDS count matrices, one count program per sample."""
     qc_genome, qc_txome = _qc_tables(args)
-    command = [sys.executable, CODE / "ribo_rna" / "build_count_matrices.py",
+    return sh([sys.executable, CODE / "ribo_rna" / "build_count_matrices.py",
                "--bams", args.bams, "--gtf", args.gtf, "--appris", args.appris,
                "--qc-genome", qc_genome, "--qc-txome", qc_txome,
-               "--manifest", args.manifest, "--output", args.out / "ribo_rna",
-               "--workers", str(min(args.workers, 2))]
-    if args.regions:
-        command += ["--regions", args.regions]
-    if samples:
-        command += ["--samples", ",".join(samples)]
-    return sh(command)
+               "--manifest", DEFAULT_MANIFEST, "--output", args.out / "ribo_rna"])
 
-def stage_te_normalize(samples, args):
+def stage_te_normalize(args):
     rscript = _rscript()
     return sh([rscript, CODE / "te_route" / "normalization.R",
                "--counts", args.out / "ribo_rna" / "counts",
                "--output", args.out / "te_route" / "normalized"])
 
-def stage_te_stats(samples, args):
+def stage_te_stats(args):
     rscript = _rscript()
     return sh([rscript, CODE / "te_route" / "te_statistics.R",
                "--normalized", args.out / "te_route" / "normalized",
                "--orf-catalog", args.out / "annotation" / "orf_catalog.tsv",
                "--output", args.out / "te_route" / "tables"])
 
-def stage_gene_partition(samples, args):
+def stage_gene_partition(args):
     """Figure 5A: the per-read gene dump, folded to the seven-segment table, in one run."""
     coverage = args.out / "coverage" / ("%s.shared_coverage.h5" % EXAMPLE_SAMPLE)
     command = [sys.executable, CODE / "read_categories" / "build_gene_categories.py",
-               "--sample", EXAMPLE_SAMPLE, "--gsm", EXAMPLE_GSM,
                "--genome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_genome_bam"),
                "--transcriptome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_txome_bam"),
-               "--gene-id", ",".join(PARTITION_GENES),
-               "--output", args.out / "read_categories" / "gene_partition_route7", "--force"]
+               "--output", args.out / "read_categories" / "gene_partition_route7"]
     if coverage.exists():
         command += ["--coverage", coverage]
     return sh(command)
 
-def stage_locus(samples, args):
+def stage_locus(args):
     """Figure 5B: the LRRFIP1 locus coverage artifact."""
     qc_genome, qc_txome = _qc_tables(args)
     return sh([sys.executable, CODE / "read_categories" / "build_locus_data.py",
-               "--gene", LOCUS_GENE, "--sample", EXAMPLE_SAMPLE, "--gsm", EXAMPLE_GSM,
                "--bams", args.bams, "--gtf", args.gtf, "--appris", args.appris,
                "--qc-genome", qc_genome, "--qc-txome", qc_txome,
-               "--output", args.out / "read_categories" / ("locus_%s" % LOCUS_GENE),
-               "--force"])
+               "--output", args.out / "read_categories" / ("locus_%s" % LOCUS_GENE)])
 
-def stage_clustering(samples, args):
+def stage_clustering(args):
     """Figure 6: every HeLa gene's five-fate read composition, the Ward tree and its k = 4
     cut, and the three per-gene validation tables. The read-state store (~20 min) is a
     durable product: it is reused when present, like the coverage HDF5."""
@@ -241,14 +215,14 @@ def stage_clustering(samples, args):
     if state.exists():
         log("  reusing %s" % state)
     else:
-        code = sh([sys.executable, clustering / "read_state.py", "--sample", EXAMPLE_SAMPLE,
+        code = sh([sys.executable, clustering / "read_state.py",
                    "--output", out] + common)
         if code:
             return code
     filtered = out / ("%s.gene_counts_filtered.tsv" % stem)
     clusters = out / ("%s.clusters_k%d.tsv" % (stem, CLUSTER_K))
     steps = [
-        [sys.executable, clustering / "build_gene_counts.py", "--sample", EXAMPLE_SAMPLE,
+        [sys.executable, clustering / "build_gene_counts.py",
          "--output", out] + common,
         [rscript, clustering / "ward_cluster.R", "--input", filtered, "--output", out,
          "--stem", stem, "--k", str(CLUSTER_K)],
@@ -378,29 +352,12 @@ def do_into_data(out: Path):
 def build_parser():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--bams", help="RiboFlow output tree")
-    parser.add_argument("--gtf", default=None, help="GENCODE annotation GTF")
-    parser.add_argument("--appris", default=None, help="APPRIS transcript-lengths TSV")
-    parser.add_argument("--regions", default=None,
-                        help="APPRIS actual-regions BED; a cross-check for the coverage stage")
-    parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST),
-                        help="sample manifest (default config/cohort_manifest.tsv)")
-    parser.add_argument("--output", default=str(REPO / "results"),
-                        help="output root (default results/)")
-    parser.add_argument("--samples", default=None,
-                        help="comma-separated subset (default: every discovered sample)")
-    parser.add_argument("--stages", default=None,
-                        help="comma-separated subset of: " + ", ".join(STAGE_ORDER))
-    parser.add_argument("--all", action="store_true",
-                        help="run every stage")
-    parser.add_argument("--workers", type=int, default=2,
-                        help="parallel samples; memory-heavy stages cap at 2 regardless")
-    parser.add_argument("--skip-existing", action="store_true",
-                        help="the coverage stage skips samples whose HDF5 already exists")
-    parser.add_argument("--validate", action="store_true",
-                        help="report the discovered samples and exit without computing")
-    parser.add_argument("--into-data", action="store_true",
-                        help="OVERWRITE data/ with the regenerated tables (off by default)")
+    parser.add_argument("--bams")
+    parser.add_argument("--gtf", default=None)
+    parser.add_argument("--appris", default=None)
+    parser.add_argument("--stages", default=None)
+    parser.add_argument("--all", action="store_true")
+    parser.add_argument("--into-data", action="store_true")
     return parser
 
 def main(argv=None):
@@ -419,15 +376,15 @@ def main(argv=None):
     if unknown:
         parser.error("unknown stage(s): %s -- choose from %s"
                      % (", ".join(unknown), ", ".join(STAGE_ORDER)))
-    if not args.stages and not args.all and not args.validate:
+    if not args.stages and not args.all:
         parser.error("choose --all or --stages (see --help)")
 
     if sys.version_info[:2] != (3, 9):
         log("WARNING: running Python %d.%d; this pipeline is developed on 3.9"
             % sys.version_info[:2])
 
-    args.out = prepare_environment(args, create_dirs=not args.validate)
-    manifest = read_manifest(args.manifest)
+    args.out = prepare_environment(args)
+    manifest = read_manifest(DEFAULT_MANIFEST)
     args.bam_for = lambda sample, column: resolve_bam(manifest, sample, column, args.bams)
 
     import bam_inputs
@@ -436,16 +393,6 @@ def main(argv=None):
     log("BAMs   = %s" % bams)
     log("output = %s" % args.out)
     log("discovered %d sample(s) with both a genome and a transcriptome BAM" % len(found))
-
-    if args.samples:
-        wanted = [s.strip() for s in args.samples.split(",") if s.strip()]
-        missing = [s for s in wanted if s not in found]
-        if missing:
-            log("NOT FOUND in the BAM tree: %s" % ", ".join(missing))
-            return 1
-        samples = wanted
-    else:
-        samples = found
 
     if args.all or not args.stages:
         selected = list(STAGE_ORDER)
@@ -465,22 +412,6 @@ def main(argv=None):
                        else "its output is missing"))
                 selected.append(stage)
 
-    if args.validate:
-        for sample in samples:
-            print("  %-24s genome=%s txome=%s"
-                  % (sample,
-                     bam_inputs.genome_bam(sample).exists(),
-                     bam_inputs.txome_bam(sample).exists()))
-        print()
-        print("%d sample(s) usable. Stages that would run: %s"
-              % (len(samples), ", ".join(selected)))
-        print("Outputs would go to %s (data/ untouched)." % args.out)
-        if set(selected) & NEEDS_ANNOTATION and not (args.gtf and args.appris):
-            print("NOTE: those stages need --gtf and --appris, which were not given.")
-        return 0
-
-    log("samples: %s" % (", ".join(samples) if len(samples) <= 6
-                         else "%d samples" % len(samples)))
     log("stages : %s" % ", ".join(selected))
     results = []
     for stage in selected:
@@ -492,7 +423,7 @@ def main(argv=None):
         elif stage in NEEDS_R and not _rscript():
             code = 1
         else:
-            code = STAGE_RUN[stage](samples, args)
+            code = STAGE_RUN[stage](args)
         results.append((stage, code, (time.time() - started) / 60))
         if code == 0:
             prune_staging(stage, args.out)

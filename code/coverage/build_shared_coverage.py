@@ -13,7 +13,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
 import bam_inputs                      # the one uniqueness policy lives here
-from inputs import make_log, sha256_of
+from inputs import make_log, require_existing, sha256_of
 
 _CDS_HEADER = re.compile(r"\|CDS:(\d+)-(\d+)\|")
 REFERENCE_NAME = "appris_human_v2_selected"
@@ -519,9 +519,10 @@ def build(config):
         writer = coverage_schema.CoverageWriter(
             out_path, sample=config.sample,
             transcripts=transcripts[list(coverage_schema.TRANSCRIPT_COLUMNS)],
-            provenance=provenance, paper_cds_trim=config.trim, chunk=config.chunk,
-            gzip_level=config.gzip_level,
-            assay=config.assay)
+            provenance=provenance, paper_cds_trim=config.trim,
+            chunk=getattr(config, "chunk", 1 << 16),
+            gzip_level=getattr(config, "gzip_level", 9),
+            assay=getattr(config, "assay", "ribo"))
 
     counts_tally = counts_sink = universe = rrl = None
     if do_counts:
@@ -673,12 +674,13 @@ def _provenance(config, coords, cds_table, region_summary, genome_offsets, txome
     import pysam
     import scipy
 
-    keep_paths = bool(config.record_input_paths)
+    keep_paths = bool(getattr(config, "record_input_paths", False))
+    hash_bams = bool(getattr(config, "hash_bams", False))
     inputs = {
         "gtf": file_identity(config.gtf, record_path=keep_paths),
         "appris_lengths": file_identity(config.appris, record_path=keep_paths),
-        "genome_bam": bam_identity(config.genome_bam, config.hash_bams, keep_paths),
-        "transcriptome_bam": bam_identity(config.txome_bam, config.hash_bams, keep_paths),
+        "genome_bam": bam_identity(config.genome_bam, hash_bams, keep_paths),
+        "transcriptome_bam": bam_identity(config.txome_bam, hash_bams, keep_paths),
         "qc_genome": file_identity(config.qc_genome, record_path=keep_paths),
         "qc_transcriptome": file_identity(config.qc_txome, record_path=keep_paths),
     }
@@ -687,7 +689,7 @@ def _provenance(config, coords, cds_table, region_summary, genome_offsets, txome
     return {
         "schema": coverage_schema.SCHEMA,
         "sample": config.sample,
-        "assay": config.assay,
+        "assay": getattr(config, "assay", "ribo"),
         "routes": list(coverage_schema.ROUTES),
         "generation": coverage_schema.invocation(record_paths=keep_paths),
         "code_version": coverage_schema.code_version(),
@@ -731,35 +733,14 @@ def _build_parser():
     parser.add_argument("--transcriptome-bam", required=True, type=Path, dest="txome_bam")
     parser.add_argument("--gtf", required=True, type=Path)
     parser.add_argument("--appris", required=True, type=Path)
-    parser.add_argument("--regions", type=Path,
-                        help="appris_human_v2_actual_regions.bed -- a cross-check")
-    parser.add_argument("--annotation-cache", type=Path, default=None,
-                        help="reuse (or create) the sample-independent annotation bundle "
-                             "here instead of reparsing the GTF. The cohort driver builds "
-                             "it once and passes it to every sample.")
-    parser.add_argument("--qc-genome", type=Path,
-                        help="genome readlen_window_qc.csv; required unless --only is "
-                             "categories alone")
+    parser.add_argument("--regions", type=Path)
+    parser.add_argument("--annotation-cache", type=Path, default=None)
+    parser.add_argument("--qc-genome", type=Path)
     parser.add_argument("--qc-txome", type=Path)
-    parser.add_argument("--only", default="coverage",
-                        help="comma-separated subset of %s: which products this run "
-                             "builds from the shared pass" % ",".join(PRODUCTS))
-    parser.add_argument("--counts-staging", type=Path, default=None,
-                        dest="counts_staging",
-                        help="directory for the staged per-sample ribo count TSV; "
-                             "required with counts")
+    parser.add_argument("--only", default="coverage")
+    parser.add_argument("--counts-staging", type=Path, default=None, dest="counts_staging")
     parser.add_argument("--output", type=Path, default=Path("results/coverage"))
     parser.add_argument("--trim", type=int, default=15)
-    parser.add_argument("--assay", default="ribo", choices=("ribo", "rna"),
-                        help="recorded in the file's provenance; both BAMs must be the "
-                             "same assay, since the two routes are compared to each other")
-    parser.add_argument("--chunk", type=int, default=1 << 16)
-    parser.add_argument("--gzip-level", type=int, default=9)
-    parser.add_argument("--hash-bams", action="store_true")
-    parser.add_argument("--record-input-paths", action="store_true",
-                        help="store full filesystem paths in the provenance. Off by "
-                             "default: an absolute path names the machine that built the "
-                             "file, and the sha256 is what identifies the input.")
     return parser
 
 REQUIRED_INPUTS = (("--genome-bam", "genome_bam"), ("--transcriptome-bam", "txome_bam"),
@@ -776,13 +757,10 @@ def check_inputs(args):
     required = list(REQUIRED_INPUTS)
     if products & {"coverage", "counts"}:
         required += list(QC_INPUTS)
-    missing = ["  %-22s %s" % (flag, getattr(args, attr))
-               for flag, attr in required
-               if getattr(args, attr) is None or not Path(getattr(args, attr)).exists()]
-    if args.regions and not Path(args.regions).exists():
-        missing.append("  %-22s %s" % ("--regions", args.regions))
-    if missing:
-        raise SystemExit("these required inputs do not exist:\n" + "\n".join(missing))
+    pairs = [(flag, getattr(args, attr)) for flag, attr in required]
+    if args.regions:
+        pairs.append(("--regions", args.regions))
+    require_existing(pairs)
     if "counts" in products and not getattr(args, "counts_staging", None):
         raise SystemExit("--counts-staging is required with --only ...counts...")
 

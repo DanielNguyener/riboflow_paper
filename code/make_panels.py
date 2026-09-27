@@ -206,18 +206,13 @@ def ensure_derived(entries):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("panels", nargs="*", help="panel ids, e.g. fig02A fig05B")
+    parser.add_argument("panels", nargs="*")
     parser.add_argument("--all", action="store_true")
-    parser.add_argument("--manifest", type=Path, default=MANIFEST)
-    parser.add_argument("--format", dest="formats", default=None,
-                        help="override the manifest's formats, e.g. pdf,svg,png")
-    parser.add_argument("--accept", action="store_true",
-                        help="store the current renders under figures/panel_references/ "
-                             "(explicit act)")
+    parser.add_argument("--accept", action="store_true")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 
-    document, panels = load_manifest(args.manifest)
+    document, panels = load_manifest()
     by_id = {p["id"]: p for p in panels}
 
     if args.all:
@@ -236,8 +231,7 @@ def main(argv=None):
             % sys.version_info[:2])
     os.environ.setdefault("MPLBACKEND", "Agg")
 
-    formats = tuple(args.formats.split(",")) if args.formats else \
-        tuple(document["defaults"]["formats"])
+    formats = tuple(document["defaults"]["formats"])
 
     ensure_derived([by_id[panel_id] for panel_id in wanted])
 

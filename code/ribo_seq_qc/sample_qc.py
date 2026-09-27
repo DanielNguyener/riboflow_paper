@@ -26,23 +26,13 @@ import pysam
 import pyranges as pr
 import numpy as np
 import pandas as pd
-import matplotlib
-matplotlib.use("Agg")   # backend for qc_core's lazy pyplot imports under --plots
-
 p = argparse.ArgumentParser(description="Per-sample read-length selection.")
 p.add_argument("--sample",           required=True)
 p.add_argument("--bam",              required=True)
-p.add_argument("--route",            choices=["genome", "transcriptome"], default="genome",
-               help="Which alignments --bam holds: genome (NH == 1 kept) or transcriptome "
-                    "(MAPQ >= 42 kept; CDS bounds come from the reference names).")
-p.add_argument("--gtf",              default=None, help="genome route only")
-p.add_argument("--appris",           default=None, help="genome route only")
-p.add_argument("--out",              default=None,
-               help="Output root; default config.out_dir() / config.tx_out_dir() by route.")
-p.add_argument("--plots", action="store_true",
-               help="also write the pre- and post-shift metagene PDFs. Off by default: they\n"
-                    "are diagnostics, and the read-length window and offsets they illustrate\n"
-                    "are already in the tables this step writes.")
+p.add_argument("--route", choices=["genome", "transcriptome"], default="genome")
+p.add_argument("--gtf", default=None)
+p.add_argument("--appris", default=None)
+p.add_argument("--out", default=None)
 args = p.parse_args()
 
 #: offset frame from downstream 3 nt phasing  robust to bimodal start peaks  see psite_offset.py
@@ -56,16 +46,13 @@ F0_THRESH   = 50.0   # min frame0 % after P-site shift to keep a length
 TAG         = " (transcriptome)" if TX else ""
 
 MIN_LEN, MAX_LEN = config.MIN_LEN, config.MAX_LEN
-FRAME_COLORS     = config.FRAME_COLORS
 
 PRE_WIN_UP  = 50   # nt upstream of start codon
 PRE_WIN_DN  = 30   # nt downstream of start codon
 POST_WIN_DN = 30
 
-dir_plots   = os.path.join(OUT, "plots", "metagene")
 dir_staging = os.path.join(OUT, "tables", "_staging")
-for d in ([dir_plots, dir_staging] if args.plots else [dir_staging]):
-    os.makedirs(d, exist_ok=True)
+os.makedirs(dir_staging, exist_ok=True)
 
 print(f"=== [sample_qc{TAG}] sample={SAMPLE} ===", flush=True)
 
@@ -203,16 +190,6 @@ phase2 = qc_core.detect_offsets(
 
 qc_df = qc_core.window_qc_table(
     length_counts, total_reads, phase2, dir_staging, SAMPLE, F0_THRESH)
-
-if args.plots:
-    print("Plotting metagenes...", flush=True)
-    qc_core.plot_preshift(pre_counts, phase1_lengths, phase2, PRE_WIN_UP, PRE_WIN_DN,
-                          dir_plots, SAMPLE,
-                          f"{SAMPLE}{TAG} - 5' end metagene (unshifted; red = detected P-site offset)")
-    qc_core.plot_postshift(reads_df, phase1_lengths, phase2, length_counts, POST_WIN_DN,
-                           dir_plots, SAMPLE,
-                           f"{SAMPLE}{TAG} - 5' end metagene (P-site shifted, first 10 codons)  "
-                           f"[threshold={F0_THRESH:.0f}%]")
 
 # ── P-site frame counts across whole CDS from the same in memory reads ──────────
 print(f"\n=== [cds_frame{TAG}] sample={SAMPLE} ===", flush=True)

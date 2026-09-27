@@ -14,26 +14,23 @@ configurations in
 
 ## What is where
 
-|                                         |                                                                                         |
-| --------------------------------------- | --------------------------------------------------------------------------------------- |
-| `code/make_tables.py`                 | BAMs → analysis tables (`results/`; `--into-data` copies them to `data/`)        |
-| `code/make_panels.py`                 | tables → panel PDFs (`results/panels/`)                                              |
-| `code/ribo_seq_qc/`                   | read-length selection and P-site QC (S1 Fig)                                            |
-| `code/coverage/`                      | per-transcript coverage on both routes (Figure 2)                                       |
-| `code/ribo_rna/` + `code/te_route/` | CDS counts and translation-efficiency statistics, R (Figure 3)                          |
-| `code/read_categories/`               | the five read categories (Figures 4–6); see its[README](code/read_categories/README.md) |
-| `code/panels/`                        | one plotting script per panel                                                           |
-| `code/common/`                        | shared input handling and annotation tables                                             |
-| `config/panel_manifest.yaml`          | which panel is drawn from which table, and how figures are composed                     |
-| `data/`                               | the shipped tables, one directory per analysis                                          |
-| `results/`                            | regenerated output (not tracked)                                                        |
-| `docs/`                               | Figure 3 math, the coverage file format, and every published number with its source     |
-| `supporting_information/S1_Table/`    | the sample table and its generator                                                      |
+|                                         |                                                                                           |
+| --------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `code/make_tables.py`                 | BAMs → analysis tables (`results/`; `--into-data` copies them to `data/`)          |
+| `code/make_panels.py`                 | tables → panel PDFs (`results/panels/`)                                                |
+| `code/ribo_seq_qc/`                   | read-length selection and P-site QC (S1 Fig)                                              |
+| `code/coverage/`                      | per-transcript coverage on both routes (Figure 2)                                         |
+| `code/ribo_rna/` + `code/te_route/` | CDS counts and translation-efficiency statistics, R (Figure 3)                            |
+| `code/read_categories/`               | the five read categories (Figures 4–6); see its [README](code/read_categories/README.md) |
+| `code/panels/`                        | one plotting script per panel                                                             |
+| `code/common/`                        | shared input handling and annotation tables                                               |
+| `config/panel_manifest.yaml`          | which panel is drawn from which table, and how figures are composed                       |
+| `data/`                               | the shipped tables, one directory per analysis                                            |
+| `results/`                            | regenerated output                                                                        |
+| `docs/`                               | Figure 3 math, the coverage file format, and every published number with its source       |
+| `supporting_information/S1_Table/`    | the sample table and its generator                                                        |
 
 ## The five read categories (Figures 4–6)
-
-Every read ID that aligns on either route falls into one of five categories, always in
-this order:
 
 | key  | meaning                                     |
 | ---- | ------------------------------------------- |
@@ -58,9 +55,7 @@ pip install -r requirements.txt
 
 ## Reproducing the results
 
-There are three starting points, from slowest to fastest. Each one produces the same
-tables and panel PDFs, byte for byte; the panels are composed into the manuscript's
-figures separately.
+There are three starting points
 
 **1. From the BAM files** Download the RiboFlow_v2 alignments (Zenodo link
 below) and run:
@@ -73,15 +68,8 @@ python code/make_panels.py --all
 The first command builds every analysis table and the per-sample coverage files
 (one HDF5 per sample under `results/coverage/`; format in
 [`docs/hdf5_schema.md`](docs/hdf5_schema.md)). Each library's BAMs are streamed four
-times in all: the QC stage reads each ribo BAM once (read-length selection, offsets and
-the frame table in one traversal), the `ribo_pass` stage reads each once more for
+times in all: the QC stage reads each ribo BAM once the `ribo_pass` stage reads each once more for
 Figures 2, 3 and 4 together, and the two RNA BAMs are read once each by `te_counts`.
-
-Byte identity is checked by comparing against `data/`, and one parser detail matters
-when doing that by hand: the master tables pass through `pandas.read_csv` during
-aggregation, whose float parser can be 1 ulp off the written value. Compare a
-regenerated row only after a `read_csv` + `to_csv` round trip, never straight from a
-worker's in-memory frame.
 
 **2. From the coverage HDF5 files** If you already have
 `results/coverage/<sample>.shared_coverage.h5`, the tables shipped in `data/` cover
@@ -91,16 +79,13 @@ everything else:
 python code/make_panels.py --all
 ```
 
-**3. From the shipped tables alone (minutes, no BAMs, no HDF5).** The same command:
+**3. From the shipped tables alone (no BAMs, no HDF5).** The same command:
 
 ```bash
 python code/make_panels.py --all
 ```
 
-Every panel builds except 2A and 2B, which plot per-position coverage straight
-from the HeLa HDF5 (too large to ship as text). Figure 3's statistics and Figure 6's
-clustering are derived on the fly from the shipped counts with base R the first time you
-build those panels; the derived tables land under `results/` and are reused after that.
+The derived tables land under `results/` and are reused after that.
 
 ## External inputs
 
@@ -112,7 +97,7 @@ build those panels; the derived tables land under `results/` and are reused afte
 | APPRIS principal-isoform transcriptome | [`references_for_riboflow`](https://github.com/ribosomeprofiling/references_for_riboflow), `transcriptome/human/v2` | RiboFlow_v2 reference; its transcript-lengths table is`--appris` |
 | Housekeeping gene lists                | HRT Atlas v1.0 (`data/te_route/housekeeping/`)                                                                       | Figure 3C labels                                                   |
 | Consensus pseudogenes                  | GENCODE release 34, Yale-UCSC 2-way consensus set (`data/clustering/gencode.v34.2wayconspseudos.gtf.gz`)             | Figure 6E                                                          |
-| Sample QC table                        | [ribobaser](https://github.com/CenikLab/ribobaser)                                                                      | S1 Table generator (not redistributed)                             |
+| Sample QC table                        | [ribobaser](https://github.com/CenikLab/ribobaser)                                                                      | S1 Table generator                                                |
 
 ## Code and data availability
 

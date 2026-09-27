@@ -101,12 +101,9 @@ def main(argv=None):
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--psite", required=True, type=Path)
     parser.add_argument("--footprint", required=True, type=Path)
-    parser.add_argument("--ylim", nargs=2, type=float, default=None)
     parser.add_argument("--figsize", nargs=2, type=float, default=(5.2, 4.4))
-    parser.add_argument("--no-points", action="store_true",
-                        help="box only, without the per-cell-line dots (narrow slots)")
-    parser.add_argument("--short-labels", action="store_true",
-                        help="tick labels rho / r instead of Spearman rho / Pearson r")
+    parser.add_argument("--no-points", action="store_true")
+    parser.add_argument("--short-labels", action="store_true")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
@@ -121,7 +118,8 @@ def main(argv=None):
         print("[panel]   %-10s median Spearman %.3f   Pearson %.3f"
               % (name, medians["spearman_all"], medians["pearson_all"]))
 
-    figure, _axes = draw(prepared, tuple(args.ylim) if args.ylim else None,
+    # ylim is the published framing  the value the manifest used to pass as fig02D args
+    figure, _axes = draw(prepared, (0.0, 1.005),
                          tuple(args.figsize), short_labels=args.short_labels, points=not args.no_points)
     written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force)
     for path in written:

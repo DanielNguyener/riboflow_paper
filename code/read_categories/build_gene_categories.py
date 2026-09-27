@@ -172,28 +172,21 @@ def dump_reads(sample, genome_bam, txome_bam, gene_ids, coverage_path, output_di
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--sample", default="HeLa")
-    parser.add_argument("--gsm", default="GSM2100602")
-    parser.add_argument("--genome-bam", required=True,
-                        help="coordinate-sorted and INDEXED: the gene side is a region fetch")
+    parser.add_argument("--genome-bam", required=True)
     parser.add_argument("--transcriptome-bam", required=True)
-    parser.add_argument("--gene-id", required=True, help="comma-separated gene IDs")
-    parser.add_argument("--coverage", default=None,
-                        help="a shared_coverage.h5, used only to resolve gene IDs and names")
-    parser.add_argument("--output", default=DEFAULT_OUTPUT,
-                        help="output stem (.tsv and .json are appended)")
-    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--coverage", default=None)
+    parser.add_argument("--output", default=DEFAULT_OUTPUT)
     args = parser.parse_args(argv)
 
-    if os.path.exists(args.output + ".tsv") and not args.force:
-        paths.die("%s.tsv exists; pass --force" % args.output)
-    gene_ids = [g.strip() for g in args.gene_id.split(",") if g.strip()]
-    reads = dump_reads(args.sample, args.genome_bam, args.transcriptome_bam, gene_ids,
+    # published panel  hela gsm and the three partition genes are fixed
+    sample, gsm = "HeLa", "GSM2100602"
+    gene_ids = ["ENSG00000093010", "ENSG00000111640", "ENSG00000124831"]
+    reads = dump_reads(sample, args.genome_bam, args.transcriptome_bam, gene_ids,
                        args.coverage, os.path.dirname(args.output) or ".")
-    prepared, segments, mapping = fold(reads, args.sample, list(GENE_ORDER))
+    prepared, segments, mapping = fold(reads, sample, list(GENE_ORDER))
     check_expected(prepared)
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
-    write(prepared, segments, mapping, reads, args.sample, args.gsm, args.output)
+    write(prepared, segments, mapping, reads, sample, gsm, args.output)
     for entry in prepared["entries"]:
         print("[tables] %-8s union %5d  %s"
               % (entry["gene_name"], entry["n_union"],

@@ -5,8 +5,8 @@ Reading both BAMs end to end costs ~136 million pysam records. This stores exact
 state the gene classifier consumes, so the passes happen once per sample and every later
 question is a slice:
 
-    python code/read_categories/read_state.py --sample HeLa          # ~20 min, once
-    python code/read_categories/build_gene_counts.py --sample HeLa   # minutes, any gene set
+    python code/read_categories/read_state.py                        # ~20 min, once
+    python code/read_categories/build_gene_counts.py                 # minutes, any gene set
 
 What is stored is what `classify_union` asks for and nothing else: for every reported
 genome alignment its locus, score, NH and CIGAR blocks; for every read its primary, its
@@ -338,7 +338,7 @@ def write_state(path, sample, genome_bam, txome_bam, columns, blocks,
         handle.attrs["n_primary"] = int(len(primary_reads))
         handle.attrs["created_utc"] = datetime.datetime.utcnow().isoformat() + "Z"
         handle.attrs["provenance"] = json.dumps(
-            {"generator": "code/clustering/read_state.py",
+            {"generator": "code/read_categories/read_state.py",
              "missing_as": MISSING_AS,
              "read_key": "packed" if keys.parsed else "dictionary",
              "runs": list(keys.run_names),
@@ -639,19 +639,16 @@ def default_path(output_root, sample, label=""):
     return Path(output_root) / ("%s.read_state.h5" % stem)
 
 
+SAMPLE = "HeLa"   # the one published example library
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--sample", required=True)
-    parser.add_argument("--genome-bam")
-    parser.add_argument("--transcriptome-bam")
     parser.add_argument("--bams")
     parser.add_argument("--gtf")
     parser.add_argument("--appris")
-    parser.add_argument("--output", help="default: results/clustering")
-    parser.add_argument("--label", default="post_dedup",
-                        help="BAM-set tag; the store is <sample>.<label>.read_state.h5")
-    parser.add_argument("--force", action="store_true", help="rebuild an existing file")
+    parser.add_argument("--output")
     args = parser.parse_args(argv)
 
     sys.path.insert(0, str(REPO / "code" / "common"))
@@ -659,16 +656,16 @@ def main(argv=None):
     log = input_resolver.make_log("read_state")
 
     paths = input_resolver.resolve_external_inputs(
-        args.bams, args.gtf, args.appris, sample=args.sample)
+        args.bams, args.gtf, args.appris, sample=SAMPLE)
     os.environ["RIBOFLOW_PAPER_GTF"] = str(Path(paths["gtf"]).resolve())
     os.environ["RIBOFLOW_PAPER_APPRIS"] = str(Path(paths["appris"]).resolve())
-    genome_bam = Path(args.genome_bam or paths["ribo_genome"])
-    txome_bam = Path(args.transcriptome_bam or paths["ribo_txome"])
+    genome_bam = Path(paths["ribo_genome"])
+    txome_bam = Path(paths["ribo_txome"])
 
     output = Path(args.output) if args.output else REPO / "results" / "clustering"
-    destination = default_path(output, args.sample, args.label)
-    if destination.exists() and not args.force:
-        raise SystemExit("%s exists; pass --force to rebuild" % destination)
+    destination = default_path(output, SAMPLE, "post_dedup")
+    if destination.exists():
+        raise SystemExit("%s exists; delete it to rebuild" % destination)
 
     saved = list(sys.path)
     for entry in (REPO / "code" / "read_categories", REPO / "code" / "common",
@@ -680,7 +677,7 @@ def main(argv=None):
 
     log("resolving the APPRIS transcript table")
     base2ver = reference_lib.build_transcript_table()["base2ver"]
-    build(args.sample, genome_bam, txome_bam, base2ver, destination, log)
+    build(SAMPLE, genome_bam, txome_bam, base2ver, destination, log)
     return 0
 
 

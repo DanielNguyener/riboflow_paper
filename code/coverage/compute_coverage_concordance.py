@@ -204,16 +204,11 @@ def write_tsv(frame, path, gzip_it=False):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--coverage", required=True, type=Path,
-                        help="directory of <sample>.shared_coverage.h5 files")
-    parser.add_argument("--samples", help="comma-separated subset")
+    parser.add_argument("--coverage", required=True, type=Path)
     parser.add_argument("--output", type=Path, default=Path("results/coverage/concordance"))
     args = parser.parse_args(argv)
 
     files = sorted(args.coverage.glob("*.shared_coverage.h5"))
-    if args.samples:
-        wanted = {s.strip() for s in args.samples.split(",") if s.strip()}
-        files = [f for f in files if f.name.split(".")[0] in wanted]
     if not files:
         raise SystemExit("no coverage files found in %s" % args.coverage)
     log("%d coverage file(s)" % len(files))

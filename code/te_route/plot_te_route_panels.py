@@ -334,18 +334,13 @@ def draw_c(figure, ax, cax, genes, housekeeping=()):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--per-gene-delta", required=True, type=Path,
-                        help="per_gene_delta.tsv from te_statistics.R")
-    parser.add_argument("--route-correlation", required=True, type=Path,
-                        help="route_correlation.tsv from te_statistics.R")
-    parser.add_argument("--housekeeping-genes", type=Path,
-                        help="HRT Atlas Housekeeping_GenesHuman.csv (panel C labels)")
-    parser.add_argument("--housekeeping-transcripts", type=Path,
-                        help="HRT Atlas Housekeeping_TranscriptsHuman.csv (panel C labels)")
-    parser.add_argument("--panel", choices=PANELS, default="combined",
-                        help="the combined page, or one panel on its own page")
-    parser.add_argument("--output", required=True, type=Path, help="path stem, no extension")
-    parser.add_argument("--format", dest="formats", default="pdf", help="pdf,png,tif")
+    parser.add_argument("--per-gene-delta", required=True, type=Path)
+    parser.add_argument("--route-correlation", required=True, type=Path)
+    parser.add_argument("--housekeeping-genes", type=Path)
+    parser.add_argument("--housekeeping-transcripts", type=Path)
+    parser.add_argument("--panel", choices=PANELS, default="combined")
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--format", dest="formats", default="pdf")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 

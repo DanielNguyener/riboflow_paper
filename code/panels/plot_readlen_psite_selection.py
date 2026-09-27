@@ -9,6 +9,9 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import _qc_grid_common as common  # noqa: E402
+import panel_style as ps  # noqa: E402
 
 BLANK_C, AGREE_C, DIFFER_C, GENOME_C, TXOME_C = (
     "#eeeeee", "#3182bd", "#984ea3", "#2ca25f", "#d62728")
@@ -17,9 +20,6 @@ STATUS_LABELS = ("both selected, equal offset", "both selected, different offset
 
 def prepare(qc_genome, qc_txome, samples_csv):
     """The status grid, its cell labels, and the agreement counts the caption quotes."""
-    sys.path.insert(0, str(HERE))
-    import _qc_grid_common as common
-
     samples, lengths, genome, txome = common.load_pair(qc_genome, qc_txome, "psite_offset")
     status = np.zeros((len(samples), len(lengths)), dtype=int)
     labels = np.empty((len(samples), len(lengths)), dtype=object)
@@ -58,19 +58,12 @@ def prepare(qc_genome, qc_txome, samples_csv):
 def draw(prepared, axes_size=None, margins=None, type_scale="large", legend_ncol=2):
     import matplotlib.pyplot as plt
     from matplotlib.colors import ListedColormap
-    sys.path.insert(0, str(HERE))
-    import _qc_grid_common as common
-    import panel_style as ps
 
     ps.apply_rcparams()
     sizes = common.grid_type(type_scale)
     samples, lengths = prepared["samples"], prepared["lengths"]
     # shared with figS1B via _qc_grid_common.MARGINS  right gutter left blank here
-    width, height = axes_size or common.AXES_SIZE
-    left, bottom, right, top = margins or common.MARGINS
-    fig_w, fig_h = left + width + right, bottom + height + top
-    figure, axis = plt.subplots(figsize=(fig_w, fig_h))
-    axis.set_position([left / fig_w, bottom / fig_h, width / fig_w, height / fig_h])
+    figure, axis, _geom = common.grid_figure(axes_size, margins)
     from matplotlib.colors import BoundaryNorm
     colormap = ListedColormap([BLANK_C, AGREE_C, DIFFER_C, GENOME_C, TXOME_C])
     norm = BoundaryNorm(np.arange(-0.5, 5.5, 1.0), colormap.N)
@@ -104,20 +97,10 @@ def main(argv=None):
     parser.add_argument("--qc-genome", required=True, type=Path)
     parser.add_argument("--qc-txome", required=True, type=Path)
     parser.add_argument("--samples-csv", required=True, type=Path)
-    parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--format", dest="formats", default="pdf")
-    parser.add_argument("--force", action="store_true")
-    parser.add_argument("--axes-size", nargs=2, type=float, metavar=("W", "H"),
-                        help="grid size in inches (default: _qc_grid_common.AXES_SIZE)")
-    parser.add_argument("--margins", nargs=4, type=float, metavar=("L", "B", "R", "T"),
-                        help="margins in inches (default: _qc_grid_common.MARGINS)")
-    parser.add_argument("--type-scale", choices=("large", "base"), default="large",
-                        help="large: standalone panel type; base: journal-page type (8-12 pt)")
+    ps.add_output_args(parser)
+    common.add_grid_args(parser)
     parser.add_argument("--legend-ncol", type=int, default=2)
     args = parser.parse_args(argv)
-
-    sys.path.insert(0, str(HERE))
-    import panel_style as ps
 
     prepared = prepare(args.qc_genome, args.qc_txome, args.samples_csv)
     total = prepared["n_agree"] + prepared["n_disagree"]
@@ -129,13 +112,11 @@ def main(argv=None):
           % (total, prepared["n_agree"], 100.0 * prepared["n_agree"] / total,
              prepared["n_disagree"]))
 
-    figure, _axis, legend = draw(
+    figure, _axis, _legend = draw(
         prepared, tuple(args.axes_size) if args.axes_size else None,
         tuple(args.margins) if args.margins else None, args.type_scale, args.legend_ncol)
-    written = ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
-                      extra_artists=[legend], tight=False)
-    for path in written:
-        print("[panel] wrote %s" % path)
+    ps.save(figure, args.output, ps.resolve_formats(args.formats), args.force,
+            tight=False, report=True)
     return 0
 
 if __name__ == "__main__":

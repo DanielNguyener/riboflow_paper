@@ -9,6 +9,9 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import panel_style as ps  # noqa: E402
+
 
 #: grid size and margins in inches  SHARED by both figure 2 panels so cells and pages
 #: match 1 to 1 at assembly  each panel leaves the other gutter BLANK so both must save
@@ -21,9 +24,6 @@ def _as_bool(series):
 
 def load_selected(qc_path, value_column="psite_offset"):
     """Long table of phase-1 read lengths and one per-length value, per sample."""
-    sys.path.insert(0, str(HERE))
-    import panel_style as ps
-
     frame = pd.read_csv(qc_path)
     ps.require_columns(frame, ("sample", "read_length", "in_phase1", value_column),
                        str(qc_path))
@@ -53,9 +53,25 @@ def load_pair(genome_qc, txome_qc, value_column):
 
 def gsm_labels(samples_csv, samples):
     """GSM accessions for the y axis, tolerating spaced or underscored cell-line names."""
-    import panel_style as ps
     mapping = ps.gsm_map(samples_csv)
     return [mapping.get(s, s) for s in samples]
+
+def add_grid_args(parser):
+    """the geometry flags both s1 grids take  the composer passes them"""
+    parser.add_argument("--axes-size", nargs=2, type=float, metavar=("W", "H"))
+    parser.add_argument("--margins", nargs=4, type=float, metavar=("L", "B", "R", "T"))
+    parser.add_argument("--type-scale", choices=("large", "base"), default="large")
+
+def grid_figure(axes_size, margins):
+    """one axes at exact inch geometry  both s1 grids share it  returns the geometry
+    the caller may need for a colourbar"""
+    import matplotlib.pyplot as plt
+    width, height = axes_size or AXES_SIZE
+    left, bottom, right, top = margins or MARGINS
+    fig_w, fig_h = left + width + right, bottom + height + top
+    figure, axis = plt.subplots(figsize=(fig_w, fig_h))
+    axis.set_position([left / fig_w, bottom / fig_h, width / fig_w, height / fig_h])
+    return figure, axis, (left, bottom, width, height, fig_w, fig_h)
 
 def draw_grid(axis, matrix, cmap, norm):
     """Draw a sample x read-length grid as TRUE VECTOR QUADS; row 0 at the TOP.
@@ -79,8 +95,6 @@ def cell_centre(index):
 #: type for the two grids at their two ship scales  "large" = standalone panel
 #: "base" = journal page inside the PLOS 8-12 pt window
 def grid_type(scale="large"):
-    sys.path.insert(0, str(HERE))
-    import panel_style as ps
     if scale == "large":
         return {"label": ps.FONT_LABEL_LARGE, "tick": ps.FONT_TICK_LARGE,
                 "annotation": ps.FONT_ANNOTATION_LARGE}

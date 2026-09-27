@@ -28,9 +28,7 @@ def txome_ref_transcripts(bam_path) -> set:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--txome-bam", default=None,
-                    help="Any transcriptome BAM (for the @SQ reference set). "
-                         "Default: first discovered sample.")
+    ap.add_argument("--txome-bam", default=None)
     ap.add_argument("--out-dir", default=str(fc.output_root()))
     args = ap.parse_args()
 

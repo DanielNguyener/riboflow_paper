@@ -74,16 +74,16 @@ def load_qc(rda=None, qc_csv=None):
 
     The .rda is an R binary; `Rscript`'s `write.csv` is how the original selection read it,
     and reproducing its 15-significant-digit output is part of reproducing the published
-    floats. `--qc-csv` exists so a machine without R can still run this from a dump.
+    floats. `qc_csv` exists so a machine without R can still run this from a dump.
     """
     if qc_csv:
         frame = pd.read_csv(qc_csv)
     else:
         if not rda:
             raise SystemExit(
-                "no QC table: pass --rda (or set RIBOBASER_RDA) or --qc-csv.\n"
+                "no QC table: pass --rda (or set RIBOFLOW_PAPER_RDA).\n"
                 "The .rda is third-party MIT data from CenikLab/ribobaser and is not "
-                "redistributed here; set RIBOBASER_RDA to your own copy.")
+                "redistributed here; set RIBOFLOW_PAPER_RDA to your own copy.")
         rda = Path(rda).resolve()
         if not rda.exists():
             raise SystemExit("no such .rda: %s" % rda)
@@ -266,24 +266,15 @@ def sha256(path):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--rda", default=os.environ.get("RIBOBASER_RDA"),
-                        help="Ribobase_QC_dedup_data.rda (default: $RIBOBASER_RDA)")
-    parser.add_argument("--qc-csv", help="a previously dumped QC table, instead of --rda")
-    parser.add_argument("--xlsx", required=True, help="41587_2025_2718_MOESM3_ESM.xlsx")
-    parser.add_argument("--output", type=Path, required=True,
-                        help="where to write the regenerated table. REQUIRED: give a "
-                             "temporary path to inspect it, or "
-                             "supporting_information/S1_Table/samples.csv to replace the "
-                             "shipped copy.")
-    parser.add_argument("--no-override", action="store_true",
-                        help="the automatic selection alone, WITHOUT the MCF10A quality "
-                             "override -- 24 rows that are not the published panel")
-    parser.add_argument("--force", action="store_true", help="overwrite --output")
+    parser.add_argument("--rda", default=os.environ.get("RIBOFLOW_PAPER_RDA"))
+    parser.add_argument("--xlsx", required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 
-    qc = load_qc(args.rda, args.qc_csv)
+    qc = load_qc(args.rda)
     metadata = load_matched_rna(args.xlsx)
-    table = build_table(qc, metadata, apply_override=not args.no_override)
+    table = build_table(qc, metadata)
 
     if args.output.exists() and not args.force:
         raise SystemExit("refusing to overwrite %s -- pass --force" % args.output)

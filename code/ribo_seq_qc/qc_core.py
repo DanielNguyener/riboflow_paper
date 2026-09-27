@@ -15,8 +15,6 @@ _COMMON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if _COMMON not in sys.path:
     sys.path.insert(0, _COMMON)
 
-FRAME_COLORS = {0: "#2c7fb8", 1: "#7fcdbb", 2: "#edf8b1"}
-
 SELECT_MIN_LEN, SELECT_MAX_LEN = 21, 40
 SELECT_CAPTURE = 0.85
 
@@ -222,99 +220,3 @@ def window_qc_table(length_counts, total_reads, phase2,
     print("  Periodic lengths (frame0 >= %.0f%%): %s" % (frame0_threshold, periodic),
           flush=True)
     return qc
-
-def _panels(n_panels):
-    import matplotlib.pyplot as plt
-    ncols = 3
-    nrows = max(1, (n_panels + ncols - 1) // ncols)
-    figure, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 3.5 * nrows),
-                               sharey=False)
-    flat = np.array(axes).flat if n_panels > 1 else [axes]
-    return figure, list(flat)
-
-def plot_preshift(pre_counts, phase1_lengths, phase2, up, down, plots_dir, sample,
-                  title):
-    """The unshifted 5'-end metagene, one panel per selected length."""
-    import matplotlib.patches as mpatches
-    import matplotlib.pyplot as plt
-
-    positions = list(range(-up, down))
-    figure, axes = _panels(len(phase1_lengths))
-    for axis, length in zip(axes, phase1_lengths):
-        raw = np.array([pre_counts[length].get(p, 0) for p in positions])
-        # per panel max normalised  otherwise CDS body dwarfs the upstream P-site peak
-        ys = raw / (raw.max() if raw.max() > 0 else 1)
-        axis.axvspan(-up, 0, color="lightgrey", alpha=0.35, zorder=0)
-        axis.axvline(0, color="black", linewidth=1.0, linestyle="--", zorder=2)
-        axis.bar(positions, ys, width=1.0,
-                 color=[FRAME_COLORS[p % 3] for p in positions], linewidth=0, zorder=1)
-        if length in phase2 and phase2[length]["psite_offset"] is not None:
-            offset = phase2[length]["psite_offset"]
-            axis.axvline(-offset, color="red", linewidth=1.2, linestyle=":", zorder=3,
-                         label="offset=%+d" % offset)
-            axis.legend(fontsize=7, frameon=False)
-        axis.set_title("%d nt" % length, fontsize=11)
-        axis.set_xlabel("Position relative to CDS start (nt)", fontsize=8)
-        axis.set_ylabel("Normalised coverage", fontsize=8)
-        axis.set_xticks(range(-up, down + 1, 10))
-        axis.set_ylim(0, 1.05)
-        axis.tick_params(labelsize=7)
-        axis.set_xlim(-up - 0.5, down - 0.5)
-    for axis in axes[len(phase1_lengths):]:
-        axis.set_visible(False)
-
-    patches = [mpatches.Patch(color=FRAME_COLORS[f], label="Frame %d" % f)
-               for f in range(3)]
-    figure.legend(handles=patches, loc="lower right", fontsize=9, frameon=False)
-    figure.suptitle(title, fontsize=12, y=1.01)
-    figure.tight_layout()
-    path = os.path.join(plots_dir, "%s_preshift.pdf" % sample)
-    figure.savefig(path, bbox_inches="tight")
-    plt.close(figure)
-    print("  Saved: %s" % path, flush=True)
-
-def plot_postshift(reads, phase1_lengths, phase2, length_counts, post_window,
-                   plots_dir, sample, title):
-    """The P-site-shifted metagene over the first `post_window` nt, in RPM."""
-    import matplotlib.patches as mpatches
-    import matplotlib.pyplot as plt
-
-    positions = list(range(post_window))
-    post_counts = {}
-    for length in phase1_lengths:
-        selected = reads["length"].eq(length) & reads["rel_pos"].notna()
-        shifted = reads.loc[selected, "rel_pos"].astype(int) + phase2[length]["psite_offset"]
-        first10 = shifted[shifted.between(0, post_window - 1)]
-        post_counts[length] = first10.groupby(first10).size().to_dict()
-
-    figure, axes = _panels(len(phase1_lengths))
-    for axis, length in zip(axes, phase1_lengths):
-        n_reads = length_counts[length]
-        rpm = 1e6 / n_reads if n_reads else 1
-        summary = phase2[length]
-        ys = np.array([post_counts[length].get(p, 0) * rpm for p in positions])
-        axis.bar(positions, ys, width=1.0,
-                 color=[FRAME_COLORS[p % 3] for p in positions], linewidth=0, zorder=1)
-        for codon_start in range(0, post_window, 3):
-            axis.axvline(codon_start - 0.5, color="grey", linewidth=0.4,
-                         linestyle=":", zorder=0)
-        axis.set_title("%d nt  %s  frame0=%.0f%%"
-                       % (length, "PASS" if summary["periodic"] else "FAIL",
-                          summary["frame0_pct"]), fontsize=10)
-        axis.set_xlabel("P-site shifted position (nt)", fontsize=8)
-        axis.set_ylabel("RPM", fontsize=8)
-        axis.tick_params(labelsize=7)
-        axis.set_xlim(-0.5, post_window - 0.5)
-        axis.set_xticks(range(0, post_window, 3))
-    for axis in axes[len(phase1_lengths):]:
-        axis.set_visible(False)
-
-    patches = [mpatches.Patch(color=FRAME_COLORS[f], label="Frame %d" % f)
-               for f in range(3)]
-    figure.legend(handles=patches, loc="lower right", fontsize=9, frameon=False)
-    figure.suptitle(title, fontsize=12, y=1.01)
-    figure.tight_layout()
-    path = os.path.join(plots_dir, "%s_postshift.pdf" % sample)
-    figure.savefig(path, bbox_inches="tight")
-    plt.close(figure)
-    print("  Saved: %s" % path, flush=True)

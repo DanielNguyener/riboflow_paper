@@ -38,13 +38,10 @@ full multi-isoform span, or if its transcriptome primary is the gene's selected 
 transcript. Genome unique/multimapped is the primary's NH (Figures 3-4). Unions overlap
 between genes; the columns do not sum to the library.
 
-    python code/clustering/read_state.py --sample HeLa
-    python code/clustering/build_gene_counts.py --sample HeLa
+    python code/read_categories/read_state.py
+    python code/read_categories/build_gene_counts.py
 
-`--verify N` proves the swap: it runs the untouched `compute_partition` on N genes from
-the same BAMs and asserts every one of the seven segment counts matches.
-
-Writes `results/clustering/<sample>.<label>.gene_counts.tsv`, one row per gene, sorted by
+Writes `results/clustering/<sample>.post_dedup.gene_counts.tsv`, one row per gene, sorted by
 `n_union` descending then gene symbol -- the row order every later step inherits. The
 HeLa table is shipped as `data/clustering/HeLa.post_dedup.gene_counts.tsv` (Figure 6).
 """
@@ -228,44 +225,6 @@ def fold_route5(table):
     return out
 
 
-def verify_against_compute_partition(partition_lib, fold, state, tids, gene_of,
-                                     genome_bam, txome_bam, sample, table, log):
-    """Run the untouched `compute_partition` on the same BAMs and compare every segment.
-
-    This is the proof that replacing the I/O did not change the answer: same inputs, same
-    genes, one path through the store and one through the original reader.
-    """
-    if not tids:
-        return
-    log("verifying %d gene(s) against compute_partition on the same BAMs" % len(tids))
-    wide, _tidy, dump = partition_lib.compute_partition(
-        sample, genome_bam, txome_bam, transcript_ids=list(tids), coverage=None,
-        log=lambda m: log("    " + m))
-
-    present = dump["txome_primary_transcript"].fillna("").astype(str) != ""
-    segments = [fold._route7_segment(c, p) for c, p in zip(dump["category"], present)]
-    reference = (dump.assign(_seg=segments).groupby("transcript_id")["_seg"]
-                 .value_counts().unstack(fill_value=0)
-                 .reindex(columns=list(SEGMENT_KEYS), fill_value=0))
-    unions = wide.set_index("transcript_id")["n_union"]
-
-    failures = []
-    indexed = table.set_index("transcript_id")
-    for tid in tids:
-        if int(indexed.loc[tid, "n_union"]) != int(unions.loc[tid]):
-            failures.append("%s n_union %d vs %d"
-                            % (tid, indexed.loc[tid, "n_union"], unions.loc[tid]))
-        for key in SEGMENT_KEYS:
-            want = int(reference.loc[tid, key]) if tid in reference.index else 0
-            if int(indexed.loc[tid, key]) != want:
-                failures.append("%s %s %d vs %d" % (tid, key, indexed.loc[tid, key], want))
-    if failures:
-        for line in failures[:20]:
-            log("  MISMATCH %s" % line)
-        raise SystemExit("the store-backed path disagrees with compute_partition")
-    log("all %d gene(s) match compute_partition exactly, on every segment" % len(tids))
-
-
 # ── reporting ────────────────────────────────────────────────────────────────
 
 def expected_counts(path, sample):
@@ -328,47 +287,34 @@ def summarise(table, log):
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
+SAMPLE = "HeLa"   # the one published example library
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--sample", required=True, help="RiboFlow sample directory name")
-    parser.add_argument("--label", default="post_dedup",
-                        help="which read-state store to use; the output stem is "
-                             "<sample>.<label>")
-    parser.add_argument("--state", help="path to a read_state HDF5 (overrides --label)")
-    parser.add_argument("--genome-bam", help="only needed by --verify")
-    parser.add_argument("--transcriptome-bam")
     parser.add_argument("--bams")
     parser.add_argument("--gtf")
     parser.add_argument("--appris")
-    parser.add_argument("--output", help="default: results/clustering")
-    parser.add_argument("--limit", type=int, help="first N genes of the universe")
-    parser.add_argument("--genes", default="",
-                        help="comma-separated symbols, gene ids or transcript ids")
-    parser.add_argument("--verify", type=int, default=0,
-                        help="genes to cross-check against compute_partition (slow: it "
-                             "re-reads both BAMs once)")
-    parser.add_argument("--expect", help="default: data/read_categories/gene_partition_route7.tsv")
+    parser.add_argument("--output")
     args = parser.parse_args(argv)
 
     sys.path.insert(0, str(HERE))
     import read_state as read_state_module
 
     paths = inputs.resolve_external_inputs(
-        args.bams, args.gtf, args.appris, sample=args.sample)
+        args.bams, args.gtf, args.appris, sample=SAMPLE)
     os.environ["RIBOFLOW_PAPER_GTF"] = str(Path(paths["gtf"]).resolve())
     os.environ["RIBOFLOW_PAPER_APPRIS"] = str(Path(paths["appris"]).resolve())
 
     root = REPO / "results" / "clustering"
     output = Path(args.output) if args.output else root
     output.mkdir(parents=True, exist_ok=True)
-    state_path = (Path(args.state) if args.state
-                  else read_state_module.default_path(root, args.sample, args.label))
+    state_path = read_state_module.default_path(root, SAMPLE, "post_dedup")
     if not state_path.exists():
         raise SystemExit(
             "no read-state store at %s. Build it first:\n"
-            "    python code/clustering/read_state.py --sample %s --label %s"
-            % (state_path, args.sample, args.label))
+            "    python code/read_categories/read_state.py" % state_path)
 
     partition_lib = load_partition_lib()
     fold = load_panel_fold()
@@ -381,21 +327,7 @@ def main(argv=None):
     names = transcript_names(log)
     tids, gene_of, dropped = gene_universe(annotation, annotation["spans"], log)
 
-    wanted = [g.strip() for g in args.genes.split(",") if g.strip()]
-    if wanted:
-        by_key = {}
-        for tid in tids:
-            by_key.setdefault(names.get(tid, ""), tid)
-            by_key.setdefault(tid, tid)
-            by_key.setdefault(str(gene_of[tid]).split(".", 1)[0], tid)
-        chosen = [by_key.get(item) for item in wanted]
-        unknown = [item for item, tid in zip(wanted, chosen) if tid is None]
-        if unknown:
-            raise SystemExit("not in the gene universe: %s" % ", ".join(unknown))
-        selected = chosen
-        log("restricted to %d requested gene(s)" % len(selected))
-    else:
-        selected = tids[:args.limit] if args.limit else tids
+    selected = tids
 
     with read_state_module.ReadState(state_path) as state:
         log("read state %s: %d reads, %d alignments"
@@ -409,14 +341,7 @@ def main(argv=None):
         table["gene_id"] = [gene_of[t] for t in table["transcript_id"]]
         table["status"] = np.where(table["n_union"] > 0, "ok", "zero_union")
 
-        if args.verify:
-            genome_bam = Path(args.genome_bam or paths["ribo_genome"])
-            txome_bam = Path(args.transcriptome_bam or paths["ribo_txome"])
-            verify_against_compute_partition(
-                partition_lib, fold, state, selected[:args.verify], gene_of,
-                genome_bam, txome_bam, args.sample, table, log)
-
-    if dropped and not wanted:
+    if dropped:
         table = pd.concat([table, pd.DataFrame(
             [{"gene": names.get(tid, tid), "gene_id": gene_id, "transcript_id": tid,
               "status": "excluded", "n_union": 0} for gene_id, tid, _r in dropped])],
@@ -425,7 +350,7 @@ def main(argv=None):
     count_columns = ["n_union"] + list(METRIC_COLUMNS) + list(SEGMENT_KEYS)
     table[count_columns] = table[count_columns].fillna(0).astype(int)
     table = table.sort_values(["n_union", "gene"], ascending=[False, True])
-    stem = "%s.%s" % (args.sample, args.label)
+    stem = "%s.post_dedup" % SAMPLE
     destination = output / ("%s.gene_counts.tsv" % stem)
     table[COLUMNS].to_csv(destination, sep="\t", index=False, lineterminator="\n")
     log("wrote %s (%d genes)" % (destination, len(table)))
@@ -440,9 +365,8 @@ def main(argv=None):
     log("wrote %s (%d genes, n_union %d..%d)"
         % (filtered, len(kept), int(kept["n_union"].min()), int(kept["n_union"].max())))
 
-    expect_path = Path(args.expect) if args.expect else EXPECT_TABLE
     named_gene_report(
-        table, expected_counts(expect_path, args.sample) if expect_path.exists() else {},
+        table, expected_counts(EXPECT_TABLE, SAMPLE) if EXPECT_TABLE.exists() else {},
         log)
     summarise(table, log)
     return 0

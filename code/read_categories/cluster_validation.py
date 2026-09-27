@@ -331,13 +331,12 @@ TABLES = {"pseudogene_counts": pseudogene_counts,
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("table", choices=sorted(TABLES), help="which per-gene table to build")
-    p.add_argument("--clusters", required=True, type=Path, help="<stem>.clusters_k<K>.tsv")
+    p.add_argument("table", choices=sorted(TABLES))
+    p.add_argument("--clusters", required=True, type=Path)
     p.add_argument("--output", required=True, type=Path)
-    p.add_argument("--gtf", type=Path, help="GENCODE v34 GTF (default: env / config/local.yaml)")
-    p.add_argument("--pseudogenes", type=Path,
-                   help="GENCODE v34 2-way consensus pseudogene GTF (pseudogene_counts)")
-    p.add_argument("--appris", type=Path, help="reference lengths TSV (reference_duplication)")
+    p.add_argument("--gtf", type=Path)
+    p.add_argument("--pseudogenes", type=Path)
+    p.add_argument("--appris", type=Path)
     a = p.parse_args(argv)
     gtf = resolve_gtf(a)
     if a.table == "pseudogene_counts":

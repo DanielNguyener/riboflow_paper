@@ -53,10 +53,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "coverage"))
 import psite_placement  # noqa: E402
 from intervals import merge, subtract  # noqa: E402
 
-#: shipped qc tables  only input allowed to default into repo
-QC_GENOME_DEFAULT = "data/ribo_seq_qc/genome/tables/readlen_window_qc.csv"
-QC_TXOME_DEFAULT = "data/ribo_seq_qc/transcriptome/tables/readlen_window_qc.csv"
-
 #: txome route uniqueness  bowtie2 emits no NH tag  project wide rule
 #: fixed width in plotted units of dashed intron connector  recorded in artifact
 INTRON_GAP = 90.0
@@ -587,33 +583,27 @@ def build(gene, sample, inputs, qc_genome, qc_txome, signal):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--gene", required=True, help="gene NAME, e.g. LRRFIP1")
-    parser.add_argument("--sample", default="HeLa")
-    parser.add_argument("--gsm", default="GSM2100602")
-    parser.add_argument("--bams", help="RiboFlow output root (else RIBOFLOW_PAPER_BAMS)")
-    parser.add_argument("--gtf", help="GENCODE GTF (else RIBOFLOW_PAPER_GTF)")
-    parser.add_argument("--appris", help="reference lengths TSV (else RIBOFLOW_PAPER_APPRIS)")
-    parser.add_argument("--qc-genome", default=QC_GENOME_DEFAULT,
-                        help="repo-relative or absolute; the genome route's QC table")
-    parser.add_argument("--qc-txome", default=QC_TXOME_DEFAULT,
-                        help="the transcriptome route's QC table")
-    parser.add_argument("--output", help="output stem; default results/read_categories/locus_<GENE>")
-    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--bams")
+    parser.add_argument("--gtf")
+    parser.add_argument("--appris")
+    parser.add_argument("--qc-genome", required=True)
+    parser.add_argument("--qc-txome", required=True)
+    parser.add_argument("--output")
     args = parser.parse_args(argv)
 
-    inputs = paths.resolve_external_inputs(args.bams, args.gtf, args.appris, args.sample)
+    # published locus  lrrfip1 in the hela example library
+    gene, sample, gsm = "LRRFIP1", "HeLa", "GSM2100602"
+    inputs = paths.resolve_external_inputs(args.bams, args.gtf, args.appris, sample)
     qc_genome = str(paths.repo_path(args.qc_genome))
     qc_txome = str(paths.repo_path(args.qc_txome))
     for qc in (qc_genome, qc_txome):
         if not os.path.exists(qc):
             die("QC table missing: %s" % qc)
     stem = args.output or os.path.join(paths.REPO, "results", "read_categories",
-                                       "locus_%s" % args.gene)
-    if os.path.exists(stem + ".npz") and not args.force:
-        die("%s.npz exists; pass --force" % stem)
+                                       "locus_%s" % gene)
 
-    arrays, meta = build(args.gene, args.sample, inputs, qc_genome, qc_txome, "psite")
-    meta["gsm"] = args.gsm
+    arrays, meta = build(gene, sample, inputs, qc_genome, qc_txome, "psite")
+    meta["gsm"] = gsm
     meta["inputs"] = {key: {"file": os.path.basename(inputs[key]),
                             "sha256": paths.sha256_of(inputs[key])}
                       for key in ("ribo_genome", "ribo_txome", "gtf", "appris")}
