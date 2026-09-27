@@ -1,28 +1,24 @@
 # The shared coverage file
 
-One HDF5 file per sample at `results/coverage/<sample>.shared_coverage.h5`, about 25 MB.
-It holds coverage from both alignment routes on one shared transcript coordinate
-(19,736 transcripts, 70,500,740 positions). The schema name is
-`riboflow_paper/shared-coverage/3`.
-
-To check a file:
+One HDF5 per sample at `results/coverage/<sample>.shared_coverage.h5`, ~25 MB: coverage
+from both alignment routes on one shared transcript coordinate (19,736 transcripts,
+70,500,740 positions). Schema `riboflow_paper/shared-coverage/3`. To check a file:
 
 ```bash
 python code/coverage/coverage_schema.py --validate results/coverage/HeLa.shared_coverage.h5
 ```
 
 The file stores only the four coverage arrays and each transcript's CDS bounds.
-Everything else a reader needs (regions, event counts, coverage keys) is computed when
-the file is read, by `CoverageFile` in `code/coverage/coverage_schema.py`.
+Everything else (regions, event counts, coverage keys) is computed on read by
+`CoverageFile` in `code/coverage/coverage_schema.py`.
 
 ## The coordinate
 
-Position i of a transcript is position i (0-based) of its complete 5' to 3' exons joined
-together. This spliced length equals the transcriptome reference length for every stored
-transcript, and the build asserts that. Genome alignments are projected into this space
-through the exons; transcriptome alignments are placed directly. Transcripts are stored
-in sorted transcript_id order, and `coverage_offset` says where each one starts in the
-arrays.
+Position i of a transcript is position i (0-based) of its complete 5' to 3' spliced
+exons. The spliced length equals the transcriptome reference length for every stored
+transcript (asserted at build). Genome alignments are projected through the exons;
+transcriptome alignments are placed directly. Transcripts are stored in sorted
+transcript_id order; `coverage_offset` says where each starts in the arrays.
 
 ## Root attributes
 
@@ -47,8 +43,8 @@ arrays.
 | `cds_start`, `cds_end` | int32 | CDS as [start, end); the stop codon is in the UTR3; `-1, -1` when there is no CDS |
 | `coverage_offset` | int64 | first index of the transcript in every coverage array |
 
-Regions follow from the CDS bounds: UTR5 is [0, cds_start), CDS is [cds_start, cds_end),
-UTR3 is [cds_end, transcript_len).
+Regions follow from the CDS bounds: UTR5 [0, cds_start), CDS [cds_start, cds_end),
+UTR3 [cds_end, transcript_len).
 
 ## /coverage, four int32 arrays
 
@@ -59,7 +55,7 @@ UTR3 is [cds_end, transcript_len).
 | `genome_footprint` | genome | depth over each read's aligned bases |
 | `txome_footprint` | transcriptome | depth over each read's aligned bases |
 
-Each array has one entry per position. Storage is chunked (65,536), gzip 9, shuffle.
+One entry per position. Chunked (65,536), gzip 9, shuffle.
 
 ## Computed on read
 
