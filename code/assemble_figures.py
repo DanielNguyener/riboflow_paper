@@ -195,26 +195,23 @@ def fit_to_slot(generators, name, target_w, target_h):
 
 def write_fitted_annotations(path, label, ids):
     """Panels A and B are drawn without in-axes numbers; this writes them as text."""
-    lines = ["# %s, panels A and B: annotations removed from the image" % label, "",
-             "Written by `code/assemble_figures.py` from the panel generator's render record. "
-             "Each panel is drawn with `--labels minimal`: the in-axes route names, the "
-             "correlation box and the trim-boundary captions are left off the axes; a "
-             "genome/transcriptome colour key (`--route-legend`) sits on the x-label line, "
-             "flush right.", "",
-             "- Upper track: P-site coverage, mirrored -- **genome** route drawn upward "
-             "(green), **transcriptome** route drawn downward (red).",
-             "- Lower track: footprint coverage, both routes overlaid (same colours).",
+    lines = ["# %s, panels A and B: numbers shown here instead of on the image" % label, "",
+             "Written by code/assemble_figures.py when the figure is built.", "",
+             "- Upper track: P-site coverage. The genome route points up (green) and the "
+             "transcriptome route points down (red).",
+             "- Lower track: footprint coverage, both routes overlaid, same colors.",
              "- Dashed vertical lines mark the CDS trim boundaries.", ""]
     for letter, stem in (("A", ids["A"]), ("B", ids["B"])):
         record = json.loads((STAGING / ("%s_record.json" % stem)).read_text())
         resolved, corr = record["resolved"], record["correlations"]
         x0, x1 = record["axis_window"]
-        lines += ["## Panel %s -- %s (%s), %s" % (letter, resolved["gene_name"],
+        lines += ["## Panel %s: %s (%s), %s" % (letter, resolved["gene_name"],
                                                    resolved["transcript_id"],
                                                    record["sample"]), "",
-                  "- CDS window: start +%d nt to stop −%d nt (CDS positions %d–%d)"
+                  "- CDS window: %d nt after the start to %d nt before the stop "
+                  "(CDS positions %d to %d)"
                   % (record["trim"], record["trim"], x0, x1), "",
-                  "| track | Spearman ρ | Pearson r |", "|---|---|---|"]
+                  "| track | Spearman rho | Pearson r |", "|---|---|---|"]
         for key, name in (("psite", "P-site coverage"), ("footprint", "footprint coverage")):
             lines.append("| %s | %.3f | %.3f |" % (name, corr[key]["spearman"],
                                                    corr[key]["pearson"]))

@@ -32,7 +32,6 @@ configurations in
 | `figures/` | per-panel reference PDFs and the published figures |
 | `docs/` | Figure 3 math, the coverage file format, and every published number with its source |
 | `supporting_information/S1_Table/` | the sample table and its generator |
-| `tests/` | the test suite |
 
 ## The five read categories (Figures 4–6)
 
@@ -66,7 +65,6 @@ pip install -r requirements.txt -r requirements-dev.txt
 python code/make_tables.py --bams DIR --gtf GTF --appris APPRIS --all --into-data
 python code/make_figures.py --all --check
 python code/make_panels.py --all --verify    # compares panels with figures/panel_references/
-python -m pytest tests -q
 ```
 
 Figures rebuild from the shipped tables alone, except Figure 2A/2B, which also needs

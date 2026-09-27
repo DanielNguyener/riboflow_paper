@@ -20,7 +20,6 @@ env/
 _staging*/
 _build/
 .cache/
-/notebooks/
 # regenerated output; only the coverage checksum manifest is versioned
 /results/*
 !/results/coverage/
@@ -41,7 +40,6 @@ _build/
 
 # machine-local input locations (copy config/inputs.example.yaml)
 /config/local.yaml
-/get_coverage/
 /docs/Fig2_panel_annotations.md
 *.bam
 *.bai
@@ -62,11 +60,9 @@ _build/
 *.local
 secrets.*
 
-/genome_coverage
-/code/cds_zero_coverage/
-/code/sample_stats
-/tests/test_genome_coverage.py
-# the min-union sensitivity check is an extra, not part of Figure 6
-/code/read_categories/sensitivity_min_union.py
-# the performance benchmark left the manuscript; kept on disk, not in the repository
 /benchmark/
+
+# internal: kept on disk, not part of the released repository
+/tests/
+/pytest.ini
+/requirements-dev.txt
