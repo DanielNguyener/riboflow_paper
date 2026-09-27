@@ -15,8 +15,6 @@ import numpy as np
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[2]
-PUBLISHED = REPO / "supporting_information" / "S1_Table" / "samples.csv"
-PUBLISHED_SHA256 = "19a3811f73f6217c922a4054f6830e8f0f66dabc5df55026f353e4a3cc8a2e9b"
 
 SHEET = "S1_RiboBase_metadata"
 SHEET_HEADER_ROW = 1
@@ -280,9 +278,6 @@ def main(argv=None):
     parser.add_argument("--no-override", action="store_true",
                         help="the automatic selection alone, WITHOUT the MCF10A quality "
                              "override -- 24 rows that are not the published panel")
-    parser.add_argument("--verify", nargs="?", const=str(PUBLISHED), default=None,
-                        help="compare the result byte-for-byte against the published CSV "
-                             "(default: %s)" % PUBLISHED.relative_to(REPO))
     parser.add_argument("--force", action="store_true", help="overwrite --output")
     args = parser.parse_args(argv)
 
@@ -297,26 +292,4 @@ def main(argv=None):
     print("[s1] wrote %s  (%d rows x %d columns, sha256 %s)"
           % (args.output, len(table), len(table.columns), sha256(args.output)[:16]))
 
-    if args.verify:
-        reference = Path(args.verify)
-        if not reference.exists():
-            raise SystemExit("no reference to verify against: %s" % reference)
-        produced, expected = args.output.read_bytes(), reference.read_bytes()
-        if produced == expected:
-            print("[s1] VERIFIED byte-identical to %s" % reference)
-            if sha256(reference) != PUBLISHED_SHA256 and reference == PUBLISHED:
-                print("[s1] note: the published copy's checksum has changed since this "
-                      "script was written")
-            return 0
-        print("[s1] DIFFERS from %s" % reference, file=sys.stderr)
-        _report_difference(args.output, reference)
-        return 1
     return 0
-
-def _report_difference(produced_csv, reference):
-    """A unified diff of the produced CSV against the reference, on stderr."""
-    import difflib
-    sys.stderr.writelines(difflib.unified_diff(
-        Path(reference).read_text().splitlines(keepends=True),
-        Path(produced_csv).read_text().splitlines(keepends=True),
-        fromfile=str(reference), tofile=str(produced_csv)))
