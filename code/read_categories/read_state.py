@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """A sparse per-read alignment-state store: the two BAM passes, done once, kept on disk.
 
-`gene_read_partition_lib.compute_partition` reads BOTH BAMs end to end on every call --
-~136 million pysam records -- before it looks at a single gene, because it was written for
-a handful of hand-picked genes. Asking it about every gene means paying that per batch.
+Reading both BAMs end to end costs ~136 million pysam records. This stores exactly the
+state the gene classifier consumes, so the passes happen once per sample and every later
+question is a slice:
 
-This stores exactly the state its classifier consumes, so the passes happen once per
-sample and every later question is a slice:
-
-    python code/clustering/read_state.py --sample HeLa         # ~20 min, once
-    python code/clustering/build_gene_counts.py --sample HeLa   # minutes, any gene set
+    python code/read_categories/read_state.py --sample HeLa          # ~20 min, once
+    python code/read_categories/build_gene_counts.py --sample HeLa   # minutes, any gene set
 
 What is stored is what `classify_union` asks for and nothing else: for every reported
 genome alignment its locus, score, NH and CIGAR blocks; for every read its primary, its
@@ -18,7 +15,7 @@ uniqueness, and the transcript its transcriptome primary landed on when it has o
 and the strings are then dropped -- the classifier treats a read id as an opaque key
 (`tie_biotype_lib.LOCUS_FRAME_COLUMNS` says so explicitly), so integers serve.
 
-Sparse throughout, following `genome_coverage/`: nothing absent is stored. A read with no
+Sparse throughout: nothing absent is stored. A read with no
 transcriptome primary has no row in `txome/` rather than a row of sentinels; positions are
 delta-encoded within a chromosome and every dataset is gzip-9 + shuffle.
 """

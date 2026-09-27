@@ -194,7 +194,7 @@ def fit_to_slot(generators, name, target_w, target_h):
 
 
 def write_fitted_annotations(path, label, ids):
-    """The numbers panels A and B no longer print on themselves, from the render records."""
+    """Panels A and B are drawn without in-axes numbers; this writes them as text."""
     lines = ["# %s, panels A and B: annotations removed from the image" % label, "",
              "Written by `code/assemble_figures.py` from the panel generator's render record. "
              "Each panel is drawn with `--labels minimal`: the in-axes route names, the "

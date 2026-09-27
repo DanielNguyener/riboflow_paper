@@ -2,76 +2,77 @@
 
 [![DOI](https://zenodo.org/badge/1321237103.svg)](https://doi.org/10.5281/zenodo.22102431)
 
-Analysis and figure code for the RiboFlow_v2 manuscript: ribosome profiling and matched
-RNA-seq from 24 human cell lines, aligned to the genome and to the transcriptome, with the
-two alignment routes compared. From RiboFlow_v2 alignments, the code produces the analysis
-tables, Figures 2–6 and S1 Fig, and S1 Table.
+Code and tables for the RiboFlow_v2 manuscript: ribosome profiling and matched RNA-seq
+from 24 human cell lines, aligned to the genome and to the transcriptome, with the two
+alignment routes compared. This repository turns the RiboFlow_v2 alignments into the
+analysis tables, Figures 2–6, S1 Fig, and S1 Table.
 
 Read processing is done by the separate
 [RiboFlow_v2](https://github.com/ribosomeprofiling/riboflow) pipeline, with the
 configurations in
 [`config/published_cohort/`](config/published_cohort/riboflow_configs/README.md).
 
-## Layout
+## What is where
 
 | | |
 |---|---|
-| `code/` | `make_tables.py` (BAMs → tables), `make_panels.py` (tables → panels), `assemble_figures.py` (panels → figures), `make_figures.py` (all three); one subdirectory per analysis: `ribo_seq_qc/` (S1 Fig), `coverage/` (Fig 2), `ribo_rna/` + `te_route/` (Fig 3, R), `read_categories/` (Figs 4–6; Fig 6's Ward tree in R), `panels/`, `common/` |
-| `config/` | `panel_manifest.yaml` (panels, figures, composition), `cohort_manifest.tsv` (+ `.schema.md`), `inputs.example.yaml`, `published_cohort/` |
-| `data/` | shipped analysis tables, one directory per `code/` subdirectory |
-| `results/` | regenerated output |
-| `figures/` | `panel_references/*.pdf` and `published/{Fig2,Fig3,Fig4,Fig5,Fig6,S1_Fig}.{tif,_plos.pdf}` |
-| `docs/` | `methods_te_route.md` (Figure 3 statistics), `hdf5_schema.md` (coverage file format), `numeric_claims.tsv` (every published number and its source), `accessions.tsv` |
-| `supporting_information/S1_Table/` | `samples.csv` and its generator |
-| `tests/` | test suite |
+| `code/make_tables.py` | BAMs → analysis tables (`results/`; `--into-data` copies them to `data/`) |
+| `code/make_panels.py` | tables → panel PDFs (`results/panels/`) |
+| `code/assemble_figures.py` | panels → `figures/published/FigN.tif` |
+| `code/make_figures.py` | runs all three |
+| `code/ribo_seq_qc/` | read-length selection and P-site QC (S1 Fig) |
+| `code/coverage/` | per-transcript coverage on both routes (Figure 2) |
+| `code/ribo_rna/` + `code/te_route/` | CDS counts and translation-efficiency statistics, R (Figure 3) |
+| `code/read_categories/` | the five read categories (Figures 4–6); see its [README](code/read_categories/README.md) |
+| `code/panels/` | one plotting script per panel |
+| `code/common/` | shared input handling and annotation tables |
+| `config/panel_manifest.yaml` | which panel is drawn from which table, and how figures are composed |
+| `data/` | the shipped tables, one directory per analysis |
+| `results/` | regenerated output (not tracked) |
+| `figures/` | per-panel reference PDFs and the published figures |
+| `docs/` | Figure 3 math, the coverage file format, and every published number with its source |
+| `supporting_information/S1_Table/` | the sample table and its generator |
+| `tests/` | the test suite |
 
 ## The five read categories (Figures 4–6)
 
-Each library's read-ID union is partitioned into shared, genome-only and
-transcriptome-only reads; shared and genome-only reads are further split by whether they
-map uniquely to the genome (`NH == 1`). Always in this order:
+Every read ID that aligns on either route falls into one of five categories, always in
+this order:
 
-| key | name |
+| key | meaning |
 |---|---|
-| SH-U | shared genome-unique |
-| SH-M | shared genome-multimapped |
-| GO-U | genome-only unique |
-| GO-M | genome-only multimapped |
-| TO | transcriptome-only |
+| SH-U | on both routes, maps uniquely to the genome |
+| SH-M | on both routes, multimaps in the genome |
+| GO-U | genome only, unique |
+| GO-M | genome only, multimapping |
+| TO | transcriptome only |
 
-`code/read_categories/categories.py` is the one definition (keys, colours, the tied
-best-scoring rule, and the two transcriptome-presence rules). Transcriptome presence for
-these figures means a primary alignment in the post-dedup BAM (RiboFlow_v2's MAPQ ≥ 10),
-NOT the MAPQ ≥ 42 rule the QC/coverage/TE analyses use (S1 Fig, Figures 2–3).
+`code/read_categories/categories.py` defines the keys, names and colours once, and every
+figure uses it. For these figures a read is "on the transcriptome route" when it has a
+primary alignment in the post-dedup BAM (RiboFlow_v2's MAPQ ≥ 10 filter). S1 Fig and
+Figures 2–3 use a stricter rule instead: MAPQ ≥ 42.
 
-## Installation
+## Setup
 
-Python 3.9, R ≥ 4 (base only, for `code/te_route/*.R` and `code/read_categories/ward_cluster.R`), and the Arial font.
+Python 3.9, R ≥ 4 (base only), and the Arial font.
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
 ```
 
-## Reproducing the tables
+## Rebuilding everything
 
 ```bash
 python code/make_tables.py --bams DIR --gtf GTF --appris APPRIS --all --into-data
-```
-
-Writes to `data/` (`results/` without `--into-data`).
-
-## Reproducing the figures
-
-```bash
 python code/make_figures.py --all --check
+python code/make_panels.py --all --verify    # compares panels with figures/panel_references/
+python -m pytest tests -q
 ```
 
-Renders the panels from `data/` and writes `figures/published/{Fig2,Fig3,Fig4,Fig5,Fig6,S1_Fig}.{tif,_plos.pdf}`.
-
-Figure 2A/2B also need `results/coverage/HeLa.shared_coverage.h5`, built from the GSM2100602 BAMs
-by `code/coverage/build_shared_coverage.py` ([`docs/hdf5_schema.md`](docs/hdf5_schema.md)).
-
-`python code/make_panels.py --all --verify` compares panels with `figures/panel_references/`.
+Figures rebuild from the shipped tables alone, except Figure 2A/2B, which also needs
+`results/coverage/HeLa.shared_coverage.h5`
+(built by `code/coverage/build_shared_coverage.py`; format in
+[`docs/hdf5_schema.md`](docs/hdf5_schema.md)).
 
 ## External inputs
 
@@ -85,14 +86,14 @@ by `code/coverage/build_shared_coverage.py` ([`docs/hdf5_schema.md`](docs/hdf5_s
 | Consensus pseudogenes | GENCODE release 34, Yale-UCSC 2-way consensus set (`data/clustering/gencode.v34.2wayconspseudos.gtf.gz`) | Figure 6E |
 | Sample QC table | [ribobaser](https://github.com/CenikLab/ribobaser) | S1 Table generator (not redistributed) |
 
-
-
 ## Code and data availability
 
 Code: this repository (MIT), archived at Zenodo
 [10.5281/zenodo.22102431](https://doi.org/10.5281/zenodo.22102431). Tables: `data/`.
 Alignments: Zenodo [10.5281/zenodo.22083992](https://doi.org/10.5281/zenodo.22083992).
-Raw reads: GEO ([`docs/accessions.tsv`](docs/accessions.tsv)).
+Raw reads: GEO ([`docs/accessions.tsv`](docs/accessions.tsv)). Every number in the
+manuscript is listed in [`docs/numeric_claims.tsv`](docs/numeric_claims.tsv) with the
+table and rule that produces it.
 
 ## Citation and license
 
