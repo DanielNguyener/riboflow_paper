@@ -155,3 +155,40 @@ def load_exon_gene_pr(rebuild=False):
     import pyranges as pr
     df = build_exon_gene_table(rebuild=rebuild)
     return pr.PyRanges(df.reset_index(drop=True))
+
+
+# ── gene bodies with biotype (the tie tests' annotation side) ─────────────────
+
+def _rank_int(gt):
+    if gt == "protein_coding":
+        return 0
+    if gt == "lncRNA":
+        return 1
+    if "pseudogene" in gt:
+        return 2
+    return 3
+
+def gene_body_pr(rebuild=False):
+    """PyRanges of per-gene genomic bodies (min exon start .. max exon end) with gene_type.
+
+    Cached keyed by the annotation fingerprint, so a changed GTF rebuilds it.
+    """
+    import pyranges as pr
+
+    def build():
+        exons = build_exon_gene_table()
+        return exons.groupby("gene_id", sort=False).agg(
+            Chromosome=("Chromosome", "first"),
+            Start=("Start", "min"),
+            End=("End", "max"),
+            gene_type=("gene_type", "first"),
+        ).reset_index()
+
+    cache = fc.output_root() / ".cache" / "read_taxonomy" / "gene_body.pkl"
+    if rebuild and cache.exists():
+        cache.unlink()
+    frame = fc.config.cached_frame(
+        cache,
+        fc.config.annotation_fingerprint(["gene_body_pr/1"]),
+        build)
+    return pr.PyRanges(frame)

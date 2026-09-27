@@ -137,31 +137,59 @@ def write(prepared, segments, mapping, reads_path, sample, gsm, output_stem):
         "source": {"file": os.path.basename(reads_path),
                    "sha256": paths.sha256_of(reads_path),
                    "n_rows": sum(1 for _ in open(reads_path)) - 1,
-                   "generator": "code/alignment_fate/build_gene_read_partition.py "
-                                "--dump-reads"},
-        "builder": "code/alignment_fate/build_gene_partition_data.py",
+                   "generator": "code/read_categories/build_gene_categories.py"},
+        "builder": "code/read_categories/build_gene_categories.py",
     }
     with open(output_stem + ".json", "w") as handle:
         handle.write(json.dumps(meta, indent=2, sort_keys=True) + "\n")
 
 
+def dump_reads(sample, genome_bam, txome_bam, gene_ids, coverage_path, output_dir):
+    """Run the chain over the three genes and write the per-read dump it is folded from."""
+    sys.path.insert(0, HERE)
+    import gene_read_partition_lib as lib
+
+    coverage = None
+    if coverage_path:
+        sys.path.insert(0, os.path.join(CODE, "coverage"))
+        import coverage_schema
+        coverage = coverage_schema.open_coverage(coverage_path)
+    try:
+        print("[tables] %s: resolving %d gene(s)" % (sample, len(gene_ids)), flush=True)
+        _wide, _tidy, dump = lib.compute_partition(
+            sample, genome_bam, txome_bam, gene_ids=gene_ids, coverage=coverage,
+            log=lambda m: print("[tables] %s" % m, flush=True))
+    finally:
+        if coverage is not None:
+            coverage.close()
+    os.makedirs(output_dir, exist_ok=True)
+    dump_path = os.path.join(output_dir, "%s.gene_read_partition_reads.tsv" % sample)
+    dump.to_csv(dump_path, sep="\t", index=False, lineterminator="\n")
+    print("[tables] wrote %s (%d rows)" % (dump_path, len(dump)), flush=True)
+    return dump_path
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--reads", required=True, help="*_gene_read_partition_reads.tsv")
     parser.add_argument("--sample", default="HeLa")
     parser.add_argument("--gsm", default="GSM2100602")
+    parser.add_argument("--genome-bam", required=True,
+                        help="coordinate-sorted and INDEXED: the gene side is a region fetch")
+    parser.add_argument("--transcriptome-bam", required=True)
+    parser.add_argument("--gene-id", required=True, help="comma-separated gene IDs")
+    parser.add_argument("--coverage", default=None,
+                        help="a shared_coverage.h5, used only to resolve gene IDs and names")
     parser.add_argument("--output", default=DEFAULT_OUTPUT,
                         help="output stem (.tsv and .json are appended)")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 
-    reads = str(paths.repo_path(args.reads))
-    if not os.path.exists(reads):
-        paths.die("%s is missing; run code/alignment_fate/build_gene_read_partition.py "
-                  "--dump-reads first" % reads)
     if os.path.exists(args.output + ".tsv") and not args.force:
         paths.die("%s.tsv exists; pass --force" % args.output)
+    gene_ids = [g.strip() for g in args.gene_id.split(",") if g.strip()]
+    reads = dump_reads(args.sample, args.genome_bam, args.transcriptome_bam, gene_ids,
+                       args.coverage, os.path.dirname(args.output) or ".")
     prepared, segments, mapping = fold(reads, args.sample, list(GENE_ORDER))
     check_expected(prepared)
     os.makedirs(os.path.dirname(args.output), exist_ok=True)

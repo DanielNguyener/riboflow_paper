@@ -81,7 +81,7 @@ def taxonomy_sample(sample, log=print):
 
 def tie_sample(sample, log=print):
     exon_pr = cl.load_exon_gene_pr()
-    gene_pr = tie.bl.gene_body_pr()
+    gene_pr = cl.gene_body_pr()
 
     log(f"[{sample}] reading txome BAM (present qname set)...")
     t_all = tie.tl.txome_present_qnames(fc.txome_bam(sample))

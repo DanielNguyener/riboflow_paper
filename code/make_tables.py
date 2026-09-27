@@ -199,24 +199,17 @@ def stage_te_stats(samples, args):
                "--output", args.out / "te_route" / "tables"])
 
 def stage_gene_partition(samples, args):
-    """Figure 5A: the per-read gene partition dump, folded to the seven-segment table."""
+    """Figure 5A: the per-read gene dump, folded to the seven-segment table, in one run."""
     coverage = args.out / "coverage" / ("%s.shared_coverage.h5" % EXAMPLE_SAMPLE)
-    command = [sys.executable, CODE / "read_categories" / "build_gene_read_partition.py",
-               "--sample", EXAMPLE_SAMPLE,
+    command = [sys.executable, CODE / "read_categories" / "build_gene_categories.py",
+               "--sample", EXAMPLE_SAMPLE, "--gsm", EXAMPLE_GSM,
                "--genome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_genome_bam"),
                "--transcriptome-bam", args.bam_for(EXAMPLE_SAMPLE, "ribo_txome_bam"),
                "--gene-id", ",".join(PARTITION_GENES),
-               "--output", args.out / "alignment_fate", "--dump-reads"]
+               "--output", args.out / "alignment_fate" / "gene_partition_route7", "--force"]
     if coverage.exists():
         command += ["--coverage", coverage]
-    code = sh(command)
-    if code:
-        return code
-    return sh([sys.executable, CODE / "read_categories" / "build_gene_partition_data.py",
-               "--reads", args.out / "alignment_fate"
-               / ("%s.gene_read_partition_reads.tsv" % EXAMPLE_SAMPLE),
-               "--sample", EXAMPLE_SAMPLE, "--gsm", EXAMPLE_GSM,
-               "--output", args.out / "alignment_fate" / "gene_partition_route7", "--force"])
+    return sh(command)
 
 def stage_locus(samples, args):
     """Figure 5B: the LRRFIP1 locus coverage artifact."""

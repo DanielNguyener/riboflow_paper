@@ -16,9 +16,9 @@ for _entry in (str(_HERE), str(_COMMON), str(_COMMON / "ribo_seq_qc"),
                str(_HERE)):
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
-import biotype_lib as bl
+import reference_lib as cl
 import taxonomy_lib as tl
-cl, fc = bl.cl, bl.fc
+fc = cl.fc
 
 OUTDIR = fc.output_root() / "read_taxonomy" / "multimap_biotype"
 PC = "protein_coding"
@@ -95,7 +95,7 @@ def classify_loci_frame(base, exon_pr, gene_pr):
     ej = loc_pr.join(exon_pr, strandedness=False, how=None).df
     if not ej.empty:
         ej = ej[["locus_idx", "gene_type"]].copy()
-        ej["rank"] = ej["gene_type"].map(bl._rank_int)
+        ej["rank"] = ej["gene_type"].map(cl._rank_int)
         ej = ej.sort_values(["locus_idx", "rank", "gene_type"]).drop_duplicates("locus_idx")
         biotype = dict(zip(ej["locus_idx"], ej["gene_type"]))
 
