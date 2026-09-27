@@ -65,3 +65,9 @@ secrets.*
 /tests/
 /pytest.ini
 /requirements-dev.txt
+
+# derived from shipped tables by make_panels; never shipped themselves
+/data/te_route/tables/
+/data/clustering/HeLa.post_dedup.clusters_k4.tsv
+/data/clustering/HeLa.post_dedup.cluster_centroids.tsv
+/data/clustering/HeLa.post_dedup.tree_merge.tsv

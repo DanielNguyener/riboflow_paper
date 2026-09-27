@@ -152,6 +152,78 @@ def _failure_excerpt(output):
         shown = lines[:6] + ["    ... %d lines omitted ..." % (len(lines) - 24)] + lines[-18:]
     return "\n".join("    " + line for line in shown)
 
+# ── tables derived from the shipped ones, not shipped themselves ──────────────
+# Figure 3's statistics and Figure 6's clustering are deterministic functions of
+# shipped tables, so the repository ships the inputs and derives these with base R
+# on first use. The derived copies land under results/ and are reused when present.
+
+def _rscript():
+    import shutil
+    path = shutil.which("Rscript")
+    if not path:
+        raise SystemExit("Rscript is not on PATH; deriving the Figure 3 statistics and "
+                         "Figure 6 clustering tables needs base R")
+    return path
+
+
+def _run_derivation(command):
+    log("  $ " + " ".join(str(c) for c in command))
+    completed = subprocess.run([str(c) for c in command])
+    if completed.returncode:
+        raise SystemExit("derivation failed (exit %d)" % completed.returncode)
+
+
+def _derive_te_tables():
+    """data/ribo_rna/counts + orf_catalog -> results/te_route/tables (Figure 3)."""
+    rscript = _rscript()
+    _run_derivation([rscript, REPO / "code" / "te_route" / "normalization.R",
+                     "--counts", REPO / "data" / "ribo_rna" / "counts",
+                     "--output", REPO / "results" / "te_route" / "normalized"])
+    _run_derivation([rscript, REPO / "code" / "te_route" / "te_statistics.R",
+                     "--normalized", REPO / "results" / "te_route" / "normalized",
+                     "--orf-catalog", REPO / "data" / "annotation" / "orf_catalog.tsv",
+                     "--output", REPO / "results" / "te_route" / "tables"])
+
+
+def _derive_cluster_tables():
+    """data/clustering/gene_counts.tsv -> the Ward cut tables (Figure 6 A-D)."""
+    import pandas as pd
+    out = REPO / "results" / "clustering"
+    out.mkdir(parents=True, exist_ok=True)
+    counts = pd.read_csv(REPO / "data" / "clustering" / "HeLa.post_dedup.gene_counts.tsv",
+                         sep="\t")
+    # build_gene_counts.MIN_UNION: status ok and at least 100 union reads
+    kept = counts[(counts["status"].astype(str) == "ok") & (counts["n_union"] >= 100)]
+    filtered = out / "HeLa.post_dedup.gene_counts_filtered.tsv"
+    kept.to_csv(filtered, sep="\t", index=False, lineterminator="\n")
+    _run_derivation([_rscript(), REPO / "code" / "read_categories" / "ward_cluster.R",
+                     "--input", filtered, "--output", out,
+                     "--stem", "HeLa.post_dedup", "--k", "4"])
+
+
+#: derived table -> the derivation that produces it (and its siblings).
+DERIVATIONS = {
+    "results/te_route/tables/per_gene_delta.tsv": _derive_te_tables,
+    "results/te_route/tables/route_correlation.tsv": _derive_te_tables,
+    "results/clustering/HeLa.post_dedup.clusters_k4.tsv": _derive_cluster_tables,
+    "results/clustering/HeLa.post_dedup.cluster_centroids.tsv": _derive_cluster_tables,
+    "results/clustering/HeLa.post_dedup.tree_merge.tsv": _derive_cluster_tables,
+}
+
+
+def ensure_derived(entries):
+    """Derive any missing derived input of the requested panels, once per derivation."""
+    pending = []
+    for entry in entries:
+        for value in (entry.get("inputs") or {}).values():
+            if value in DERIVATIONS and not (REPO / value).exists():
+                if DERIVATIONS[value] not in pending:
+                    pending.append(DERIVATIONS[value])
+    for derivation in pending:
+        derivation()
+
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -188,6 +260,8 @@ def main(argv=None):
 
     formats = tuple(args.formats.split(",")) if args.formats else \
         tuple(document["defaults"]["formats"])
+
+    ensure_derived([by_id[panel_id] for panel_id in wanted])
 
     results = []
     for panel_id in wanted:

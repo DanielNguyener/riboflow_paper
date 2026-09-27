@@ -147,8 +147,8 @@ panels:
     generator: code/te_route/plot_te_route_panels.py
     args: {panel: combined}
     inputs:
-      per_gene_delta:    data/te_route/tables/per_gene_delta.tsv
-      route_correlation: data/te_route/tables/route_correlation.tsv
+      per_gene_delta:    results/te_route/tables/per_gene_delta.tsv
+      route_correlation: results/te_route/tables/route_correlation.tsv
       housekeeping_genes:       data/te_route/housekeeping/Housekeeping_GenesHuman.csv
       housekeeping_transcripts: data/te_route/housekeeping/Housekeeping_TranscriptsHuman.csv
     output: results/panels/fig03_te_route_combined
@@ -160,8 +160,8 @@ panels:
     generator: code/te_route/plot_te_route_panels.py
     args: {panel: A}
     inputs:
-      per_gene_delta:    data/te_route/tables/per_gene_delta.tsv
-      route_correlation: data/te_route/tables/route_correlation.tsv
+      per_gene_delta:    results/te_route/tables/per_gene_delta.tsv
+      route_correlation: results/te_route/tables/route_correlation.tsv
     output: results/panels/fig03A_route_agreement
 
   - id: fig03B
@@ -171,8 +171,8 @@ panels:
     generator: code/te_route/plot_te_route_panels.py
     args: {panel: B}
     inputs:
-      per_gene_delta:    data/te_route/tables/per_gene_delta.tsv
-      route_correlation: data/te_route/tables/route_correlation.tsv
+      per_gene_delta:    results/te_route/tables/per_gene_delta.tsv
+      route_correlation: results/te_route/tables/route_correlation.tsv
     output: results/panels/fig03B_ranked_delta_te
 
   - id: fig03C
@@ -182,8 +182,8 @@ panels:
     generator: code/te_route/plot_te_route_panels.py
     args: {panel: C}
     inputs:
-      per_gene_delta:    data/te_route/tables/per_gene_delta.tsv
-      route_correlation: data/te_route/tables/route_correlation.tsv
+      per_gene_delta:    results/te_route/tables/per_gene_delta.tsv
+      route_correlation: results/te_route/tables/route_correlation.tsv
       housekeeping_genes:       data/te_route/housekeeping/Housekeeping_GenesHuman.csv
       housekeeping_transcripts: data/te_route/housekeeping/Housekeeping_TranscriptsHuman.csv
     output: results/panels/fig03C_assay_plane
@@ -283,9 +283,9 @@ panels:
       validation row; panels A-G lettered by the generator
     generator: code/panels/plot_read_category_clusters.py
     inputs:
-      clusters:  data/clustering/HeLa.post_dedup.clusters_k4.tsv
-      centroids: data/clustering/HeLa.post_dedup.cluster_centroids.tsv
-      tree:      data/clustering/HeLa.post_dedup.tree_merge.tsv
+      clusters:  results/clustering/HeLa.post_dedup.clusters_k4.tsv
+      centroids: results/clustering/HeLa.post_dedup.cluster_centroids.tsv
+      tree:      results/clustering/HeLa.post_dedup.tree_merge.tsv
       pseudogene_counts:     data/clustering/HeLa.post_dedup.pseudogene_counts_genes.tsv
       omitted_sequence:      data/clustering/HeLa.post_dedup.omitted_sequence_genes.tsv
       reference_duplication: data/clustering/HeLa.post_dedup.reference_duplication_entries.tsv

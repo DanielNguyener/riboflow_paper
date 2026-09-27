@@ -352,7 +352,7 @@ def main(argv=None):
     for path in (args.per_gene_delta, args.route_correlation):
         if not path.exists():
             raise SystemExit("%s does not exist; run code/te_route/normalization.R then "
-                             "te_statistics.R (or use the shipped data/te_route/tables)" % path)
+                             "te_statistics.R (make_panels derives them from the shipped counts)" % path)
     genes = pd.read_csv(args.per_gene_delta, sep="\t")
     corr = pd.read_csv(args.route_correlation, sep="\t")
     housekeeping = (args.housekeeping_genes, args.housekeeping_transcripts)

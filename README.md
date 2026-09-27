@@ -59,34 +59,44 @@ Python 3.9, R ≥ 4 (base only), and the Arial font.
 pip install -r requirements.txt
 ```
 
-## Reproducing everything
+## Reproducing the results
 
-Two steps. Step 1 builds the analysis tables from the BAM files. Step 2 builds the
-figures from the tables.
+There are three starting points, from slowest to fastest. Each one produces the same
+figures, byte for byte.
 
-**Step 1: BAMs to tables.** Download the RiboFlow_v2 alignments (Zenodo link below) and
-run:
+**1. From the BAM files (hours).** Download the RiboFlow_v2 alignments (Zenodo link
+below) and run:
 
 ```bash
 python code/make_tables.py --bams DIR --gtf GTF --appris APPRIS --all --into-data
+python code/make_figures.py --all --check
 ```
 
-This writes every analysis table to `data/` and the per-sample coverage files to
-`results/coverage/` (one HDF5 per sample; format in
-[`docs/hdf5_schema.md`](docs/hdf5_schema.md)). It takes hours. If you already have the
-coverage HDF5 files, or you only want the figures, skip this step: the repository ships
-every table the figures read, and only Figure 2A/2B needs an HDF5
-(`results/coverage/HeLa.shared_coverage.h5`).
+The first command builds every analysis table and the per-sample coverage files
+(one HDF5 per sample under `results/coverage/`; format in
+[`docs/hdf5_schema.md`](docs/hdf5_schema.md)).
 
-**Step 2: tables to figures.**
+**2. From the coverage HDF5 files (minutes).** If you already have
+`results/coverage/<sample>.shared_coverage.h5`, the tables shipped in `data/` cover
+everything else:
 
 ```bash
 python code/make_figures.py --all --check
 ```
 
-This draws every panel from `data/` and writes
-`figures/published/{Fig2,Fig3,Fig4,Fig5,Fig6,S1_Fig}.tif`. To compare the panels against
-the shipped references, run `python code/make_panels.py --all --verify`.
+**3. From the shipped tables alone (minutes, no BAMs, no HDF5).** The same command:
+
+```bash
+python code/make_figures.py --all --check
+```
+
+Every figure builds except panels 2A and 2B, which plot per-position coverage straight
+from the HeLa HDF5 (too large to ship as text). Figure 3's statistics and Figure 6's
+clustering are derived on the fly from the shipped counts with base R the first time you
+build those figures; the derived tables land under `results/` and are reused after that.
+
+To compare the panels against the shipped references, run
+`python code/make_panels.py --all --verify`.
 
 ## External inputs
 

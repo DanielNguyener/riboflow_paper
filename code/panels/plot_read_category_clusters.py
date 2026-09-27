@@ -2,9 +2,9 @@
 """Figure 6: genes clustered by how their reads split between the two alignment routes.
 
     python code/panels/plot_read_fate_clusters.py \\
-        --clusters data/clustering/HeLa.post_dedup.clusters_k4.tsv \\
-        --centroids data/clustering/HeLa.post_dedup.cluster_centroids.tsv \\
-        --tree data/clustering/HeLa.post_dedup.tree_merge.tsv \\
+        --clusters results/clustering/HeLa.post_dedup.clusters_k4.tsv \\
+        --centroids results/clustering/HeLa.post_dedup.cluster_centroids.tsv \\
+        --tree results/clustering/HeLa.post_dedup.tree_merge.tsv \\
         --pseudogene-counts data/clustering/HeLa.post_dedup.pseudogene_counts_genes.tsv \\
         --omitted-sequence data/clustering/HeLa.post_dedup.omitted_sequence_genes.tsv \\
         --reference-duplication data/clustering/HeLa.post_dedup.reference_duplication_entries.tsv \\
