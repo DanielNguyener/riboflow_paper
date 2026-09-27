@@ -119,7 +119,7 @@ def stage_qc(samples, args):
     qc = CODE / "ribo_seq_qc"
     selection = ["--samples", ",".join(samples)] if samples else []
     code = sh([sys.executable, qc / "run_pipeline.py",
-               "--bam-dir", args.bams, "--steps", "qc,cds_frame",
+               "--bam-dir", args.bams,
                "--bam-glob", "*/genome/alignment_ribo/merged/*.post_dedup.bam"] + selection)
     code |= sh([sys.executable, qc / "run_pipeline.py", "--route", "transcriptome",
                 "--bam-dir", args.bams] + selection)

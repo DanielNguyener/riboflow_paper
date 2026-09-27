@@ -17,11 +17,6 @@ if _COMMON not in sys.path:
 
 FRAME_COLORS = {0: "#2c7fb8", 1: "#7fcdbb", 2: "#edf8b1"}
 
-def _fc():
-    """`bam_inputs`, imported lazily so this module stays importable without pysam."""
-    import bam_inputs
-    return bam_inputs
-
 SELECT_MIN_LEN, SELECT_MAX_LEN = 21, 40
 SELECT_CAPTURE = 0.85
 
@@ -67,34 +62,29 @@ def select_read_lengths(cds_length_counts,
 
 _CDS_HEADER_RE = re.compile(r"\|CDS:(\d+)-(\d+)\|")
 
-def cds_length_hist_transcriptome(bam, min_len, max_len):
+def cds_length_hist_transcriptome(reads, refs, min_len, max_len):
     """`{read_length: n}` over transcriptome primaries whose 5' end lands in RiboPy's CDS.
 
-    bowtie2 `--norc`: every read is forward, so the 5' end is `reference_start`.
+    Computed from the pass-1 frame (`Chromosome`, `pos5`, `length`): pass 1 keeps exactly
+    the MAPQ >= 42 primaries in 20-45 nt, a superset of this histogram's filter. bowtie2
+    `--norc`: every read is forward, so `pos5` is `reference_start`.
     """
     import region_lib as rl
 
-    bounds = {}
-    for ref in bam.references:
+    core_lo, core_hi = {}, {}
+    for ref in refs:
         match = _CDS_HEADER_RE.search(ref)
         if match:
-            bounds[ref] = (int(match.group(1)) - 1, int(match.group(2)))
-    counts = defaultdict(int)
-    for read in bam.fetch(until_eof=True):
-        if not _fc().is_unique_txome_read(read):      # MAPQ >= 42
-            continue
-        length = read.query_length
-        if not (min_len <= length <= max_len):
-            continue
-        bound = bounds.get(read.reference_name)
-        if bound is None:
-            continue
-        start_site, stop_site = bound
-        if (start_site + rl.DEFAULT_RIGHT_SPAN + 1
-                <= read.reference_start
-                < stop_site - rl.DEFAULT_LEFT_SPAN):
-            counts[length] += 1
-    return dict(counts)
+            core_lo[ref] = int(match.group(1)) - 1 + rl.DEFAULT_RIGHT_SPAN + 1
+            core_hi[ref] = int(match.group(2)) - rl.DEFAULT_LEFT_SPAN
+    frame = reads[(reads["length"] >= min_len) & (reads["length"] <= max_len)]
+    if frame.empty:
+        return {}
+    lo = frame["Chromosome"].map(core_lo)
+    hi = frame["Chromosome"].map(core_hi)
+    keep = lo.notna() & (frame["pos5"] >= lo) & (frame["pos5"] < hi)
+    hits = frame.loc[keep, "length"].value_counts()
+    return {int(k): int(v) for k, v in hits.items()}
 
 def cds_length_hist_genome(reads, cds_intervals, min_len, max_len):
     """`{read_length: n}` over genome reads whose 5' end projects into RiboPy's CDS.

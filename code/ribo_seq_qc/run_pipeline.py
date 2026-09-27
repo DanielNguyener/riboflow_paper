@@ -18,12 +18,7 @@ import config
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_WORKERS = 10
 
-#: step name -> (script, staging suffix). Order is significant.
-STEP_SCRIPTS = {
-    "qc":        ("01_readlen_psite_qc.py", "readlen_window_qc"),
-    "cds_frame": ("03_cds_frame.py", "cds_psite_frame"),
-}
-STEP_ORDER = ["qc", "cds_frame"]
+SAMPLE_SCRIPT = "sample_qc.py"   # one program, one BAM traversal, both staging CSVs
 
 DEFAULT_BAM_GLOB = {
     "genome": "*.bam",
@@ -55,10 +50,15 @@ def out_dir(route):
 def staging_path(sample, suffix, route):
     return os.path.join(out_dir(route), "tables", "_staging", "%s_%s.csv" % (sample, suffix))
 
-def run_step(step, sample, bam, route, plots=False):
-    script = os.path.join(HERE, STEP_SCRIPTS[step][0])
+def run_sample(sample, bam, skip_existing, route, plots=False):
+    """Run the per-sample QC program -> list of failed samples."""
+    print("\n%s\nSAMPLE: %s\n  BAM: %s\n%s" % ("=" * 70, sample, bam, "=" * 70), flush=True)
+    if skip_existing and all(os.path.exists(staging_path(sample, suffix, route))
+                             for suffix in MASTER_TABLES.values()):
+        print("  [%s] [skip-existing] both tables already staged" % sample, flush=True)
+        return []
     command = [
-        sys.executable, script,
+        sys.executable, os.path.join(HERE, SAMPLE_SCRIPT),
         "--sample", sample,
         "--bam", bam,
         "--route", route,
@@ -66,30 +66,16 @@ def run_step(step, sample, bam, route, plots=False):
     ]
     if route == "genome":
         command += ["--appris", config.appris_path(), "--gtf", config.gtf_path()]
-    if plots and step == "qc":
+    if plots:
         command.append("--plots")
     print("\n$ %s" % " ".join(command), flush=True)
-    subprocess.run(command, check=True)
-
-def run_sample(sample, bam, steps, skip_existing, route, plots=False):
-    """Run the requested steps for one sample -> list of (sample, step) failures."""
-    failures = []
-    print("\n%s\nSAMPLE: %s\n  BAM: %s\n%s" % ("=" * 70, sample, bam, "=" * 70), flush=True)
-    for step in steps:
-        suffix = STEP_SCRIPTS[step][1]
-        if skip_existing and os.path.exists(staging_path(sample, suffix, route)):
-            print("  [%s] [skip-existing] %s (%s already staged)" % (sample, step, suffix),
-                  flush=True)
-            continue
-        try:
-            run_step(step, sample, bam, route, plots)
-        except subprocess.CalledProcessError as exc:
-            print("  !! %s/%s FAILED (exit %d); continuing with the next step/sample"
-                  % (sample, step, exc.returncode), file=sys.stderr, flush=True)
-            failures.append((sample, step))
-            if step == "qc":
-                break
-    return failures
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as exc:
+        print("  !! %s FAILED (exit %d); continuing with the next sample"
+              % (sample, exc.returncode), file=sys.stderr, flush=True)
+        return [sample]
+    return []
 
 def aggregate(samples_done, route):
     """Concatenate the staging CSVs into the two master tables."""
@@ -129,21 +115,13 @@ def main():
                              '"%s" on the transcriptome route.' % DEFAULT_BAM_GLOB["transcriptome"])
     parser.add_argument("--samples", default=None,
                         help="Comma-separated subset of sample names to process.")
-    parser.add_argument("--steps", default=",".join(STEP_ORDER),
-                        help="Comma-separated steps to run (qc,cds_frame).")
     parser.add_argument("--plots", action="store_true",
-                        help="also write the per-sample metagene PDFs from step 01. Off by "
+                        help="also write the per-sample metagene PDFs. Off by "
                              "default: they are diagnostics, and the window and offsets "
                              "they illustrate are in the QC table.")
     parser.add_argument("--skip-existing", action="store_true",
-                        help="Skip a step if its staging output already exists.")
+                        help="Skip a sample if both its staging outputs already exist.")
     args = parser.parse_args()
-
-    steps = [s.strip() for s in args.steps.split(",") if s.strip()]
-    unknown = [s for s in steps if s not in STEP_SCRIPTS]
-    if unknown:
-        parser.error("unknown step(s): %s; valid: %s" % (unknown, list(STEP_SCRIPTS)))
-    steps = [s for s in STEP_ORDER if s in steps]
 
     bam_glob = args.bam_glob or DEFAULT_BAM_GLOB[args.route]
     samples = discover_samples(args.bam_dir, bam_glob)
@@ -159,7 +137,6 @@ def main():
     os.makedirs(os.path.join(out_dir(args.route), "tables", "_staging"), exist_ok=True)
 
     print("Discovered %d %s sample(s): %s" % (len(samples), args.route, [s for s, _ in samples]))
-    print("Steps: %s" % steps)
 
     if args.route == "genome":
         print("\nBuilding/loading annotation cache...", flush=True)
@@ -171,14 +148,14 @@ def main():
         print("\nRunning %d sample(s) in parallel (workers=%d)..." % (len(samples), n_workers),
               flush=True)
         with ThreadPoolExecutor(max_workers=n_workers) as pool:
-            futures = {pool.submit(run_sample, s, b, steps, args.skip_existing, args.route,
+            futures = {pool.submit(run_sample, s, b, args.skip_existing, args.route,
                                    args.plots): s
                        for s, b in samples}
             for future in as_completed(futures):
                 failures += future.result()
     else:
         for sample, bam in samples:
-            failures += run_sample(sample, bam, steps, args.skip_existing, args.route,
+            failures += run_sample(sample, bam, args.skip_existing, args.route,
                                    args.plots)
 
     aggregate([s for s, _ in samples], args.route)

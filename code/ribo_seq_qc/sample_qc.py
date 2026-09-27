@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""STEP 01 — Read-length selection + per-read-length P-site offset detection (genome or transcriptome route)."""
+"""Per-sample Ribo-seq QC in one BAM traversal (genome or transcriptome route).
+
+One pass collects the per-read state (reference, 5' end, strand, length); from it come
+the read-length selection and P-site offsets (`<sample>_readlen_window_qc.csv`) and then,
+applying the just-computed offsets to the same in-memory reads, the whole-CDS frame
+table (`<sample>_cds_psite_frame.csv`).
+"""
 import os
 import re
 import sys
@@ -61,7 +67,7 @@ dir_staging = os.path.join(OUT, "tables", "_staging")
 for d in ([dir_plots, dir_staging] if args.plots else [dir_staging]):
     os.makedirs(d, exist_ok=True)
 
-print(f"=== [01 readlen_selection{TAG}] sample={SAMPLE} ===", flush=True)
+print(f"=== [sample_qc{TAG}] sample={SAMPLE} ===", flush=True)
 
 _CDS_RE = re.compile(r"\|CDS:(\d+)-(\d+)\|")
 
@@ -69,12 +75,24 @@ def _cds_start0_from_refname(ref):
     m = _CDS_RE.search(ref)
     return int(m.group(1)) - 1 if m else None
 
+def _cds_bounds_from_refname(ref):
+    """(cds_start0, cds_len_nostop) or (None, None). Stop codon trimmed (-3)."""
+    m = _CDS_RE.search(ref)
+    if not m:
+        return None, None
+    start1, end1 = int(m.group(1)), int(m.group(2))
+    cds_len_nostop = (end1 - start1 + 1) - 3  # drop the stop codon (CDS:end includes it)
+    if cds_len_nostop <= 0:
+        return None, None
+    return start1 - 1, cds_len_nostop
+
 print("Reading BAM...", flush=True)
 rec = {"Chromosome": [], "pos5": [], "Strand": [], "length": []}
 bam = pysam.AlignmentFile(BAM, "rb")
 if TX:
     # Reference names embed "|CDS:start-end|"; bowtie2 --norc, so the 5' end is reference_start.
-    ref_cds0 = {ref: _cds_start0_from_refname(ref) for ref in bam.references}
+    tx_refs = list(bam.references)
+    ref_cds0 = {ref: _cds_start0_from_refname(ref) for ref in tx_refs}
     print(f"  {len(ref_cds0):,} references; "
           f"{sum(1 for v in ref_cds0.values() if v is not None):,} carry a CDS region", flush=True)
 for read in bam.fetch(until_eof=TX):
@@ -108,9 +126,8 @@ if total_reads == 0:
 # CDS cores tested on raw 5' ends, no P-site shift.
 print("Phase 1: CDS length distribution + 85 % expansion...", flush=True)
 if TX:
-    with pysam.AlignmentFile(BAM, "rb") as _cds_bam:
-        cds_length_counts = qc_core.cds_length_hist_transcriptome(
-            _cds_bam, qc_core.SELECT_MIN_LEN, qc_core.SELECT_MAX_LEN)
+    cds_length_counts = qc_core.cds_length_hist_transcriptome(
+        reads_df, tx_refs, qc_core.SELECT_MIN_LEN, qc_core.SELECT_MAX_LEN)
 else:
     cds_length_counts = qc_core.cds_length_hist_genome(
         reads_df, qc_core.genome_cds_core_intervals(),
@@ -196,4 +213,136 @@ if args.plots:
                            dir_plots, SAMPLE,
                            f"{SAMPLE}{TAG} - 5' end metagene (P-site shifted, first 10 codons)  "
                            f"[threshold={F0_THRESH:.0f}%]")
+
+# ── P-site frame counts across the whole CDS, from the same in-memory reads ──────────
+print(f"\n=== [cds_frame{TAG}] sample={SAMPLE} ===", flush=True)
+
+# The inputs, derived from qc_df with the exact expressions the former step 03 used on
+# the re-read CSV (ints and bools survive the round trip identically).
+phase1_mask   = fc._as_bool(qc_df["in_phase1"])
+periodic_mask = fc._as_bool(qc_df["periodic"])
+
+phase1_rows      = qc_df[phase1_mask]
+frame_lengths    = set(phase1_rows["read_length"].astype(int).tolist())
+periodic_lengths = set(qc_df.loc[periodic_mask, "read_length"].astype(int).tolist())
+psite_offsets    = dict(zip(phase1_rows["read_length"].astype(int),
+                            phase1_rows["psite_offset"].astype(int)))
+
+print(f"  Phase1 lengths:   {sorted(frame_lengths)}")
+print(f"  Periodic lengths: {sorted(periodic_lengths)}")
+
+# The same read subset, in the same BAM order, that 03's own pass loaded.
+sub = reads_df[reads_df["length"].isin(frame_lengths)].reset_index(drop=True)
+offsets_s = sub["length"].map(psite_offsets)
+n_loaded = len(sub)
+print(f"  {n_loaded:,} phase1-length reads loaded")
+
+if TX:
+    ref_bounds = {ref: _cds_bounds_from_refname(ref) for ref in tx_refs}
+    cds_start0 = sub["Chromosome"].map(
+        {r: b[0] for r, b in ref_bounds.items() if b[0] is not None})
+    cds_len_nostop = sub["Chromosome"].map(
+        {r: b[1] for r, b in ref_bounds.items() if b[0] is not None})
+    # bowtie2 --norc: all reads forward on the transcript, 5' end = reference_start
+    rel = sub["pos5"] + offsets_s - cds_start0
+    keep = cds_start0.notna() & (rel >= 0) & (rel < cds_len_nostop)
+    frame_reads = pd.DataFrame({
+        "length":  sub.loc[keep, "length"].values,
+        "frame":   (rel[keep] % 3).values,
+        "rel_pos": rel[keep].values,
+    })
+    print(f"  {len(frame_reads):,} reads with P-site in CDS body "
+          f"(0 <= rel_pos < CDS len, stop excluded)")
+else:
+    plus = sub["Strand"].values == "+"
+    p_sites = np.where(plus, sub["pos5"].values + offsets_s.values,
+                       sub["pos5"].values - offsets_s.values)
+
+    print("Joining P-site positions to CDS exons...", flush=True)
+    frame_reads = pd.DataFrame({
+        "length":  sub["length"].values,
+        "frame":   np.nan,
+        "rel_pos": np.nan,
+    })
+
+    if n_loaded > 0 and len(ann) > 0:
+        read_idx = np.arange(n_loaded)
+        psite_pr = pr.PyRanges(pd.DataFrame({
+            "Chromosome": sub["Chromosome"].values,
+            "Start":      p_sites,
+            "End":        p_sites + 1,
+            "Strand":     sub["Strand"].values,
+            "read_idx":   read_idx,
+        }))
+        cds_pr = pr.PyRanges(
+            ann[["Chromosome", "Start", "End", "Strand", "Phase", "cds_genomic_start"]]
+        )
+        joined = psite_pr.join(cds_pr, strandedness="same")
+
+        if not joined.df.empty:
+            jdf  = joined.df.copy()
+            plus = jdf["Strand"] == "+"
+
+            # subtract Phase: using +Phase mislabels in-frame P-sites in phase-1/2 exons.
+            jdf["frame"] = np.where(
+                plus,
+                (jdf["Start"] - jdf["Start_b"] - jdf["Phase"]) % 3,
+                (jdf["End_b"] - 1 - jdf["Start"] - jdf["Phase"]) % 3,
+            ).astype(float)
+
+            jdf["rel_pos"] = np.where(
+                plus,
+                jdf["Start"] - jdf["cds_genomic_start"],
+                jdf["cds_genomic_start"] - jdf["Start"],
+            ).astype(float)
+
+            jdf = jdf.drop_duplicates("read_idx", keep="first")
+            frame_reads.loc[jdf["read_idx"].values, "frame"]   = jdf["frame"].values
+            frame_reads.loc[jdf["read_idx"].values, "rel_pos"] = jdf["rel_pos"].values
+
+            n_in_cds = int((frame_reads["rel_pos"] >= 0).sum())
+            print(f"  {n_in_cds:,} reads with P-site in CDS body (rel_pos >= 0)")
+        else:
+            print("  No P-site positions overlapped any CDS exon.")
+
+print("Aggregating frame counts per read length...", flush=True)
+out_rows = []
+for rlen in sorted(frame_lengths):
+    mask = (
+        frame_reads["length"].eq(rlen)
+        & frame_reads["rel_pos"].notna()
+        & (frame_reads["rel_pos"] >= 0)
+    )
+    frames   = frame_reads.loc[mask, "frame"]
+    n_psite  = len(frames)
+    n_f0 = int((frames == 0).sum())
+    n_f1 = int((frames == 1).sum())
+    n_f2 = int((frames == 2).sum())
+    pct_f0 = round(n_f0 / n_psite * 100, 1) if n_psite else 0.0
+    pct_f1 = round(n_f1 / n_psite * 100, 1) if n_psite else 0.0
+    pct_f2 = round(n_f2 / n_psite * 100, 1) if n_psite else 0.0
+    out_rows.append({
+        "read_length":   rlen,
+        "in_phase1":     True,
+        "periodic":      rlen in periodic_lengths,
+        "psite_offset":  psite_offsets[rlen],
+        "n_psite_in_cds": n_psite,
+        "n_frame0":      n_f0,
+        "n_frame1":      n_f1,
+        "n_frame2":      n_f2,
+        "pct_frame0":    pct_f0,
+        "pct_frame1":    pct_f1,
+        "pct_frame2":    pct_f2,
+    })
+
+frame_df = pd.DataFrame(out_rows)
+
+frame_path = os.path.join(dir_staging, f"{SAMPLE}_cds_psite_frame.csv")
+frame_df.to_csv(frame_path, index=False)
+
+total_in_cds = frame_df["n_psite_in_cds"].sum()
+total_f0     = frame_df["n_frame0"].sum()
+pct_f0_total = round(total_f0 / total_in_cds * 100, 1) if total_in_cds else 0.0
+print(f"  P-sites in CDS body: {total_in_cds:,} | frame 0: {total_f0:,} ({pct_f0_total:.1f}%)")
+print(f"  Saved: {frame_path}")
 print("Done.", flush=True)
