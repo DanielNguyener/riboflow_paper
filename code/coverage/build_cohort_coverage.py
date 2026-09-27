@@ -26,6 +26,11 @@ class CohortError(RuntimeError):
 def log(message):
     print("[cohort] %s" % message, flush=True)
 
+def _library_scan():
+    sys.path.insert(0, str(HERE.parent / "read_categories"))
+    import library_scan
+    return library_scan
+
 def read_manifest(path):
     with open(path, newline="") as handle:
         rows = list(csv.DictReader(handle, delimiter="\t"))
@@ -80,10 +85,14 @@ def build_one(row, args):
         "--genome-bam", str(resolve(row, "ribo_genome_bam", args.bams)),
         "--transcriptome-bam", str(resolve(row, "ribo_txome_bam", args.bams)),
         "--gtf", str(args.gtf), "--appris", str(args.appris),
-        "--qc-genome", str(args.qc_genome), "--qc-txome", str(args.qc_txome),
         "--output", str(args.output),
         "--annotation-cache", str(args.annotation_cache),
+        "--only", args.only,
     ]
+    if args.qc_genome:
+        command += ["--qc-genome", str(args.qc_genome), "--qc-txome", str(args.qc_txome)]
+    if args.counts_staging:
+        command += ["--counts-staging", str(args.counts_staging)]
     if args.regions:
         command += ["--regions", str(args.regions)]
 
@@ -144,6 +153,13 @@ def _build_parser():
     parser.add_argument("--regions", type=Path)
     parser.add_argument("--qc-genome", type=Path)
     parser.add_argument("--qc-txome", type=Path)
+    parser.add_argument("--only", default="coverage",
+                        help="comma-separated subset of coverage,counts,categories -- "
+                             "the products of the shared ribo pass")
+    parser.add_argument("--counts-staging", type=Path, default=None,
+                        dest="counts_staging",
+                        help="directory for the staged per-sample ribo count TSVs; "
+                             "required with counts")
     parser.add_argument("--output", type=Path, default=Path("results/coverage"))
     parser.add_argument("--workers", type=int, default=1,
                         help="concurrent samples. A build peaks near 5 GB resident.")
@@ -176,9 +192,18 @@ def main(argv=None):
             "There is no implicit whole-cohort run: the product is ~1 GB and hours of "
             "I/O, so it has to be asked for.")
 
-    for required in ("gtf", "appris", "qc_genome", "qc_txome"):
-        if getattr(args, required) is None:
-            raise SystemExit("--%s is required to build" % required.replace("_", "-"))
+    products = {p.strip() for p in args.only.split(",") if p.strip()}
+    unknown = sorted(products - {"coverage", "counts", "categories"})
+    if unknown:
+        raise SystemExit("--only: unknown product(s) %s" % ", ".join(unknown))
+    required = ["gtf", "appris"]
+    if products & {"coverage", "counts"}:
+        required += ["qc_genome", "qc_txome"]
+    for name in required:
+        if getattr(args, name) is None:
+            raise SystemExit("--%s is required to build" % name.replace("_", "-"))
+    if "counts" in products and not args.counts_staging:
+        raise SystemExit("--counts-staging is required with --only ...counts...")
 
     wanted = [r["sample_id"] for r in rows] if args.all else \
         [s.strip() for s in args.samples.split(",") if s.strip()]
@@ -197,9 +222,22 @@ def main(argv=None):
 
     args.output.mkdir(parents=True, exist_ok=True)
     if args.skip_existing:
+        def _all_products_exist(sample):
+            if ("coverage" in products
+                    and not (args.output / ("%s.shared_coverage.h5" % sample)).exists()):
+                return False
+            if ("counts" in products
+                    and not (Path(args.counts_staging) / ("%s.tsv" % sample)).exists()):
+                return False
+            if "categories" in products:
+                tables = _library_scan().TABLES
+                if any(not (tables[a]["staging"] / ("%s.tsv" % sample)).exists()
+                       for a in tables):
+                    return False
+            return True
+
         before = len(selected)
-        selected = [r for r in selected
-                    if not (args.output / ("%s.shared_coverage.h5" % r["sample_id"])).exists()]
+        selected = [r for r in selected if not _all_products_exist(r["sample_id"])]
         if before != len(selected):
             log("skipping %d sample(s) already built" % (before - len(selected)))
 
@@ -235,7 +273,13 @@ def main(argv=None):
                                              outcome["seconds"] / 60.0))
 
     failed = [r for r in results if not r["ok"]]
-    checksums = write_checksums(args.output, [r["sample"] for r in results if r["ok"]])
+    checksums = None
+    if "coverage" in products:
+        checksums = write_checksums(args.output, [r["sample"] for r in results if r["ok"]])
+    if "categories" in products:
+        library_scan = _library_scan()
+        for analysis in ("taxonomy", "tie_biotype", "reach"):
+            library_scan.aggregate(analysis, wanted)
 
     print()
     log("%d succeeded, %d failed, %.1f min total"

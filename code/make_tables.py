@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import functools
 import os
 import subprocess
 import sys
@@ -131,8 +130,14 @@ def stage_orf_catalog(samples, args):
                "--txome-bam", args.bam_for(reference, "ribo_txome_bam"),
                "--out-dir", args.out / "annotation"])
 
-def stage_coverage(samples, args):
-    """The shared-coordinate coverage HDF5, one per sample; a durable product, never deleted."""
+def stage_ribo_pass(samples, args):
+    """One pass over each ribo BAM -> the coverage HDF5 (a durable product, never
+    deleted), the staged ribo count columns for te_counts, and the three Figure 4
+    category masters.
+
+    Capped at 2 workers regardless of `--workers`: the category sets peak near 5 GB per
+    sample, plus ~1 GB of coverage arrays.
+    """
     command = [sys.executable, CODE / "coverage" / "build_cohort_coverage.py",
                "--manifest", args.manifest, "--bams", args.bams,
                "--gtf", args.gtf, "--appris", args.appris,
@@ -141,6 +146,8 @@ def stage_coverage(samples, args):
                "--qc-txome",
                args.out / "ribo_seq_qc" / "transcriptome" / "tables" / "readlen_window_qc.csv",
                "--output", args.out / "coverage",
+               "--only", "coverage,counts,categories",
+               "--counts-staging", args.out / "ribo_rna" / "_staging_ribo_counts",
                "--workers", str(min(args.workers, 2))]
     command += ["--samples", ",".join(samples)] if samples else ["--all"]
     if args.regions:
@@ -259,15 +266,6 @@ def stage_clustering(samples, args):
             return code
     return 0
 
-def stage_read_categories(samples, args):
-    """The three Figure 4 masters, from one scan of each library's two BAMs.
-
-    Capped at 2 workers regardless of `--workers`: each subprocess peaks near 5 GB.
-    """
-    selection = ["--samples", ",".join(samples)] if samples else []
-    return sh([sys.executable, CODE / "read_categories" / "library_scan.py",
-               "--workers", str(min(args.workers, 2))] + selection)
-
 STAGES = [
     ("annotation",   stage_annotation,   (),                       True,  ()),
     ("qc",           stage_qc,           ("annotation",),          True,
@@ -277,8 +275,11 @@ STAGES = [
       "ribo_seq_qc/transcriptome/tables/cds_psite_frame.csv")),
     ("orf_catalog",  stage_orf_catalog,  ("annotation",),          True,
      ("annotation/orf_catalog.tsv",)),
-    ("coverage",     stage_coverage,     ("annotation", "qc"),     True,  ()),
-    ("concordance",  stage_concordance,  ("coverage",),            False,
+    ("ribo_pass",    stage_ribo_pass,    ("annotation", "qc"),     True,
+     ("read_categories/taxonomy_all.tsv",
+      "read_categories/multimap_tie_biotype_all.tsv",
+      "read_categories/genome_anchored_reach_all.tsv")),
+    ("concordance",  stage_concordance,  ("ribo_pass",),           False,
      ("coverage/concordance/region_concordance_per_sample.tsv",
       "coverage/concordance/region_coverage_per_sample.tsv",
       "coverage/concordance/region_concordance_per_transcript.tsv.gz",
@@ -297,10 +298,6 @@ STAGES = [
     ("locus",        stage_locus,        ("annotation", "qc"),     True,
      ("read_categories/locus_LRRFIP1.npz",
       "read_categories/locus_LRRFIP1.json")),
-    ("read_categories", stage_read_categories, ("annotation",), True,
-     ("read_categories/taxonomy_all.tsv",
-      "read_categories/multimap_tie_biotype_all.tsv",
-      "read_categories/genome_anchored_reach_all.tsv",)),
     ("clustering",   stage_clustering,   ("annotation",),          True,
      ("clustering/HeLa.post_dedup.gene_counts.tsv",
       "clustering/HeLa.post_dedup.pseudogene_counts_genes.tsv",
@@ -311,10 +308,12 @@ STAGES = [
 STAGE_STAGING = {
     "qc": ("ribo_seq_qc/genome/tables/_staging",
            "ribo_seq_qc/transcriptome/tables/_staging"),
-    "te_counts": ("ribo_rna/_route_scratch",),
-    "read_categories": ("read_categories/_staging_taxonomy",
-                        "read_categories/_staging_tie_biotype",
-                        "read_categories/_staging_reach"),
+    # the staged ribo counts are ribo_pass's hand-off to te_counts, so te_counts owns
+    # their pruning: they must survive until it has consumed them.
+    "te_counts": ("ribo_rna/_route_scratch", "ribo_rna/_staging_ribo_counts"),
+    "ribo_pass": ("read_categories/_staging_taxonomy",
+                  "read_categories/_staging_tie_biotype",
+                  "read_categories/_staging_reach"),
 }
 
 #: Shipped under data/ but built by no stage: third-party inputs, recorded with their source.
@@ -328,7 +327,7 @@ EXTERNAL_INPUTS = {
 STAGE_ORDER = [name for name, _run, _needs, _anno, _out in STAGES]
 STAGE_RUN = {name: run for name, run, _needs, _anno, _out in STAGES}
 NEEDS_ANNOTATION = {name for name, _r, _n, anno, _o in STAGES if anno}
-NEEDS_GTF = {"coverage", "te_counts", "locus", "clustering"}
+NEEDS_GTF = {"ribo_pass", "te_counts", "locus", "clustering"}
 NEEDS_R = {"te_normalize", "te_stats", "clustering"}
 STAGE_OUTPUTS = {name: outs for name, _r, _n, _a, outs in STAGES}
 OUTPUTS = [rel for _n, _r, _nd, _a, outs in STAGES for rel in outs]

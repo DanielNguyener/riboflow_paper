@@ -165,21 +165,27 @@ def count_genome_cds(bam_path, cds_pr, stranded: bool, read_lengths=None):
             strand.append("-" if read.is_reverse else "+")
     finally:
         handle.close()
+    counts, n_assigned, n_ambiguous = count_genome_points(chrom, pos5, strand,
+                                                          cds_pr, stranded)
+    return counts, n_assigned, n_ambiguous, len(chrom)
 
-    n_retained = len(chrom)
-    if n_retained == 0:
-        return {}, 0, 0, 0
+def count_genome_points(chrom, pos5, strand, cds_pr, stranded: bool):
+    """CDS-assigned counts from pre-collected 5' points -> (counts, n_assigned, n_ambiguous).
 
+    The points must be the retained reads' `_five_prime` positions, in BAM order; the
+    shared ribo pass collects them so the genome BAM is streamed once for everything.
+    """
+    if not chrom:
+        return {}, 0, 0
     positions = np.asarray(pos5, dtype=np.int64)
     reads = pr.PyRanges(pd.DataFrame({
         "Chromosome": chrom, "Start": positions, "End": positions + 1,
-        "Strand": strand, "read_idx": np.arange(n_retained, dtype=np.int64),
+        "Strand": strand, "read_idx": np.arange(len(chrom), dtype=np.int64),
     }))
     frame = reads.join(cds_pr, strandedness="same" if stranded else False).df
     if frame.empty:
-        return {}, 0, 0, n_retained
-    counts, n_assigned, n_ambiguous = _resolve_overlaps(frame)
-    return counts, n_assigned, n_ambiguous, n_retained
+        return {}, 0, 0
+    return _resolve_overlaps(frame)
 
 def _resolve_overlaps(frame):
     """(counts, n_assigned, n_ambiguous_excluded) from a read x CDS-exon join.
@@ -195,35 +201,45 @@ def _resolve_overlaps(frame):
     counts = pairs["transcript_id"].value_counts()
     return {str(k): int(v) for k, v in counts.items()}, int(counts.sum()), n_ambiguous
 
-def count_txome_cds(bam_path, cds_spans, read_lengths=None):
-    """CDS-assigned counts from a TRANSCRIPTOME BAM -> (counts, n_assigned, n_retained).
+class TxomeCdsTally:
+    """Per-read CDS tally on the transcriptome route, fed one retained read at a time.
 
+    The caller applies the uniqueness and read-length filters; `add` applies the span rule.
     RNA-seq txome BAMs DO contain reverse alignments; those use `reference_end - 1`.
     """
-    counts = {}
-    n_assigned = 0
+
+    def __init__(self, references, cds_spans):
+        self.tid_of_ref = [name.split("|", 1)[0] for name in references]
+        self.span_of_ref = [cds_spans.get(t) for t in self.tid_of_ref]
+        self.counts = {}
+        self.n_assigned = 0
+
+    def add(self, read):
+        span = self.span_of_ref[read.reference_id]
+        if span is None:
+            return
+        position = _five_prime(read)
+        if span[0] <= position < span[1]:
+            tid = self.tid_of_ref[read.reference_id]
+            self.counts[tid] = self.counts.get(tid, 0) + 1
+            self.n_assigned += 1
+
+def count_txome_cds(bam_path, cds_spans, read_lengths=None):
+    """CDS-assigned counts from a TRANSCRIPTOME BAM -> (counts, n_assigned, n_retained)."""
     n_retained = 0
     handle = pysam.AlignmentFile(str(bam_path), "rb")
     try:
-        tid_of_ref = [name.split("|", 1)[0] for name in handle.references]
-        span_of_ref = [cds_spans.get(t) for t in tid_of_ref]
+        tally = TxomeCdsTally(handle.references, cds_spans)
         for read in handle.fetch(until_eof=True):
             if not fc.is_unique_txome_read(read):
                 continue
             if read_lengths is not None and read.query_length not in read_lengths:
                 continue
             n_retained += 1
-            span = span_of_ref[read.reference_id]
-            if span is None:
-                continue
-            position = _five_prime(read)
-            if span[0] <= position < span[1]:
-                tid = tid_of_ref[read.reference_id]
-                counts[tid] = counts.get(tid, 0) + 1
-                n_assigned += 1
+            tally.add(read)
     finally:
         handle.close()
-    return counts, n_assigned, n_retained
+    return tally.counts, tally.n_assigned, n_retained
 
 def correlate(ribo_counts: dict, rna_counts: dict, universe: list) -> dict:
     """Ribo-vs-RNA agreement over the whole universe, zeros kept.

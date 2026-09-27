@@ -17,9 +17,9 @@ sys.path.insert(0, str(CODE / "common"))
 import inputs  # noqa: E402
 
 #: The `make_tables.py` stages each figure's inputs come from.
-STAGES = {"S1": ["qc"], "2": ["coverage", "concordance"],
+STAGES = {"S1": ["qc"], "2": ["ribo_pass", "concordance"],
           "3": ["te_counts", "te_normalize", "te_stats"],
-          "4": ["read_categories"],
+          "4": ["ribo_pass"],
           "5": ["gene_partition", "locus"], "6": ["clustering"]}
 
 

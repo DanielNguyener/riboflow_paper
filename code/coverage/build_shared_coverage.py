@@ -49,28 +49,49 @@ def _cds_pyranges(cds_table):
     return pr.PyRanges(cds_table[["Chromosome", "Start", "End", "Strand",
                                   "transcript_id", "cds_cum_start"]])
 
-def read_genome_signals(bam_path, offsets):
-    """Stream the genome BAM once for BOTH signals.
+def read_genome_signals(bam_path, offsets, on_record=None, counts_sink=None,
+                        collect_coverage=True):
+    """Stream the genome BAM once for everything the ribo pass needs from it.
 
-    Unique primaries with a read length in `offsets`. P-sites are CIGAR-aware (never
-    inside an intron) and undefined placements are dropped from the P-site signal only;
-    footprints are the aligned blocks (`get_blocks()` splits on N, introns excluded).
+    Coverage keeps unique primaries with a read length in `offsets`. P-sites are
+    CIGAR-aware (never inside an intron) and undefined placements are dropped from the
+    P-site signal only; footprints are the aligned blocks (`get_blocks()` splits on N,
+    introns excluded).
+
+    `on_record` (categories) is called first for EVERY fetched record -- it needs
+    secondaries, so no filter runs before it. `counts_sink` (Figure 3), three lists,
+    receives (chrom, raw 5' end, strand) for exactly the coverage-filtered reads: no
+    offset is applied, and the key set of `offsets` IS the selected-length window.
     """
     import pysam
-    import psite_placement
+    if collect_coverage:
+        import psite_placement
 
     p_chroms, p_positions, p_strands = [], [], []
     f_chroms, f_starts, f_ends, f_strands, f_read_ids = [], [], [], [], []
     index = 0
+    collect = collect_coverage or counts_sink is not None
     bam = pysam.AlignmentFile(str(bam_path), "rb")
     try:
         for read in bam.fetch(until_eof=True):
+            if on_record is not None:
+                on_record(read)
+            if not collect:
+                continue
             if not bam_inputs.is_unique_genome_read(read):
                 continue
             offset = offsets.get(read.query_length)
             if offset is None:
                 continue
             strand = "-" if read.is_reverse else "+"
+
+            if counts_sink is not None:
+                counts_sink[0].append(read.reference_name)
+                counts_sink[1].append(read.reference_end - 1 if read.is_reverse
+                                      else read.reference_start)
+                counts_sink[2].append(strand)
+            if not collect_coverage:
+                continue
 
             position = psite_placement.place(read, offset)
             if position is not None:
@@ -271,22 +292,37 @@ def txome_reference_map(bam_path, tx_index_of_base, transcript_len):
     return mapping
 
 def read_txome_signals(bam_path, offsets, reference_map, coverage_offset,
-                       transcript_len):
+                       transcript_len, on_record=None, counts_tally=None,
+                       collect_coverage=True):
     """One transcriptome-BAM pass -> (psite_indices, footprint_starts, footprint_ends).
 
     P-site = reference_start + offset (Bowtie2 --norc: all reads forward; no introns, so no
     CIGAR walk needed); both signals pass exactly the same reads (MAPQ >= 42, window length).
+
+    `on_record` (categories) is called first for EVERY fetched record. `counts_tally`
+    (Figure 3, a `ribo_rna_lib.TxomeCdsTally`) receives exactly the reads that pass the
+    uniqueness and window filters -- BEFORE the reference-map filter, which only coverage
+    applies.
     """
     import pysam
 
     psites, starts, ends = [], [], []
+    collect = collect_coverage or counts_tally is not None
     bam = pysam.AlignmentFile(str(bam_path), "rb")
     try:
         for read in bam.fetch(until_eof=True):
+            if on_record is not None:
+                on_record(read)
+            if not collect:
+                continue
             if not bam_inputs.is_unique_txome_read(read):
                 continue
             offset = offsets.get(read.query_length)
             if offset is None:
+                continue
+            if counts_tally is not None:
+                counts_tally.add(read)
+            if not collect_coverage:
                 continue
             index = reference_map.get(read.reference_name)
             if index is None:
@@ -390,120 +426,234 @@ def bam_identity(path, hash_bams=False, record_path=False):
         record["sha256"] = sha256_of(path)
     return record
 
+PRODUCTS = ("coverage", "counts", "categories")
+
+def _requested_products(config):
+    """The products this run builds; `--only coverage` is the historical behavior."""
+    value = getattr(config, "only", None) or ("coverage",)
+    if isinstance(value, str):
+        value = tuple(part.strip() for part in value.split(",") if part.strip())
+    unknown = sorted(set(value) - set(PRODUCTS))
+    if unknown:
+        raise BuildError("unknown product(s) %s; valid: %s"
+                         % (", ".join(unknown), ", ".join(PRODUCTS)))
+    return set(value)
+
+def _ribo_rna_lib():
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "ribo_rna"))
+    import ribo_rna_lib
+    return ribo_rna_lib
+
+def _library_scan():
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "read_categories"))
+    import library_scan
+    return library_scan
+
 def build(config):
-    """Build one sample's coverage file. Returns the finished path and a run report."""
+    """Build one sample's requested products from ONE pass over each ribo BAM.
+
+    coverage (Fig 2, the HDF5), counts (Fig 3, the staged ribo count column pair) and
+    categories (Fig 4, the three staged rows) share the two traversals; each product
+    applies its own per-record filter. Returns the coverage path (None when coverage was
+    not requested) and a run report.
+    """
     import coverage_schema
     import psite_placement
     started = time.time()
+    products = _requested_products(config)
+    do_cov = "coverage" in products
+    do_counts = "counts" in products
+    do_cats = "categories" in products
     report = {"sample": config.sample, "steps": {}}
 
-    import annotation_cache
+    bundle = None
+    if do_cov or do_counts:
+        import annotation_cache
 
-    bundle, reused = annotation_cache.load_or_build(
-        config.annotation_cache, config.gtf, config.appris,
-        config.regions, LEFT_SPAN, RIGHT_SPAN)
-    report["annotation_cache_reused"] = reused
+        bundle, reused = annotation_cache.load_or_build(
+            config.annotation_cache, config.gtf, config.appris,
+            config.regions, LEFT_SPAN, RIGHT_SPAN)
+        report["annotation_cache_reused"] = reused
 
-    headers = bundle["headers"]
-    coords = bundle["coords"]
-    cds_table = bundle["cds_table"]
-    transcripts, exons = bundle["transcripts"], bundle["exons"]
-    n_positions = bundle["n_positions"]
-    region_summary = bundle["region_summary"]
-    index_of_id, index_of_base = bundle["index_of_id"], bundle["index_of_base"]
-    regions = bundle["regions"]
+        log("offsets: reading the two QC masters")
+        genome_offsets = psite_placement.load_offsets(config.qc_genome, config.sample)
+        txome_offsets = psite_placement.load_offsets(config.qc_txome, config.sample)
+        log("  genome %s" % genome_offsets)
+        log("  txome  %s" % txome_offsets)
+    else:
+        genome_offsets = txome_offsets = None
 
-    transcripts = transcripts.copy()
-    cds_starts, cds_ends = _cds_windows(regions, len(transcripts))
-    transcripts["cds_start"] = cds_starts
-    transcripts["cds_end"] = cds_ends
-    del headers
+    reference_map = coverage_offset = transcript_len = writer = None
+    if do_cov:
+        headers = bundle["headers"]
+        coords = bundle["coords"]
+        cds_table = bundle["cds_table"]
+        transcripts, exons = bundle["transcripts"], bundle["exons"]
+        n_positions = bundle["n_positions"]
+        region_summary = bundle["region_summary"]
+        index_of_id, index_of_base = bundle["index_of_id"], bundle["index_of_base"]
+        regions = bundle["regions"]
 
-    coverage_offset = transcripts["coverage_offset"].to_numpy()
-    transcript_len = transcripts["transcript_len"].to_numpy()
-    cds_total_by_id = dict(zip(transcripts["transcript_id"], transcripts["cds_len_gtf"]))
+        transcripts = transcripts.copy()
+        cds_starts, cds_ends = _cds_windows(regions, len(transcripts))
+        transcripts["cds_start"] = cds_starts
+        transcripts["cds_end"] = cds_ends
+        del headers
 
-    log("offsets: reading the two QC masters")
-    genome_offsets = psite_placement.load_offsets(config.qc_genome, config.sample)
-    txome_offsets = psite_placement.load_offsets(config.qc_txome, config.sample)
-    log("  genome %s" % genome_offsets)
-    log("  txome  %s" % txome_offsets)
+        coverage_offset = transcripts["coverage_offset"].to_numpy()
+        transcript_len = transcripts["transcript_len"].to_numpy()
+        cds_total_by_id = dict(zip(transcripts["transcript_id"],
+                                   transcripts["cds_len_gtf"]))
 
-    exon_pr = _exon_pyranges(exons, transcripts)
-    cds_pr = _cds_pyranges(cds_table)
-    reference_map = txome_reference_map(config.txome_bam, index_of_base, transcript_len)
-    log("  transcriptome references matched to the coordinate: %d" % len(reference_map))
+        exon_pr = _exon_pyranges(exons, transcripts)
+        cds_pr = _cds_pyranges(cds_table)
+        reference_map = txome_reference_map(config.txome_bam, index_of_base,
+                                            transcript_len)
+        log("  transcriptome references matched to the coordinate: %d"
+            % len(reference_map))
 
-    provenance = _provenance(config, coords, cds_table, region_summary,
-                             genome_offsets, txome_offsets)
+        provenance = _provenance(config, coords, cds_table, region_summary,
+                                 genome_offsets, txome_offsets)
 
-    out_path = Path(config.output) / ("%s.shared_coverage.h5" % config.sample)
-    writer = coverage_schema.CoverageWriter(
-        out_path, sample=config.sample,
-        transcripts=transcripts[list(coverage_schema.TRANSCRIPT_COLUMNS)],
-        provenance=provenance, paper_cds_trim=config.trim, chunk=config.chunk,
-        gzip_level=config.gzip_level,
-        assay=config.assay)
+        out_path = Path(config.output) / ("%s.shared_coverage.h5" % config.sample)
+        writer = coverage_schema.CoverageWriter(
+            out_path, sample=config.sample,
+            transcripts=transcripts[list(coverage_schema.TRANSCRIPT_COLUMNS)],
+            provenance=provenance, paper_cds_trim=config.trim, chunk=config.chunk,
+            gzip_level=config.gzip_level,
+            assay=config.assay)
 
+    counts_tally = counts_sink = universe = rrl = None
+    if do_counts:
+        import pysam
+
+        counts_staging = getattr(config, "counts_staging", None)
+        if not counts_staging:
+            raise BuildError("counts need a staging directory (--counts-staging)")
+        rrl = _ribo_rna_lib()
+        for path in (config.genome_bam, config.txome_bam):
+            rrl.assert_single_end(path)
+        universe, universe_report = rrl.build_universe(bundle, config.txome_bam)
+        log("counts: shared reference set %d APPRIS transcripts"
+            % universe_report["n_universe"])
+        cds_spans = rrl.transcript_cds_spans(bundle, universe)
+        counts_cds_pr = rrl.genome_cds_intervals(bundle, universe)
+        handle = pysam.AlignmentFile(str(config.txome_bam), "rb")
+        try:
+            counts_tally = rrl.TxomeCdsTally(handle.references, cds_spans)
+        finally:
+            handle.close()
+        counts_sink = ([], [], [])
+
+    cat_state = ls = None
+    if do_cats:
+        ls = _library_scan()
+        cat_state = ls.new_state()
+
+    # The transcriptome BAM goes FIRST: the categories' genome collector tests membership
+    # in the transcriptome presence set, which must be complete by then. The h5 WRITE
+    # order below is unchanged.
     try:
-        log("genome: streaming the BAM once for both signals")
+        log("transcriptome: streaming the BAM once")
+        tx_psites, txome_fp_starts, txome_fp_ends = read_txome_signals(
+            config.txome_bam, txome_offsets, reference_map, coverage_offset,
+            transcript_len,
+            on_record=(lambda r: ls.collect_txome_record(cat_state, r))
+            if do_cats else None,
+            counts_tally=counts_tally, collect_coverage=do_cov)
+
+        log("genome: streaming the BAM once")
         (chroms, positions, strands), genome_blocks = read_genome_signals(
-            config.genome_bam, genome_offsets)
-        log("  %d reads placed; projecting" % len(chroms))
-        indices, stats = project_genome_psites(
-            chroms, positions, strands, exon_pr, cds_pr, cds_total_by_id,
-            index_of_id, coverage_offset)
-        del chroms, positions, strands
-        report["steps"]["genome_psite"] = stats
-        values = accumulate_points(indices, n_positions)
-        del indices
-        writer.write_signal("genome_psite", values)
-        del values
+            config.genome_bam, genome_offsets,
+            on_record=(lambda r: ls.collect_genome_record(cat_state, r))
+            if do_cats else None,
+            counts_sink=counts_sink, collect_coverage=do_cov)
 
-        log("transcriptome: streaming the BAM once for both signals")
-        indices, txome_fp_starts, txome_fp_ends = read_txome_signals(
-            config.txome_bam, txome_offsets,
-            reference_map, coverage_offset, transcript_len)
-        report["steps"]["txome_psite"] = {"n_placed": int(indices.size)}
-        values = accumulate_points(indices, n_positions)
-        del indices
-        writer.write_signal("txome_psite", values)
-        del values
+        if do_cov:
+            log("  %d reads placed; projecting" % len(chroms))
+            indices, stats = project_genome_psites(
+                chroms, positions, strands, exon_pr, cds_pr, cds_total_by_id,
+                index_of_id, coverage_offset)
+            del chroms, positions, strands
+            report["steps"]["genome_psite"] = stats
+            values = accumulate_points(indices, n_positions)
+            del indices
+            writer.write_signal("genome_psite", values)
+            del values
 
-        # already read, in the same pass as the genome P-sites
-        blocks = genome_blocks
-        del genome_blocks
-        log("  %d reads, %d aligned blocks; projecting" % (blocks[5], len(blocks[0])))
-        starts, ends, stats = project_genome_footprints(
-            blocks, exon_pr, cds_pr, index_of_id, coverage_offset)
-        del blocks
-        report["steps"]["genome_footprint"] = stats
-        values = accumulate_intervals(starts, ends, n_positions)
-        del starts, ends
-        writer.write_signal("genome_footprint", values)
-        del values
+            report["steps"]["txome_psite"] = {"n_placed": int(tx_psites.size)}
+            values = accumulate_points(tx_psites, n_positions)
+            del tx_psites
+            writer.write_signal("txome_psite", values)
+            del values
 
-        # already read, in the same pass as the transcriptome P-sites
-        starts, ends = txome_fp_starts, txome_fp_ends
-        del txome_fp_starts, txome_fp_ends
-        report["steps"]["txome_footprint"] = {"n_intervals": int(starts.size)}
-        values = accumulate_intervals(starts, ends, n_positions)
-        del starts, ends
-        writer.write_signal("txome_footprint", values)
-        del values
+            # already read, in the same pass as the genome P-sites
+            blocks = genome_blocks
+            del genome_blocks
+            log("  %d reads, %d aligned blocks; projecting" % (blocks[5], len(blocks[0])))
+            starts, ends, stats = project_genome_footprints(
+                blocks, exon_pr, cds_pr, index_of_id, coverage_offset)
+            del blocks
+            report["steps"]["genome_footprint"] = stats
+            values = accumulate_intervals(starts, ends, n_positions)
+            del starts, ends
+            writer.write_signal("genome_footprint", values)
+            del values
 
-        final = writer.finalize()
+            # already read, in the same pass as the transcriptome P-sites
+            starts, ends = txome_fp_starts, txome_fp_ends
+            del txome_fp_starts, txome_fp_ends
+            report["steps"]["txome_footprint"] = {"n_intervals": int(starts.size)}
+            values = accumulate_intervals(starts, ends, n_positions)
+            del starts, ends
+            writer.write_signal("txome_footprint", values)
+            del values
+
+            final = writer.finalize()
+        else:
+            final = None
     except BaseException:
-        writer.abort()
+        if writer is not None:
+            writer.abort()
         raise
 
-    report["output"] = str(final)
-    report["bytes"] = final.stat().st_size
+    if do_counts:
+        counts, n_assigned, n_ambiguous = rrl.count_genome_points(
+            counts_sink[0], counts_sink[1], counts_sink[2], counts_cds_pr,
+            stranded=True)
+        frame = pd.DataFrame({"transcript_id": universe})
+        frame["genome_ribo_reads"] = np.array(
+            [counts.get(t, 0) for t in universe], dtype=int)
+        frame["txome_ribo_reads"] = np.array(
+            [counts_tally.counts.get(t, 0) for t in universe], dtype=int)
+        del counts_sink, counts
+        staging = Path(config.counts_staging)
+        staging.mkdir(parents=True, exist_ok=True)
+        counts_path = staging / ("%s.tsv" % config.sample)
+        frame.to_csv(counts_path, sep="\t", index=False, lineterminator="\n")
+        report["steps"]["counts"] = {
+            "genome_assigned": int(n_assigned), "genome_ambiguous": int(n_ambiguous),
+            "txome_assigned": int(counts_tally.n_assigned)}
+        log("counts: staged %s (genome %d, txome %d CDS-assigned reads)"
+            % (counts_path, n_assigned, counts_tally.n_assigned))
+
+    if do_cats:
+        # The row builders load the annotation through the RIBOFLOW_PAPER_* environment,
+        # as the standalone scan always did; fill it in for standalone runs.
+        import os
+        os.environ.setdefault("RIBOFLOW_PAPER_GTF", str(config.gtf))
+        os.environ.setdefault("RIBOFLOW_PAPER_APPRIS", str(config.appris))
+        ls.finish_state(cat_state)
+        ls.stage_rows(config.sample, cat_state, log=log)
+
     report["elapsed_seconds"] = round(time.time() - started, 1)
-    report["n_transcripts"] = int(len(transcripts))
-    report["n_positions"] = int(n_positions)
-    log("wrote %s (%.1f MB) in %.1f min"
-        % (final, report["bytes"] / 1e6, report["elapsed_seconds"] / 60.0))
+    if do_cov:
+        report["output"] = str(final)
+        report["bytes"] = final.stat().st_size
+        report["n_transcripts"] = int(len(transcripts))
+        report["n_positions"] = int(n_positions)
+        log("wrote %s (%.1f MB) in %.1f min"
+            % (final, report["bytes"] / 1e6, report["elapsed_seconds"] / 60.0))
     return final, report
 
 def _cds_windows(regions, n_transcripts):
@@ -587,8 +737,17 @@ def _build_parser():
                         help="reuse (or create) the sample-independent annotation bundle "
                              "here instead of reparsing the GTF. The cohort driver builds "
                              "it once and passes it to every sample.")
-    parser.add_argument("--qc-genome", required=True, type=Path)
-    parser.add_argument("--qc-txome", required=True, type=Path)
+    parser.add_argument("--qc-genome", type=Path,
+                        help="genome readlen_window_qc.csv; required unless --only is "
+                             "categories alone")
+    parser.add_argument("--qc-txome", type=Path)
+    parser.add_argument("--only", default="coverage",
+                        help="comma-separated subset of %s: which products this run "
+                             "builds from the shared pass" % ",".join(PRODUCTS))
+    parser.add_argument("--counts-staging", type=Path, default=None,
+                        dest="counts_staging",
+                        help="directory for the staged per-sample ribo count TSV; "
+                             "required with counts")
     parser.add_argument("--output", type=Path, default=Path("results/coverage"))
     parser.add_argument("--trim", type=int, default=15)
     parser.add_argument("--assay", default="ribo", choices=("ribo", "rna"),
@@ -604,17 +763,28 @@ def _build_parser():
     return parser
 
 REQUIRED_INPUTS = (("--genome-bam", "genome_bam"), ("--transcriptome-bam", "txome_bam"),
-                   ("--gtf", "gtf"), ("--appris", "appris"),
-                   ("--qc-genome", "qc_genome"), ("--qc-txome", "qc_txome"))
+                   ("--gtf", "gtf"), ("--appris", "appris"))
+QC_INPUTS = (("--qc-genome", "qc_genome"), ("--qc-txome", "qc_txome"))
 
 def check_inputs(args):
-    """Fail before any compute starts, naming every missing input at once."""
+    """Fail before any compute starts, naming every missing input at once.
+
+    The QC masters are inputs to coverage and counts only; a categories-only run never
+    reads them.
+    """
+    products = _requested_products(args)
+    required = list(REQUIRED_INPUTS)
+    if products & {"coverage", "counts"}:
+        required += list(QC_INPUTS)
     missing = ["  %-22s %s" % (flag, getattr(args, attr))
-               for flag, attr in REQUIRED_INPUTS if not Path(getattr(args, attr)).exists()]
+               for flag, attr in required
+               if getattr(args, attr) is None or not Path(getattr(args, attr)).exists()]
     if args.regions and not Path(args.regions).exists():
         missing.append("  %-22s %s" % ("--regions", args.regions))
     if missing:
         raise SystemExit("these required inputs do not exist:\n" + "\n".join(missing))
+    if "counts" in products and not getattr(args, "counts_staging", None):
+        raise SystemExit("--counts-staging is required with --only ...counts...")
 
 def main(argv=None):
     args = _build_parser().parse_args(argv)

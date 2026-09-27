@@ -92,6 +92,10 @@ def run_sample(row, args):
                "--annotation-cache", str(Path(args.output) / ".cache" / "annotation.pkl")]
     for flag, path in resolve_bams(row, args.bams).items():
         command += [flag, str(path)]
+    staged_ribo = Path(args.output) / "_staging_ribo_counts" / ("%s.tsv" % sample)
+    if staged_ribo.exists():
+        log("%s: reusing the shared ribo pass's staged counts" % sample)
+        command += ["--ribo-counts", str(staged_ribo)]
     if args.regions:
         command += ["--regions", str(args.regions)]
 

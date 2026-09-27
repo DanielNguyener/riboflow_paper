@@ -8,7 +8,7 @@ and unique or multimapping in the genome). All scripts here are run by
 | script | what it does |
 |---|---|
 | `categories.py` | Defines the five categories once: keys, names, colors and the shared alignment rules. Everything else imports it. |
-| `library_scan.py` | Figure 4. Reads each library's two BAMs once and writes all three tables from that one scan: taxonomy (the five counts, panels 4A and 4B), tie_biotype (pseudogene ties, 4C) and reach (omitted alternative-exon overlap, 4D). |
+| `library_scan.py` | Figure 4. The per-record collectors and row builders for all three tables: taxonomy (the five counts, panels 4A and 4B), tie_biotype (pseudogene ties, 4C) and reach (omitted alternative-exon overlap, 4D). The collection runs inside the shared ribo pass (`code/coverage/build_shared_coverage.py --only ...,categories`, the `ribo_pass` stage), which streams each library's two BAMs once for Figures 2, 3 and 4 together; the cohort driver aggregates the staged rows into the three masters. |
 | `taxonomy_lib.py` | Which reads are in which BAM, and whether they map uniquely. |
 | `tie_biotype_lib.py` | The pseudogene-tie test: a multimapper whose best placements sit on a protein-coding gene and a processed pseudogene. |
 | `reach_lib.py` | Where genome-only unique reads fall relative to the selected transcript. |

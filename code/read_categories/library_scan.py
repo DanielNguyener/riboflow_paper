@@ -1,31 +1,26 @@
 #!/usr/bin/env python3
-"""The per-library category tables of Figure 4, over the whole cohort.
+"""The per-library category tables of Figure 4 (definitions and row builders).
 
-    python code/read_categories/library_scan.py                 # every library, 2 workers
-    python code/read_categories/library_scan.py --sample HeLa   # one library, this process
-
-One worker reads a library's two post-dedup BAMs once each (transcriptome presence is any
-primary alignment; see categories.py) and computes all three Figure 4 tables from that
-single scan:
+The per-read collection runs inside the shared ribo pass
+(`code/coverage/build_shared_coverage.py --only ...,categories`): its BAM loops feed
+`collect_txome_record` / `collect_genome_record` (transcriptome presence is any primary
+alignment; see categories.py), and `stage_rows` computes the three Figure 4 tables from
+that single scan:
 
     taxonomy_all.tsv                 the five category counts per library (4A, 4B)
     multimap_tie_biotype_all.tsv     protein-coding-pseudogene ties (4C)
     genome_anchored_reach_all.tsv    omitted alternative-exon overlap (4D)
 
-Each worker stages one row per table; the driver runs the workers and concatenates the
-staged rows into the three master tables.
+Each library stages one row per table; the cohort driver concatenates the staged rows
+into the three master tables with `aggregate`.
 """
 from __future__ import annotations
 
-import argparse
-import subprocess
 import sys
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
-import pysam
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -35,8 +30,6 @@ import taxonomy_lib as tl  # noqa: E402
 import tie_biotype_lib as tie  # noqa: E402
 from categories import MISSING_AS  # noqa: E402
 fc = tl.fc
-
-DEFAULT_WORKERS = 2
 
 def _out(*parts):
     return fc.output_root().joinpath("read_categories", *parts)
@@ -59,66 +52,65 @@ TABLES = {
 CATS = ["cross_pc_pp", "cross_pp_pc", "same_pc_pc", "same_pp_pp"]
 
 
-# ── the one scan: both BAMs read once, everything the three tables need ───────
+# ── the one scan: fed record by record from the shared ribo pass ──────────────
+#
+# The transcriptome loop collects the presence set; it must be COMPLETE before the genome
+# loop starts (the genome collector tests membership). The genome loop then collects, in
+# one traversal: the primary and unique read-id sets (taxonomy), every genome locus of
+# the multimapping presence-set reads (the tie test), and the primary blocks of the
+# unique reads outside the presence set (the reach test). Secondaries are needed: the
+# caller must not filter them out before calling the genome collector.
 
-def scan(sample, log=print):
-    """Read the two BAMs once and return the shared per-read state.
+def new_state():
+    return {"t_all": set(), "g_all": set(), "g_uniq": set(),
+            "tie_records": defaultdict(list), "primary_multi": set(),
+            "gUtA_blocks": {}}
 
-    The transcriptome pass collects the presence set. The genome pass then collects, in
-    one traversal: the primary and unique read-id sets (taxonomy), every genome locus of
-    the multimapping presence-set reads (the tie test), and the primary blocks of the
-    unique reads outside the presence set (the reach test).
-    """
-    log(f"[{sample}] transcriptome pass (presence set)...")
-    t_all = set()
-    bam = pysam.AlignmentFile(str(fc.txome_bam(sample)), "rb")
-    for r in bam.fetch(until_eof=True):
-        if r.is_unmapped or r.is_secondary or r.is_supplementary:
-            continue
-        t_all.add(r.query_name)
-    bam.close()
+def collect_txome_record(state, r):
+    if r.is_unmapped or r.is_secondary or r.is_supplementary:
+        return
+    state["t_all"].add(r.query_name)
 
-    log(f"[{sample}] n_txome_present={len(t_all):,}; genome pass...")
-    g_all, g_uniq = set(), set()
-    tie_records = defaultdict(list)
-    primary_multi = set()
-    gUtA_blocks = {}
-    bam = pysam.AlignmentFile(str(fc.genome_bam(sample)), "rb")
-    for r in bam.fetch(until_eof=True):
-        if r.is_unmapped or r.is_supplementary:
-            continue
-        q = r.query_name
+def collect_genome_record(state, r):
+    if r.is_unmapped or r.is_supplementary:
+        return
+    q = r.query_name
+    t_all = state["t_all"]
 
-        if not r.is_secondary:
-            g_all.add(q)
-            if fc.is_unique_genome_read(r):
-                g_uniq.add(q)
-                if q not in t_all:
-                    blocks = r.get_blocks()
-                    if blocks:
-                        strand = "-" if r.is_reverse else "+"
-                        gUtA_blocks[q] = (r.reference_name, strand, blocks)
+    if not r.is_secondary:
+        state["g_all"].add(q)
+        if fc.is_unique_genome_read(r):
+            state["g_uniq"].add(q)
+            if q not in t_all:
+                blocks = r.get_blocks()
+                if blocks:
+                    strand = "-" if r.is_reverse else "+"
+                    state["gUtA_blocks"][q] = (r.reference_name, strand, blocks)
 
-        if q in t_all:
-            try:
-                nh = r.get_tag("NH")
-            except KeyError:
-                nh = None
-            if not r.is_secondary and nh is not None and nh > 1:
-                primary_multi.add(q)
-            if nh is None or nh <= 1:
-                continue
-            blocks = r.get_blocks()
-            if not blocks:
-                continue
-            pos5 = blocks[0][0] if not r.is_reverse else blocks[-1][1] - 1
-            score = int(r.get_tag("AS")) if r.has_tag("AS") else MISSING_AS
-            tie_records[q].append((r.reference_name, pos5, score, bool(r.is_secondary)))
-    bam.close()
+    if q in t_all:
+        try:
+            nh = r.get_tag("NH")
+        except KeyError:
+            nh = None
+        if not r.is_secondary and nh is not None and nh > 1:
+            state["primary_multi"].add(q)
+        if nh is None or nh <= 1:
+            return
+        blocks = r.get_blocks()
+        if not blocks:
+            return
+        pos5 = blocks[0][0] if not r.is_reverse else blocks[-1][1] - 1
+        score = int(r.get_tag("AS")) if r.has_tag("AS") else MISSING_AS
+        state["tie_records"][q].append((r.reference_name, pos5, score,
+                                        bool(r.is_secondary)))
 
-    tie_recs = {q: recs for q, recs in tie_records.items() if q in primary_multi}
-    return {"t_all": t_all, "g_all": g_all, "g_uniq": g_uniq,
-            "tie_records": tie_recs, "gUtA_blocks": gUtA_blocks}
+def finish_state(state):
+    """Restrict the tie loci to reads whose PRIMARY is multimapping; drop the helpers."""
+    tie_records = state.pop("tie_records")
+    primary_multi = state.pop("primary_multi")
+    state["tie_records"] = {q: recs for q, recs in tie_records.items()
+                            if q in primary_multi}
+    return state
 
 
 # ── taxonomy: one row of the five categories per library (4A, 4B) ─────────────
@@ -260,26 +252,12 @@ def _stage(analysis, sample, row):
     print(f"[{sample}] wrote {dest}", flush=True)
 
 
-def run_one(sample, log=print):
-    """One library: scan both BAMs once, stage the three rows."""
-    state = scan(sample, log)
+def stage_rows(sample, state, log=print):
+    """One library: the three table rows from a finished scan state, staged."""
     tax, tax_counts = taxonomy_row(sample, state, log)
     _stage("taxonomy", sample, tax)
     _stage("tie_biotype", sample, tie_row(sample, state, tax_counts, log))
     _stage("reach", sample, reach_row(sample, state, tax_counts, log))
-
-
-# ── the cohort driver ──────────────────────────────────────────────────────────
-
-def run_sample(sample):
-    command = [sys.executable, str(HERE / "library_scan.py"), "--sample", sample]
-    try:
-        subprocess.run(command, check=True)
-    except subprocess.CalledProcessError as exc:
-        print("  !! %s FAILED (exit %d)" % (sample, exc.returncode),
-              file=sys.stderr, flush=True)
-        return sample
-    return None
 
 
 def aggregate(analysis, samples):
@@ -296,45 +274,3 @@ def aggregate(analysis, samples):
     table.to_csv(master, sep="\t", index=False, lineterminator="\n")
     print("\nwrote %s (%d samples)" % (master, table["sample"].nunique()))
     return master
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--sample", default=None,
-                        help="run ONE library in this process (the worker mode)")
-    parser.add_argument("--samples", default=None, help="comma-separated subset")
-    parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
-    args = parser.parse_args(argv)
-
-    if args.sample:
-        run_one(args.sample)
-        return 0
-
-    samples = fc.discover_samples()
-    if args.samples:
-        wanted = {s.strip() for s in args.samples.split(",") if s.strip()}
-        samples = [s for s in samples if s in wanted]
-    if not samples:
-        parser.error("no samples discovered")
-
-    print("[read_categories] %d sample(s), %d worker(s)"
-          % (len(samples), args.workers), flush=True)
-    failures = []
-    with ThreadPoolExecutor(max_workers=min(args.workers, len(samples))) as pool:
-        futures = {pool.submit(run_sample, s): s for s in samples}
-        for future in as_completed(futures):
-            failed = future.result()
-            if failed:
-                failures.append(failed)
-
-    for analysis in ("taxonomy", "tie_biotype", "reach"):
-        aggregate(analysis, samples)
-    if failures:
-        print("FAILURES (%d): %s" % (len(failures), failures), file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

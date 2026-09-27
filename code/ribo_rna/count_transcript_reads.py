@@ -31,11 +31,14 @@ class CountError(RuntimeError):
 log = inputs.make_log("counts")
 
 def count_sample(sample, ribo_genome_bam, ribo_txome_bam, rna_genome_bam, rna_txome_bam,
-                 gtf, appris, qc_genome, qc_txome, regions=None, annotation_cache=None):
+                 gtf, appris, qc_genome, qc_txome, regions=None, annotation_cache=None,
+                 ribo_counts=None):
     """One pass over each of the four BAMs -> (counts frame, route frame, universe report).
 
     The counts frame has one row per transcript in the shared universe; the route frame has
-    one row per route.
+    one row per route. With `ribo_counts` (a TSV the shared ribo pass staged), the two
+    ribo BAMs are not opened: their columns come from the file, and the route frame is
+    None (its ribo library totals only exist when the BAMs are streamed here).
     """
     sys.path.insert(0, str(HERE))
     sys.path.insert(0, str(HERE.parent / "coverage"))
@@ -57,6 +60,31 @@ def count_sample(sample, ribo_genome_bam, ribo_txome_bam, rna_genome_bam, rna_tx
 
     cds_spans = rrl.transcript_cds_spans(bundle, universe)
     cds_pr = rrl.genome_cds_intervals(bundle, universe)
+
+    if ribo_counts is not None:
+        staged = pd.read_csv(ribo_counts, sep="\t")
+        if list(staged["transcript_id"]) != universe:
+            raise CountError(
+                "%s names a different transcript set or order than this run's universe; "
+                "it was staged against another annotation" % ribo_counts)
+        log("%s: ribo counts from %s (the shared ribo pass)" % (sample, ribo_counts))
+        counts = {
+            "genome_ribo_reads": dict(zip(staged["transcript_id"],
+                                          staged["genome_ribo_reads"])),
+            "txome_ribo_reads": dict(zip(staged["transcript_id"],
+                                         staged["txome_ribo_reads"])),
+        }
+        for path in (rna_genome_bam, rna_txome_bam):
+            rrl.assert_single_end(path)
+        counts["genome_rna_reads"], _n, _amb, _lib = rrl.count_genome_cds(
+            rna_genome_bam, cds_pr, stranded=False, read_lengths=None)
+        counts["txome_rna_reads"], _n, _lib = rrl.count_txome_cds(
+            rna_txome_bam, cds_spans, read_lengths=None)
+        frame = pd.DataFrame({"transcript_id": universe})
+        for column in COUNT_COLUMNS:
+            mapping = counts[column]
+            frame[column] = np.array([mapping.get(k, 0) for k in universe], dtype=int)
+        return frame, None, report
 
     genome_lengths = set(psite_placement.load_selected_lengths(qc_genome, sample))
     txome_lengths = set(psite_placement.load_selected_lengths(qc_txome, sample))
@@ -132,6 +160,10 @@ def _build_parser():
                              "_staging_cds/<sample>.tsv)")
     parser.add_argument("--counts-output", type=Path,
                         help="per-transcript count TSV; omit to skip writing it")
+    parser.add_argument("--ribo-counts", type=Path,
+                        help="staged ribo count TSV from the shared ribo pass; when "
+                             "given, the two ribo BAMs are not streamed and no route "
+                             "table is written")
     return parser
 
 def main(argv=None):
@@ -146,24 +178,27 @@ def main(argv=None):
                if not getattr(args, attr).exists()]
     if missing:
         raise SystemExit("these required inputs do not exist:\n" + "\n".join(missing))
+    if args.ribo_counts and not args.ribo_counts.exists():
+        raise SystemExit("--ribo-counts %s does not exist" % args.ribo_counts)
     frame, route_frame, _report = count_sample(
         args.sample, args.ribo_genome_bam, args.ribo_txome_bam,
         args.rna_genome_bam, args.rna_txome_bam,
         args.gtf, args.appris, args.qc_genome, args.qc_txome,
-        args.regions, args.annotation_cache)
+        args.regions, args.annotation_cache, args.ribo_counts)
 
-    route_output = args.route_output or (
-        Path("results/ribo_rna/_staging_%s" % REGION) / ("%s.tsv" % args.sample))
-    write_table(route_frame, route_output)
-    for row in route_frame.to_dict("records"):
-        log("  %-13s Spearman rho=%.4f  Pearson log2(raw+1)=%.4f  "
-            "(ribo CDS %d/%d = %.1f%%, rna %.1f%%)"
-            % (row["route"], row["spearman_rho"], row["pearson_log2_raw"],
-               row["ribo_reads"], row["ribo_library"], 100 * row["ribo_cds_frac"],
-               100 * row["rna_cds_frac"]))
-    excluded = int(route_frame["ribo_ambiguous_excluded"].sum()
-                   + route_frame["rna_ambiguous_excluded"].sum())
-    log("  cross-gene CDS overlaps excluded (genome route): %d reads" % excluded)
+    if route_frame is not None:
+        route_output = args.route_output or (
+            Path("results/ribo_rna/_staging_%s" % REGION) / ("%s.tsv" % args.sample))
+        write_table(route_frame, route_output)
+        for row in route_frame.to_dict("records"):
+            log("  %-13s Spearman rho=%.4f  Pearson log2(raw+1)=%.4f  "
+                "(ribo CDS %d/%d = %.1f%%, rna %.1f%%)"
+                % (row["route"], row["spearman_rho"], row["pearson_log2_raw"],
+                   row["ribo_reads"], row["ribo_library"], 100 * row["ribo_cds_frac"],
+                   100 * row["rna_cds_frac"]))
+        excluded = int(route_frame["ribo_ambiguous_excluded"].sum()
+                       + route_frame["rna_ambiguous_excluded"].sum())
+        log("  cross-gene CDS overlaps excluded (genome route): %d reads" % excluded)
 
     if args.counts_output:
         write_table(frame, args.counts_output)
