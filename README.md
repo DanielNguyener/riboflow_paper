@@ -16,7 +16,7 @@ configurations in
 
 | | |
 |---|---|
-| `code/` | `make_tables.py` (BAMs → tables), `make_panels.py` (tables → panels), `assemble_figures.py` (panels → figures), `make_figures.py` (all three); one subdirectory per analysis: `ribo_seq_qc/` (S1 Fig), `coverage/` (Fig 2), `ribo_rna/` + `te_route/` (Fig 3, R), `read_taxonomy/` (Fig 4), `alignment_fate/` (Fig 5), `clustering/` (Fig 6, R), `panels/`, `common/` |
+| `code/` | `make_tables.py` (BAMs → tables), `make_panels.py` (tables → panels), `assemble_figures.py` (panels → figures), `make_figures.py` (all three); one subdirectory per analysis: `ribo_seq_qc/` (S1 Fig), `coverage/` (Fig 2), `ribo_rna/` + `te_route/` (Fig 3, R), `read_categories/` (Figs 4–6; Fig 6's Ward tree in R), `panels/`, `common/` |
 | `config/` | `panel_manifest.yaml` (panels, figures, composition), `cohort_manifest.tsv` (+ `.schema.md`), `inputs.example.yaml`, `published_cohort/` |
 | `data/` | shipped analysis tables, one directory per `code/` subdirectory |
 | `results/` | regenerated output |
@@ -25,9 +25,28 @@ configurations in
 | `supporting_information/S1_Table/` | `samples.csv` and its generator |
 | `tests/` | test suite |
 
+## The five read categories (Figures 4–6)
+
+Each library's read-ID union is partitioned into shared, genome-only and
+transcriptome-only reads; shared and genome-only reads are further split by whether they
+map uniquely to the genome (`NH == 1`). Always in this order:
+
+| key | name |
+|---|---|
+| SH-U | shared genome-unique |
+| SH-M | shared genome-multimapped |
+| GO-U | genome-only unique |
+| GO-M | genome-only multimapped |
+| TO | transcriptome-only |
+
+`code/read_categories/categories.py` is the one definition (keys, colours, the tied
+best-scoring rule, and the two transcriptome-presence rules). Transcriptome presence for
+these figures means a primary alignment in the post-dedup BAM (RiboFlow_v2's MAPQ ≥ 10),
+NOT the MAPQ ≥ 42 rule the QC/coverage/TE analyses use (S1 Fig, Figures 2–3).
+
 ## Installation
 
-Python 3.9, R ≥ 4 (base only, for `code/te_route/*.R` and `code/clustering/ward_cluster.R`), and the Arial font.
+Python 3.9, R ≥ 4 (base only, for `code/te_route/*.R` and `code/read_categories/ward_cluster.R`), and the Arial font.
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt

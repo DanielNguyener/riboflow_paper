@@ -14,10 +14,7 @@
 # per gene with the composition in %, plus one centroid row per cluster (member mean).
 #
 # Writes, under --output, all named by the stem:
-#   <stem>.tree.rds              the hclust object
 #   <stem>.tree_merge.tsv        its merge matrix and heights (what the panel draws)
-#   <stem>.tree.tsv              linkage, n, cophenetic correlation
-#   <stem>.hclust_sweep.tsv      one row per k, the chosen one marked
 #   <stem>.clusters_k<K>.tsv     per gene: cluster and the five shares in %
 #   <stem>.cluster_centroids.tsv per cluster: n and the centroid composition in %
 #
@@ -101,11 +98,8 @@ log_line("cophenetic correlation %.4f", coph)
 
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 path <- function(suffix) file.path(out_dir, sprintf("%s.%s", stem, suffix))
-saveRDS(tree, path("tree.rds"))
 write_tsv(data.frame(merge1 = tree$merge[, 1], merge2 = tree$merge[, 2], height = tree$height),
           path("tree_merge.tsv"))
-write_tsv(data.frame(linkage = "ward.D2", n = nrow(X), cophenetic_correlation = coph),
-          path("tree.tsv"))
 
 totss <- sum(scale(X, scale = FALSE)^2)
 rows <- list()
@@ -126,7 +120,6 @@ for (k in k_range) {
            k, withinss, 1 - withinss / totss, sil, height, paste(sizes, collapse = "/"))
   if (k == chosen) chosen_cut <- list(cluster = cluster, centres = centres, sizes = sizes)
 }
-write_tsv(do.call(rbind, rows), path("hclust_sweep.tsv"))
 
 # the chosen cut: cluster 1 = the most concordant centroid, 2 the next, ...
 centres_P <- chosen_cut$centres / rowSums(chosen_cut$centres)
