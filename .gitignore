@@ -25,17 +25,11 @@ _build/
 !/results/coverage/
 /results/coverage/*
 
-# figures: the panel references and the six published figures are versioned
-/figures/*
-!/figures/panel_references/
-/figures/panel_references/*
-!/figures/panel_references/*.pdf
-!/figures/published/
-/figures/published/*
-!/figures/published/Fig[2-6].tif
-!/figures/published/Fig[2-6]_plos.pdf
-!/figures/published/S[0-9]_Fig.tif
-!/figures/published/S[0-9]_Fig_plos.pdf
+# internal: the published figures, the panel references, and the code that composes
+# and verifies them stay on disk but are not part of the released repository
+/figures/
+/code/assemble_figures.py
+/code/make_figures.py
 
 # machine-local input locations (copy config/inputs.example.yaml)
 /config/local.yaml
