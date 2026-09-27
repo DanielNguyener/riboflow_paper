@@ -43,7 +43,7 @@ def omitted_pc_genes(exon_gene_df, selected_genes):
 
 # ── direct overlap with omitted exonic sequence (Figure 4D) ─────────────────
 # The gene-level test of Figure 5A (`read_categories/gene_read_partition_lib.
-# alt_exon_overlap`) applied cohort-wide: a gU_tA read counts once per library when an
+# alt_exon_overlap`) applied cohort-wide: a GO-U read counts once per library when an
 # aligned block of its primary genomic alignment overlaps exonic sequence of ANY gene
 # that is absent from that gene's selected transcript. Strand-agnostic, indifferent to
 # junctions and to whether the rest of the alignment fits the selected transcript.
@@ -127,9 +127,9 @@ def representability(chrom, strand, blocks, t):
         return "representable"
     return "splice_junction_absent"
 
-def classify_gU_tA(qnames, genome_blocks, exon_gene_pr, exon_gene_df,
+def classify_go_u(qnames, genome_blocks, exon_gene_pr, exon_gene_df,
                    all_gene_body_pr, transcript_table, gene2tid, omitted_genes):
-    """Return a Series qname -> category, for the gU_tA population."""
+    """Return a Series qname -> category, for the GO-U population."""
     import pyranges as pr
 
     rows = []

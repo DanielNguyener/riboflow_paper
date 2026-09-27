@@ -42,7 +42,7 @@ SEGMENTS = tuple(zip(("both_genome_unique", "both_genome_multi", "genome_only_un
                      (categories.COLOR[k] for k in categories.KEYS)))
 
 TAXONOMY_REQUIRED = (
-    "sample", "n_universe", "n_gU_tP", "n_gU_tA", "n_gM_tP", "n_gM_tA", "n_gA_tP",
+    "sample", "n_universe", "n_sh_u", "n_go_u", "n_sh_m", "n_go_m", "n_to",
     "n_genome_unique", "n_genome_multi", "n_genome_absent",
     "n_txome_present", "n_txome_absent")
 
@@ -52,8 +52,8 @@ SHARE_PANELS = {
           "required": ("sample", "pct_cross_pp_pc", "pct_cross_pc_pp"),
           "share": lambda f: f["pct_cross_pp_pc"] + f["pct_cross_pc_pp"]},
     "D": {"master": "reach_master",
-          "required": ("sample", "n_omitted_exon_overlap", "n_gU_tA"),
-          "share": lambda f: 100.0 * f["n_omitted_exon_overlap"] / f["n_gU_tA"]},
+          "required": ("sample", "n_omitted_exon_overlap", "n_go_u"),
+          "share": lambda f: 100.0 * f["n_omitted_exon_overlap"] / f["n_go_u"]},
 }
 
 
@@ -69,11 +69,11 @@ def load_taxonomy(path):
     frame = pd.read_csv(path, sep="\t")
     ps.require_columns(frame, TAXONOMY_REQUIRED, str(path))
     frame = frame.copy()
-    frame["both_genome_unique"] = frame["n_gU_tP"]
-    frame["both_genome_multi"] = frame["n_gM_tP"]
-    frame["genome_only_unique"] = frame["n_gU_tA"]
-    frame["genome_only_multi"] = frame["n_gM_tA"]
-    frame["txome_only"] = frame["n_gA_tP"]
+    frame["both_genome_unique"] = frame["n_sh_u"]
+    frame["both_genome_multi"] = frame["n_sh_m"]
+    frame["genome_only_unique"] = frame["n_go_u"]
+    frame["genome_only_multi"] = frame["n_go_m"]
+    frame["txome_only"] = frame["n_to"]
 
     total = (frame["both_genome_unique"] + frame["both_genome_multi"]
              + frame["genome_only_unique"] + frame["genome_only_multi"]

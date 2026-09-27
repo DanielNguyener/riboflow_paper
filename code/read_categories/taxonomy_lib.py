@@ -21,8 +21,12 @@ TXOME_STATES = ("present", "absent")
 #: threshold is applied here (the MAPQ >= 42 rule belongs to the coverage/TE analyses).
 CELLS = tuple((g, t) for g in GENOME_STATES for t in TXOME_STATES
               if not (g == "absent" and t == "absent"))
-ABBR = {"unique": "U", "multi": "M", "present": "P", "absent": "A"}
+
+#: One taxonomy cell -> its manuscript category key (categories.KEYS, the one definition).
+CELL_KEY = {("unique", "present"): "sh_u", ("multi", "present"): "sh_m",
+            ("unique", "absent"): "go_u", ("multi", "absent"): "go_m",
+            ("absent", "present"): "to"}
 
 def cell_key(genome_status, txome_status):
-    """`gU_tP`, `gM_tA`, ...: the column stem of one taxonomy cell."""
-    return "g%s_t%s" % (ABBR[genome_status], ABBR[txome_status])
+    """`sh_u`, `go_m`, ...: the column stem of one taxonomy cell."""
+    return CELL_KEY[(genome_status, txome_status)]

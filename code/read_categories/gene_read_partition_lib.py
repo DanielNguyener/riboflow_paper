@@ -37,7 +37,7 @@ import categories  # noqa: E402
 from categories import MISSING_AS, qualifies  # noqa: E402
 
 #: The chain, in evaluation order; one read gets exactly one of these. The order nests by
-#: definedness — `classify_gU_tA` must only see transcriptome-ABSENT reads.
+#: definedness — `classify_go_u` must only see transcriptome-ABSENT reads.
 PARTITION_CATEGORIES = (
     "txome_only_genome_absent",
     "txome_only_genome_elsewhere",
@@ -388,7 +388,7 @@ def classify_union(libs, annotation, tid, locus, genome_side, txome_side,
         alt_exon = alt_exon_overlap(annotation, tid, primary, absent)
         blocks = {q: (primary[q][0], primary[q][1], primary[q][2])
                   for q in absent if q in primary}
-        reach = reach_lib.classify_gU_tA(
+        reach = reach_lib.classify_go_u(
             absent, blocks, annotation["exon_pr"], annotation["exon_gene_df"],
             annotation["gene_body_pr"], annotation["table"], annotation["gene2tid"],
             annotation["omitted_genes"])

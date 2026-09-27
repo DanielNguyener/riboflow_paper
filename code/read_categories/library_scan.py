@@ -64,7 +64,7 @@ CATS = ["cross_pc_pp", "cross_pp_pc", "same_pc_pc", "same_pp_pp"]
 def new_state():
     return {"t_all": set(), "g_all": set(), "g_uniq": set(),
             "tie_records": defaultdict(list), "primary_multi": set(),
-            "gUtA_blocks": {}}
+            "go_u_blocks": {}}
 
 def collect_txome_record(state, r):
     if r.is_unmapped or r.is_secondary or r.is_supplementary:
@@ -85,7 +85,7 @@ def collect_genome_record(state, r):
                 blocks = r.get_blocks()
                 if blocks:
                     strand = "-" if r.is_reverse else "+"
-                    state["gUtA_blocks"][q] = (r.reference_name, strand, blocks)
+                    state["go_u_blocks"][q] = (r.reference_name, strand, blocks)
 
     if q in t_all:
         try:
@@ -167,7 +167,7 @@ def tie_row(sample, state, tax_counts, log=print):
     recs = state["tie_records"]
     expected = tax_counts[("multi", "present")]
     assert len(recs) == expected, (
-        f"[{sample}] tie population {len(recs)} disagrees with the taxonomy gM_tP count "
+        f"[{sample}] tie population {len(recs)} disagrees with the taxonomy SH-M count "
         f"{expected}")
 
     exon_pr = cl.load_exon_gene_pr()
@@ -189,16 +189,16 @@ def tie_row(sample, state, tax_counts, log=print):
 # ── reach: omitted alternative-exon overlap per library (4D) ──────────────────
 
 def reach_row(sample, state, tax_counts, log=print):
-    n_gUtP = tax_counts[("unique", "present")]
-    n_gUtA = tax_counts[("unique", "absent")]
-    n_genome_unique = n_gUtP + n_gUtA
-    log(f"[{sample}] N_G={n_genome_unique} gU_tP={n_gUtP} gU_tA={n_gUtA}")
+    n_sh_u = tax_counts[("unique", "present")]
+    n_go_u = tax_counts[("unique", "absent")]
+    n_genome_unique = n_sh_u + n_go_u
+    log(f"[{sample}] N_G={n_genome_unique} SH-U={n_sh_u} GO-U={n_go_u}")
 
-    gUtA_qnames = state["g_uniq"] - state["t_all"]
-    genome_blocks = state["gUtA_blocks"]
-    assert len(gUtA_qnames) == n_gUtA, (
-        f"[{sample}] gU_tA set ({len(gUtA_qnames)}) disagrees with the taxonomy count "
-        f"({n_gUtA})")
+    go_u_qnames = state["g_uniq"] - state["t_all"]
+    genome_blocks = state["go_u_blocks"]
+    assert len(go_u_qnames) == n_go_u, (
+        f"[{sample}] GO-U set ({len(go_u_qnames)}) disagrees with the taxonomy count "
+        f"({n_go_u})")
 
     transcript_payload = cl.build_transcript_table()
     table = transcript_payload["table"]
@@ -209,29 +209,29 @@ def reach_row(sample, state, tax_counts, log=print):
     all_gene_body_pr = _all_gene_body_pr()
     omitted_genes = rl.omitted_pc_genes(exon_gene_df, selected_genes)
 
-    log(f"[{sample}] classifying gU_tA reads...")
-    labels = rl.classify_gU_tA(gUtA_qnames, genome_blocks, exon_gene_pr, exon_gene_df,
+    log(f"[{sample}] classifying GO-U reads...")
+    labels = rl.classify_go_u(go_u_qnames, genome_blocks, exon_gene_pr, exon_gene_df,
                                all_gene_body_pr, table, gene2tid, omitted_genes)
     counts = labels.value_counts()
 
     log(f"[{sample}] testing direct overlap with omitted exonic sequence...")
     omitted_index = rl.build_omitted_exon_index(exon_gene_df, table)
-    overlap_qnames = rl.omitted_exon_overlap_qnames(gUtA_qnames, genome_blocks, omitted_index)
+    overlap_qnames = rl.omitted_exon_overlap_qnames(go_u_qnames, genome_blocks, omitted_index)
 
     row = {"sample": sample, "n_genome_unique": n_genome_unique,
-           "n_gU_tP": n_gUtP, "n_gU_tA": n_gUtA}
+           "n_sh_u": n_sh_u, "n_go_u": n_go_u}
     for cat in rl.REACH_CATEGORIES:
         row[f"n_{cat}"] = int(counts.get(cat, 0))
-    check_sum = n_gUtP + sum(row[f"n_{c}"] for c in rl.REACH_CATEGORIES)
+    check_sum = n_sh_u + sum(row[f"n_{c}"] for c in rl.REACH_CATEGORIES)
     assert check_sum == n_genome_unique, f"partition does not sum to N_G ({check_sum} != {n_genome_unique})"
     for cat in rl.REACH_CATEGORIES:
-        row[f"pct_{cat}"] = 100.0 * row[f"n_{cat}"] / n_gUtA if n_gUtA else float("nan")
+        row[f"pct_{cat}"] = 100.0 * row[f"n_{cat}"] / n_go_u if n_go_u else float("nan")
     # Figure 4D: NOT a partition slice. The gene-level alternative-exon test of Figure 5A
-    # applied to the whole gU_tA population; each read ID counts at most once.
+    # applied to the whole GO-U population; each read ID counts at most once.
     row["n_omitted_exon_overlap"] = len(overlap_qnames)
     row["pct_omitted_exon_overlap"] = (
-        100.0 * len(overlap_qnames) / n_gUtA if n_gUtA else float("nan"))
-    log(f"[{sample}] omitted-exon overlap {len(overlap_qnames)} / {n_gUtA} "
+        100.0 * len(overlap_qnames) / n_go_u if n_go_u else float("nan"))
+    log(f"[{sample}] omitted-exon overlap {len(overlap_qnames)} / {n_go_u} "
         f"({row['pct_omitted_exon_overlap']:.2f}%)")
     return row
 
