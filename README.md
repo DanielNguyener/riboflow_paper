@@ -74,7 +74,16 @@ python code/make_figures.py --all --check
 
 The first command builds every analysis table and the per-sample coverage files
 (one HDF5 per sample under `results/coverage/`; format in
-[`docs/hdf5_schema.md`](docs/hdf5_schema.md)).
+[`docs/hdf5_schema.md`](docs/hdf5_schema.md)). Each library's BAMs are streamed four
+times in all: the QC stage reads each ribo BAM once (read-length selection, offsets and
+the frame table in one traversal), the `ribo_pass` stage reads each once more for
+Figures 2, 3 and 4 together, and the two RNA BAMs are read once each by `te_counts`.
+
+Byte identity is checked by comparing against `data/`, and one parser detail matters
+when doing that by hand: the master tables pass through `pandas.read_csv` during
+aggregation, whose float parser can be 1 ulp off the written value. Compare a
+regenerated row only after a `read_csv` + `to_csv` round trip, never straight from a
+worker's in-memory frame.
 
 **2. From the coverage HDF5 files (minutes).** If you already have
 `results/coverage/<sample>.shared_coverage.h5`, the tables shipped in `data/` cover
