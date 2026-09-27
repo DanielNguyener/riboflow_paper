@@ -245,21 +245,19 @@ def stage_clustering(samples, args):
                    "--output", out] + common)
         if code:
             return code
-    counts = out / ("%s.gene_counts.tsv" % stem)
     filtered = out / ("%s.gene_counts_filtered.tsv" % stem)
     clusters = out / ("%s.clusters_k%d.tsv" % (stem, CLUSTER_K))
     steps = [
         [sys.executable, clustering / "build_gene_counts.py", "--sample", EXAMPLE_SAMPLE,
          "--output", out] + common,
-        [sys.executable, clustering / "filter_genes.py", "--input", counts, "--output", filtered],
         [rscript, clustering / "ward_cluster.R", "--input", filtered, "--output", out,
          "--stem", stem, "--k", str(CLUSTER_K)],
-        [sys.executable, clustering / "validate_cluster_pseudogene_counts.py",
+        [sys.executable, clustering / "cluster_validation.py", "pseudogene_counts",
          "--clusters", clusters, "--output", out, "--gtf", args.gtf,
          "--pseudogenes", REPO / "data" / PSEUDOGENE_GTF],
-        [sys.executable, clustering / "validate_cluster_omitted_sequence.py",
+        [sys.executable, clustering / "cluster_validation.py", "omitted_sequence",
          "--clusters", clusters, "--output", out, "--gtf", args.gtf],
-        [sys.executable, clustering / "validate_cluster_reference_duplication.py",
+        [sys.executable, clustering / "cluster_validation.py", "reference_duplication",
          "--clusters", clusters, "--output", out, "--gtf", args.gtf, "--appris", args.appris],
     ]
     for command in steps:
@@ -274,7 +272,7 @@ def _taxonomy_driver(analysis, samples, args):
     Capped at 2 workers regardless of `--workers`: each subprocess peaks near 5 GB.
     """
     selection = ["--samples", ",".join(samples)] if samples else []
-    return sh([sys.executable, CODE / "read_categories" / "run_read_taxonomy.py", analysis,
+    return sh([sys.executable, CODE / "read_categories" / "library_scan.py", analysis,
                "--workers", str(min(args.workers, 2))] + selection)
 
 STAGES = [

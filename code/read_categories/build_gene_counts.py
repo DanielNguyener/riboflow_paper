@@ -68,6 +68,10 @@ log = inputs.make_log("clustering/counts")
 
 #: The seven route-7 segment keys, in the order `ROUTE7_SEGMENTS` declares them. Checked
 #: against the panel module at run time.
+#: The single gene-depth cutoff, in union reads. Every later step inherits it through
+#: the filtered table; nothing downstream re-filters.
+MIN_UNION = 100
+
 SEGMENT_KEYS = ("r7_shared_unique", "r7_shared_multi_pp", "r7_shared_multi_other",
                 "r7_gonly_unique_omit", "r7_gonly_unique_other", "r7_gonly_multi",
                 "r7_txonly")
@@ -93,10 +97,6 @@ COLUMNS = ["gene", "gene_id", "transcript_id", "status", "n_union"] + list(METRI
 
 #: The mechanism table: two route-7 segments under their own names, as subsets of the
 #: metrics they belong to (genome_only_unique and shared_genome_multimapped).
-MECHANISMS = (("n_alt_exon_genome_unique", "r7_gonly_unique_omit"),
-              ("n_pseudogene_tie_shared_multi", "r7_shared_multi_pp"))
-MECHANISM_COLUMNS = (["gene", "gene_id", "transcript_id", "status", "n_union"]
-                     + [name for name, _segment in MECHANISMS])
 
 
 # ── the chain, imported by path ──────────────────────────────────────────────
@@ -429,11 +429,16 @@ def main(argv=None):
     destination = output / ("%s.gene_counts.tsv" % stem)
     table[COLUMNS].to_csv(destination, sep="\t", index=False, lineterminator="\n")
     log("wrote %s (%d genes)" % (destination, len(table)))
-    for name, segment in MECHANISMS:
-        table[name] = table[segment]
-    mechanisms = output / ("%s.gene_mechanisms.tsv" % stem)
-    table[MECHANISM_COLUMNS].to_csv(mechanisms, sep="\t", index=False, lineterminator="\n")
-    log("wrote %s" % mechanisms)
+
+    # The clustering input: status ok and a union deep enough that the five proportions
+    # are estimates rather than coin flips (MIN_UNION reads resolve a component to 1 %).
+    kept = table[(table["status"].astype(str) == "ok") & (table["n_union"] >= MIN_UNION)]
+    if kept.empty:
+        raise SystemExit("no gene survives the n_union >= %d filter" % MIN_UNION)
+    filtered = output / ("%s.gene_counts_filtered.tsv" % stem)
+    kept[COLUMNS].to_csv(filtered, sep="\t", index=False, lineterminator="\n")
+    log("wrote %s (%d genes, n_union %d..%d)"
+        % (filtered, len(kept), int(kept["n_union"].min()), int(kept["n_union"].max())))
 
     expect_path = Path(args.expect) if args.expect else EXPECT_TABLE
     named_gene_report(
