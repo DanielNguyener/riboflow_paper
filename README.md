@@ -47,7 +47,7 @@ Figures 2–3 use a stricter rule instead: MAPQ ≥ 42.
 
 ## Setup
 
-Python 3.9, R ≥ 4 (base only), and the Arial font.
+Python 3.9, R ≥ 4
 
 ```bash
 pip install -r requirements.txt
@@ -56,9 +56,9 @@ pip install -r requirements.txt
 ## Reproducing the results
 
 There are three starting points, from slowest to fastest. Each one produces the same
-tables and panel PDFs, byte for byte.
+tables and panel PDFs
 
-**1. From the BAM files (hours).** Download the RiboFlow_v2 alignments (Zenodo link
+**1. From the BAM files** Download the RiboFlow_v2 alignments (Zenodo link
 below) and run:
 
 ```bash
@@ -68,12 +68,10 @@ python code/make_panels.py --all
 
 The first command builds every analysis table and the per-sample coverage files
 (one HDF5 per sample under `results/coverage/`; format in
-[`docs/hdf5_schema.md`](docs/hdf5_schema.md)). Each library's BAMs are streamed four
-times in all: the QC stage reads each ribo BAM once, the `ribo_pass` stage reads each
-once more for Figures 2, 3 and 4 together, and the two RNA BAMs are read once each by
+[`docs/hdf5_schema.md`](docs/hdf5_schema.md)).
 `te_counts`.
 
-**2. From the coverage HDF5 files (minutes, no BAMs).** If you already have
+**2. From the coverage HDF5 files** If you already have
 `results/coverage/<sample>.shared_coverage.h5`, the tables shipped in `data/` cover
 everything else:
 
@@ -81,16 +79,13 @@ everything else:
 python code/make_panels.py --all
 ```
 
-**3. From the shipped tables alone (minutes, no BAMs, no HDF5).** The same command:
+**3. From the shipped tables alone** The same command:
 
 ```bash
 python code/make_panels.py --all
 ```
 
-Every panel builds except 2A and 2B, which plot per-position coverage straight from the
-HeLa HDF5 (too large to ship as text). Figure 3's statistics and Figure 6's clustering
-are derived on the fly from the shipped counts with base R the first time you build
-those panels; the derived tables land under `results/` and are reused after that.
+Builds panels
 
 ## External inputs
 
