@@ -131,7 +131,8 @@ def draw(prepared, ylim=(0.0, 1.0), figsize=(11.0, 4.4), layout="side"):
 
     if layout == "stacked":
         axes[0].tick_params(labelbottom=False)
-        figure.supylabel("per-transcript correlation", fontsize=ps.FONT_LABEL, x=0.012)
+        ylabel = figure.supylabel("per-transcript correlation", fontsize=ps.FONT_LABEL,
+                                  x=0.012)
     else:
         axes[0].set_ylabel("per-transcript correlation", fontsize=ps.FONT_LABEL)
     axes[0].set_ylim(*ylim)
@@ -144,6 +145,8 @@ def draw(prepared, ylim=(0.0, 1.0), figsize=(11.0, 4.4), layout="side"):
     figure.tight_layout()
     if layout == "stacked":
         figure.subplots_adjust(hspace=0.08, left=0.13)
+        # centre on the axes span  not the figure  tick labels below would pull it down
+        ylabel.set_y((axes[0].get_position().y1 + axes[-1].get_position().y0) / 2)
         for loc, label in zip(axes[0].get_yticks(), axes[0].get_yticklabels()):
             if loc <= ylim[0] + 1e-9:
                 label.set_visible(False)
